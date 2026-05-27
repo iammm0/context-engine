@@ -37,6 +37,9 @@ class RetrievalResponse(BaseModel):
     """检索响应模型"""
     context: str
     sources: List[Dict[str, Any]]
+    evidence: Optional[List[Dict[str, Any]]] = []
+    query_plan: Optional[Dict[str, Any]] = {}
+    trace: Optional[Dict[str, Any]] = {}
     retrieval_count: int
     recommended_resources: Optional[List[Dict[str, Any]]] = []
 
@@ -137,6 +140,9 @@ async def retrieve_context(
         return RetrievalResponse(
             context=retrieval_result.get("context", ""),
             sources=retrieval_result.get("sources", []),
+            evidence=retrieval_result.get("evidence", []),
+            query_plan=retrieval_result.get("query_plan", {}),
+            trace=retrieval_result.get("trace", {}),
             retrieval_count=len(retrieval_result.get("sources", [])),
             recommended_resources=retrieval_result.get("recommended_resources", [])
         )
@@ -146,4 +152,3 @@ async def retrieve_context(
             status_code=500,
             detail=f"检索失败: {str(e)}"
         )
-

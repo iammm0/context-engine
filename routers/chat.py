@@ -24,6 +24,8 @@ class ChatMessage(BaseModel):
     content: str
     timestamp: Optional[datetime] = None
     sources: Optional[List[dict]] = None  # 检索到的文档来源
+    evidence: Optional[List[dict]] = None  # chunk级证据
+    citation_warnings: Optional[List[str]] = None
     recommended_resources: Optional[List[dict]] = None  # 推荐的相关资源
 
 
@@ -54,6 +56,8 @@ class MessageAdd(BaseModel):
     role: str
     content: str
     sources: Optional[List[dict]] = None
+    evidence: Optional[List[dict]] = None
+    citation_warnings: Optional[List[str]] = None
     recommended_resources: Optional[List[dict]] = None
 
 
@@ -77,6 +81,7 @@ class DeepResearchRequest(BaseModel):
     """深度研究模式请求"""
     query: str
     assistant_id: Optional[str] = None
+    knowledge_space_ids: Optional[List[str]] = None
     conversation_id: Optional[str] = None
     enabled_agents: Optional[List[str]] = None  # 启用的专家Agent列表
     generation_config: Optional[Dict[str, Any]] = None  # 模型配置：{"llm_model": "...", "embedding_model": "...", "sub_agent_config": {...}}
@@ -330,6 +335,8 @@ async def get_conversation(
                 "content": msg.get("content"),
                 "timestamp": msg.get("timestamp").isoformat() if msg.get("timestamp") else None,
                 "sources": msg.get("sources", []),
+                "evidence": msg.get("evidence", []),
+                "citation_warnings": msg.get("citation_warnings", []),
                 "recommended_resources": msg.get("recommended_resources", [])
             })
         
@@ -379,6 +386,8 @@ async def add_message(
             "content": message.content,
             "timestamp": beijing_now(),
             "sources": message.sources or [],
+            "evidence": message.evidence or [],
+            "citation_warnings": message.citation_warnings or [],
             "recommended_resources": message.recommended_resources or []
         }
         
@@ -784,6 +793,10 @@ async def chat(
             try:
                 full_response = ""
                 sources = []
+                evidence = []
+                citation_warnings = []
+                query_plan = {}
+                rag_trace = {}
                 recommended_resources = []
                 # 记录使用的Agent类型
                 agent_type = type(agent).__name__
@@ -812,10 +825,18 @@ async def chat(
                         
                         elif result.get("type") == "complete":
                             sources = result.get("sources", [])
+                            evidence = result.get("evidence", [])
+                            citation_warnings = result.get("citation_warnings", [])
+                            query_plan = result.get("query_plan", {})
+                            rag_trace = result.get("trace", {})
                             recommended_resources = result.get("recommended_resources", [])
                             data = json.dumps({
                                 "done": True,
                                 "sources": sources,
+                                "evidence": evidence,
+                                "citation_warnings": citation_warnings,
+                                "query_plan": query_plan,
+                                "trace": rag_trace,
                                 "recommended_resources": recommended_resources
                             }, ensure_ascii=False)
                             yield f"data: {data}\n\n"
@@ -907,6 +928,7 @@ async def deep_research_chat(
         # 构建上下文
         context = {
             "assistant_id": research_request.assistant_id,
+            "knowledge_space_ids": research_request.knowledge_space_ids,
             "conversation_id": research_request.conversation_id,
             "conversation_history": conversation_history,
             "generation_config": research_request.generation_config,
@@ -942,7 +964,13 @@ async def deep_research_chat(
                             # 发送规划结果
                             data = json.dumps({
                                 "type": "planning",
-                                "content": planning_content
+                                "run_id": result.get("run_id"),
+                                "content": planning_content,
+                                "selected_agents": result.get("selected_agents", []),
+                                "agent_tasks": result.get("agent_tasks", {}),
+                                "dependencies": result.get("dependencies", {}),
+                                "parallel_groups": result.get("parallel_groups", []),
+                                "reasoning": result.get("reasoning", "")
                             }, ensure_ascii=False)
                             yield f"data: {data}\n\n"
                         
@@ -956,8 +984,31 @@ async def deep_research_chat(
                             })
                             data = json.dumps({
                                 "type": "agent_result",
+                                "run_id": result.get("run_id"),
                                 "agent_type": result.get("agent_type"),
-                                "content": result.get("content", "")
+                                "content": result.get("content", ""),
+                                "sources": result.get("sources", []),
+                                "evidence": result.get("evidence", []),
+                                "evidence_ids": result.get("evidence_ids", []),
+                                "claims": result.get("claims", []),
+                                "open_questions": result.get("open_questions", []),
+                                "confidence": result.get("confidence", 0.5),
+                                "dependencies": result.get("dependencies", []),
+                            }, ensure_ascii=False)
+                            yield f"data: {data}\n\n"
+
+                        elif result.get("type") == "agent_status":
+                            data = json.dumps({
+                                "type": "agent_status",
+                                "run_id": result.get("run_id"),
+                                "agent_type": result.get("agent_type"),
+                                "status": result.get("status"),
+                                "current_step": result.get("current_step"),
+                                "progress": result.get("progress"),
+                                "details": result.get("details"),
+                                "dependencies": result.get("dependencies", []),
+                                "started_at": result.get("started_at"),
+                                "completed_at": result.get("completed_at"),
                             }, ensure_ascii=False)
                             yield f"data: {data}\n\n"
                         
@@ -975,12 +1026,16 @@ async def deep_research_chat(
                             # 发送HTML响应
                             data = json.dumps({
                                 "type": "html",
-                                "content": html_response
+                                "run_id": result.get("run_id"),
+                                "content": html_response,
+                                "selected_agents": result.get("selected_agents", []),
+                                "dependencies": result.get("dependencies", {}),
+                                "artifact": result.get("artifact", {}),
                             }, ensure_ascii=False)
                             yield f"data: {data}\n\n"
                             
                             # 发送完成标记
-                            yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'done': True, 'run_id': result.get('run_id'), 'artifact': result.get('artifact', {})}, ensure_ascii=False)}\n\n"
                         
                         elif result.get("type") == "error":
                             error_data = json.dumps({"error": result.get("content", "")}, ensure_ascii=False)
@@ -1444,5 +1499,3 @@ async def get_conversation_attachment_status(
         created_at=attachment.get("created_at").isoformat() if attachment.get("created_at") else None,
         updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None
     )
-
-

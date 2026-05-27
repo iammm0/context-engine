@@ -16,6 +16,9 @@ class RuntimeModules(TypedDict, total=False):
     kg_extract_enabled: bool
     kg_retrieve_enabled: bool
     query_analyze_enabled: bool
+    query_rewrite_enabled: bool
+    citation_check_enabled: bool
+    legacy_deep_research_html_enabled: bool
     rerank_enabled: bool
     ocr_image_enabled: bool
     table_parse_enabled: bool
@@ -23,6 +26,8 @@ class RuntimeModules(TypedDict, total=False):
 
 
 class RuntimeParams(TypedDict, total=False):
+    retrieval_fusion_strategy: str
+    context_budget: int
     kg_concurrency: int
     kg_chunk_timeout_s: int
     kg_max_chunks: int
@@ -56,6 +61,9 @@ _DEFAULT_LOW: RuntimeConfig = {
         "kg_extract_enabled": False,
         "kg_retrieve_enabled": False,
         "query_analyze_enabled": False,
+        "query_rewrite_enabled": False,
+        "citation_check_enabled": True,
+        "legacy_deep_research_html_enabled": True,
         "rerank_enabled": False,
         "ocr_image_enabled": False,
         "table_parse_enabled": False,
@@ -63,6 +71,8 @@ _DEFAULT_LOW: RuntimeConfig = {
         "embedding_enabled": True,
     },
     "params": {
+        "retrieval_fusion_strategy": "rrf",
+        "context_budget": 30_000,
         "kg_concurrency": 1,
         "kg_chunk_timeout_s": 60,
         "kg_max_chunks": 0,
@@ -90,12 +100,17 @@ _DEFAULT_HIGH: RuntimeConfig = {
         "kg_extract_enabled": True,
         "kg_retrieve_enabled": True,
         "query_analyze_enabled": True,
+        "query_rewrite_enabled": True,
+        "citation_check_enabled": True,
+        "legacy_deep_research_html_enabled": True,
         "rerank_enabled": True,
         "ocr_image_enabled": True,
         "table_parse_enabled": True,
         "embedding_enabled": True,
     },
     "params": {
+        "retrieval_fusion_strategy": "rrf",
+        "context_budget": 30_000,
         "kg_concurrency": 3,
         "kg_chunk_timeout_s": 150,
         # 默认不强行截断（0 表示不限制，交给 UI/用户）
@@ -250,4 +265,3 @@ async def upsert_runtime_config(patch: RuntimeConfig) -> RuntimeConfig:
         _CACHE_TS = time.time()
 
     return merged
-

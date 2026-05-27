@@ -3,10 +3,13 @@
 from typing import List, Dict, Any, Optional
 import asyncio
 import os
+import math
+import re
 from database.mongodb import ChunkRepository, mongodb_client
 from database.qdrant_client import qdrant_client
 from database.neo4j_client import neo4j_client
 from embedding.embedding_service import embedding_service
+from retrieval.fusion import merge_results_rrf
 from services.knowledge_extraction_service import knowledge_extraction_service
 from utils.logger import logger
 from utils.token_utils import truncate_to_tokens
@@ -26,6 +29,7 @@ class RAGRetriever:
         reranker_model: Optional[str] = None,
         reranker_device: Optional[str] = None,
         reranker_max_tokens: int = 512,
+        fusion_strategy: str = "rrf",
     ):
         """
         初始化RAG检索器
@@ -48,6 +52,7 @@ class RAGRetriever:
         self.reranker_model = reranker_model or os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-base")
         self.reranker_device = reranker_device or os.getenv("RERANKER_DEVICE", "cpu")
         self.reranker_max_tokens = reranker_max_tokens
+        self.fusion_strategy = (fusion_strategy or "rrf").lower()
 
     def _get_reranker(self):
         """延迟加载 CrossEncoder，避免导入阶段崩溃影响服务启动。"""
@@ -86,7 +91,15 @@ class RAGRetriever:
         except RuntimeError:
             return asyncio.run(self.retrieve_async(query, document_id, collection_name))
 
-    async def retrieve_async(self, query: str, document_id: Optional[str] = None, collection_name: Optional[str] = None, embedding_model: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def retrieve_async(
+        self,
+        query: str,
+        document_id: Optional[str] = None,
+        collection_name: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        query_variants: Optional[List[str]] = None,
+        graph_enabled: Optional[bool] = None,
+    ) -> List[Dict[str, Any]]:
         """
         异步检索相关文档块 (High-level RAG)
         
@@ -110,17 +123,32 @@ class RAGRetriever:
         except Exception:
             modules = {}
 
-        graph_enabled = bool(modules.get("kg_retrieve_enabled", True))
+        if graph_enabled is None:
+            graph_enabled = bool(modules.get("kg_retrieve_enabled", True))
 
         # 1. 并行执行多种检索策略
+        queries = [q for q in (query_variants or [query]) if q and q.strip()]
+        if not queries:
+            queries = [query]
+
+        vector_tasks = [
+            self._vector_search(q, document_id, collection_name, embedding_model)
+            for q in queries
+        ]
+        keyword_tasks = [
+            self._keyword_search(q, document_id)
+            for q in queries
+        ]
         tasks = [
-            self._vector_search(query, document_id, collection_name, embedding_model),
-            self._keyword_search(query, document_id),
+            asyncio.gather(*vector_tasks),
+            asyncio.gather(*keyword_tasks),
             (self._graph_search(query, document_id) if graph_enabled else asyncio.sleep(0, result=[])),
         ]
         
         results_list = await asyncio.gather(*tasks)
-        vector_results, keyword_results, graph_results = results_list
+        vector_groups, keyword_groups, graph_results = results_list
+        vector_results = self._flatten_ranked_groups(vector_groups)
+        keyword_results = self._flatten_ranked_groups(keyword_groups)
         
         # 2. 混合检索结果（合并和初步去重）
         merged_results = self._merge_results(vector_results, keyword_results, graph_results)
@@ -173,31 +201,44 @@ class RAGRetriever:
         merged = self._merge_results(vector_results, keyword_results, [])
         return merged[: self.final_k]
 
+    def _flatten_ranked_groups(self, groups: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Merge query-variant result groups while preserving the best rank per chunk."""
+        merged: Dict[str, Dict[str, Any]] = {}
+        for group in groups or []:
+            for rank, item in enumerate(group or [], start=1):
+                payload = item.get("payload") or {}
+                key = payload.get("chunk_id") or item.get("id")
+                if not key:
+                    continue
+                current = merged.get(str(key))
+                score = float(item.get("score", 0.0) or 0.0)
+                if current is None or score > float(current.get("score", 0.0) or 0.0):
+                    copied = dict(item)
+                    copied["_variant_rank"] = rank
+                    merged[str(key)] = copied
+        return sorted(merged.values(), key=lambda x: x.get("score", 0.0), reverse=True)
+
     async def _vector_search(self, query: str, document_id: Optional[str], collection_name: Optional[str], embedding_model: Optional[str] = None) -> List[Dict[str, Any]]:
         """向量检索"""
         try:
-            # 向量化查询文本 (可能是同步的，但在 executor 中运行比较好，或者假设很快)
-            query_vector = embedding_service.encode_single(query, model_name=embedding_model)
-            
-            filter_conditions = None
-            if document_id:
-                filter_conditions = {"document_id": document_id}
-            
-            from database.qdrant_client import get_qdrant_client
-            if collection_name:
-                client = get_qdrant_client(collection_name)
-            else:
-                client = qdrant_client
-            
-            # search 是同步的，但 Qdrant 客户端可能是 HTTP 调用
-            # 这里为了简单直接调用
-            results = client.search(
-                query_vector=query_vector,
-                limit=self.prefetch_k,
-                score_threshold=self.score_threshold,
-                filter_conditions=filter_conditions,
-                query_text=query
-            )
+            def _search_sync() -> List[Dict[str, Any]]:
+                query_vector = embedding_service.encode_single(query, model_name=embedding_model)
+
+                filter_conditions = None
+                if document_id:
+                    filter_conditions = {"document_id": document_id}
+
+                from database.qdrant_client import get_qdrant_client
+                client = get_qdrant_client(collection_name) if collection_name else qdrant_client
+                return client.search(
+                    query_vector=query_vector,
+                    limit=self.prefetch_k,
+                    score_threshold=self.score_threshold,
+                    filter_conditions=filter_conditions,
+                    query_text=query
+                )
+
+            results = await asyncio.to_thread(_search_sync)
             return results
         except Exception as e:
             logger.error(f"向量检索失败: {e}")
@@ -206,37 +247,84 @@ class RAGRetriever:
     async def _keyword_search(self, query: str, document_id: Optional[str]) -> List[Dict[str, Any]]:
         """关键词检索"""
         try:
-            # 获取所有相关块 (对于大文档库这可能很慢，需要优化，比如只检索最近的或限制数量)
-            # 这里简单实现，假设 MongoDB 查询够快
+            chunks = []
             if document_id:
-                # 只有指定文档时才做全量关键词匹配，否则太慢
                 chunks = self.chunk_repo.get_chunks_by_document(document_id)
             else:
-                return [] # 全局关键词检索太慢，跳过
-            
-            query_keywords = set(query.lower().split())
-            results = []
-            
+                chunks = self._candidate_chunks_for_keyword(query, limit=int(os.getenv("BM25_CANDIDATE_LIMIT", "1200")))
+
+            if not chunks:
+                return []
+
+            query_terms = self._tokenize(query)
+            if not query_terms:
+                return []
+
+            avgdl = sum(len(self._tokenize(c.get("text", ""))) for c in chunks) / max(len(chunks), 1)
+            doc_freq: Dict[str, int] = {}
+            tokenized_chunks = []
             for chunk in chunks:
-                chunk_text = chunk.get("text", "").lower()
-                matched_keywords = query_keywords.intersection(set(chunk_text.split()))
-                if matched_keywords:
-                    score = len(matched_keywords) / len(query_keywords)
-                    if score > 0.1:
-                        results.append({
-                            "id": chunk.get("_id"),
-                            "score": score,
-                            "payload": {
-                                "chunk_id": chunk.get("_id"),
-                                "document_id": chunk.get("document_id"),
-                                "text": chunk.get("text"),
-                                "chunk_index": chunk.get("chunk_index"),
-                                "metadata": chunk.get("metadata", {})
-                            }
-                        })
-            return sorted(results, key=lambda x: x["score"], reverse=True)[:self.final_k]
+                terms = self._tokenize(chunk.get("text", ""))
+                tokenized_chunks.append((chunk, terms))
+                for term in set(terms):
+                    doc_freq[term] = doc_freq.get(term, 0) + 1
+
+            k1 = 1.5
+            b = 0.75
+            results = []
+            total_docs = len(chunks)
+            for chunk, terms in tokenized_chunks:
+                if not terms:
+                    continue
+                term_counts: Dict[str, int] = {}
+                for term in terms:
+                    term_counts[term] = term_counts.get(term, 0) + 1
+                dl = len(terms)
+                score = 0.0
+                for term in query_terms:
+                    tf = term_counts.get(term, 0)
+                    if tf <= 0:
+                        continue
+                    df = doc_freq.get(term, 0)
+                    idf = math.log(1 + (total_docs - df + 0.5) / (df + 0.5))
+                    denom = tf + k1 * (1 - b + b * dl / max(avgdl, 1))
+                    score += idf * (tf * (k1 + 1)) / denom
+                if score > 0:
+                    results.append({
+                        "id": str(chunk.get("_id")),
+                        "score": score,
+                        "payload": {
+                            "chunk_id": str(chunk.get("_id")),
+                            "document_id": chunk.get("document_id"),
+                            "text": chunk.get("text"),
+                            "chunk_index": chunk.get("chunk_index"),
+                            "metadata": chunk.get("metadata", {})
+                        }
+                    })
+            return sorted(results, key=lambda x: x["score"], reverse=True)[: self.prefetch_k]
         except Exception as e:
             logger.error(f"关键词检索失败: {e}")
+            return []
+
+    def _tokenize(self, text: str) -> List[str]:
+        clean = (text or "").lower()
+        try:
+            import jieba  # type: ignore
+            tokens = [t.strip() for t in jieba.cut(clean) if t.strip()]
+        except Exception:
+            tokens = re.findall(r"[\w\u4e00-\u9fff]+", clean)
+        return [t for t in tokens if len(t) > 1 or re.match(r"[\u4e00-\u9fff]", t)]
+
+    def _candidate_chunks_for_keyword(self, query: str, limit: int = 1200) -> List[Dict[str, Any]]:
+        terms = self._tokenize(query)[:8]
+        if not terms:
+            return []
+        try:
+            regexes = [{"text": {"$regex": re.escape(term), "$options": "i"}} for term in terms]
+            cursor = self.chunk_repo.collection.find({"$or": regexes}).limit(limit)
+            return [{**chunk, "_id": str(chunk["_id"])} for chunk in cursor]
+        except Exception as e:
+            logger.warning(f"关键词候选块查询失败: {e}")
             return []
 
     async def _graph_search(self, query: str, document_id: Optional[str]) -> List[Dict[str, Any]]:
@@ -253,38 +341,11 @@ class RAGRetriever:
                 
             if neo4j_client.driver:
                 for entity in entities:
-                    # 查询实体及其一跳邻居
-                    cypher = (
-                        f"MATCH (n {{name: $name}})-[r]->(m) "
-                        f"RETURN n, r, m LIMIT 10"
-                    )
-                    records = neo4j_client.execute_query(cypher, {"name": entity})
-                    
-                    if records:
-                        # 将图谱路径转化为文本
-                        # 格式: Entity -[Relation]-> Entity
-                        paths = []
-                        for record in records:
-                            n = record.get('n', {}).get('name')
-                            r_type = record.get('r', {}).get('type') # neo4j driver return structure varies
-                            # Check structure of record
-                            # record is dict from data()
-                            # {'n': {'name': '...'}, 'r': {'name': '...', 'type': '...'}, 'm': {'name': '...'}}
-                            # But record.data() usually returns properties. 
-                            # Wait, neo4j_client.execute_query returns [record.data() for ...]
-                            # record.data() returns {'n': Node(...), ...} -> dict of props
-                            # But relationship type is not in props usually.
-                            
-                            # Let's adjust cypher to return type(r)
-                            pass
-
-                # Optimized Cypher to get type
-                for entity in entities:
                     cypher = (
                         f"MATCH (n {{name: $name}})-[r]->(m) "
                         f"RETURN n.name as head, type(r) as relation, m.name as tail, r.source_doc as doc_id, r.source_chunk as chunk_id LIMIT 10"
                     )
-                    records = neo4j_client.execute_query(cypher, {"name": entity})
+                    records = await asyncio.to_thread(neo4j_client.execute_query, cypher, {"name": entity})
                     
                     if records:
                         text_parts = []
@@ -303,21 +364,41 @@ class RAGRetriever:
                             if record.get('doc_id'):
                                 doc_ids.add(record.get('doc_id'))
                         
-                        if text_parts:
-                            # 构造一个虚拟的 chunk 结果
-                            # 如果有 doc_id 过滤，需要检查
-                            if document_id and document_id not in doc_ids:
+                        if document_id and document_id not in doc_ids:
+                            continue
+
+                        for chunk_id in chunk_ids:
+                            chunk = self.chunk_repo.get_chunk_by_id(str(chunk_id))
+                            if not chunk:
                                 continue
-                                
+                            if document_id and chunk.get("document_id") != document_id:
+                                continue
+                            meta = (chunk.get("metadata") or {}).copy()
+                            meta["graph_relations"] = text_parts
+                            results.append({
+                                "id": str(chunk.get("_id")),
+                                "score": 0.75,
+                                "payload": {
+                                    "chunk_id": str(chunk.get("_id")),
+                                    "document_id": chunk.get("document_id"),
+                                    "text": chunk.get("text"),
+                                    "chunk_index": chunk.get("chunk_index"),
+                                    "metadata": meta,
+                                    "retrieval_type": "graph",
+                                    "entities": entities,
+                                }
+                            })
+
+                        if text_parts and not chunk_ids:
                             combined_text = "Knowledge Graph Context:\n" + "\n".join(text_parts)
                             results.append({
                                 "id": f"graph_{entity}",
-                                "score": 0.8, # 给图谱检索较高的初始分
+                                "score": 0.35,
                                 "payload": {
                                     "text": combined_text,
                                     "retrieval_type": "graph",
                                     "entities": entities,
-                                    "chunk_ids": list(chunk_ids)
+                                    "metadata": {"graph_relations": text_parts},
                                 }
                             })
             return results
@@ -332,6 +413,18 @@ class RAGRetriever:
         graph_results: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """合并多种检索结果"""
+        if self.fusion_strategy == "rrf":
+            return self._merge_results_rrf(vector_results, keyword_results, graph_results)
+
+        return self._merge_results_score_boost(vector_results, keyword_results, graph_results)
+
+    def _merge_results_score_boost(
+        self,
+        vector_results: List[Dict[str, Any]],
+        keyword_results: List[Dict[str, Any]],
+        graph_results: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Legacy score-boost merge."""
         result_dict = {}
         
         # 1. 向量结果 (Base)
@@ -362,6 +455,20 @@ class RAGRetriever:
         merged.sort(key=lambda x: x["score"], reverse=True)
         return merged
 
+    def _merge_results_rrf(
+        self,
+        vector_results: List[Dict[str, Any]],
+        keyword_results: List[Dict[str, Any]],
+        graph_results: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Reciprocal Rank Fusion across vector, BM25, and graph retrieval."""
+        lists = [
+            ("vector", vector_results, 1.0),
+            ("keyword", keyword_results, 0.8),
+            ("graph", graph_results, 0.7),
+        ]
+        return merge_results_rrf(lists)
+
     def _rerank(self, query: str, results: List[Dict[str, Any]], reranker) -> List[Dict[str, Any]]:
         """使用 Cross-Encoder 重排"""
         if not reranker or not results:
@@ -389,4 +496,3 @@ class RAGRetriever:
         except Exception as e:
             logger.error(f"重排失败: {e}")
             return results
-

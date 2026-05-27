@@ -4,6 +4,7 @@ from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
 from services.model_selector import model_selector
 from utils.logger import logger
+from utils.citation import validate_citations
 
 
 class GeneralAssistantAgent(BaseAgent):
@@ -98,6 +99,9 @@ class GeneralAssistantAgent(BaseAgent):
         rag_context = ""
         sources = []
         recommended_resources = []
+        evidence = []
+        query_plan = {}
+        rag_trace = {}
         
         if enable_rag:
             try:
@@ -113,6 +117,9 @@ class GeneralAssistantAgent(BaseAgent):
                 
                 rag_context = retrieval_result.get("context", "")
                 sources = retrieval_result.get("sources", [])
+                evidence = retrieval_result.get("evidence", [])
+                query_plan = retrieval_result.get("query_plan", {})
+                rag_trace = retrieval_result.get("trace", {})
                 recommended_resources = retrieval_result.get("recommended_resources", [])
                 
                 logger.info(f"GeneralAssistantAgent: RAG检索完成 - 上下文长度: {len(rag_context)}, 来源数: {len(sources)}")
@@ -123,10 +130,16 @@ class GeneralAssistantAgent(BaseAgent):
         # 2. 使用OllamaService生成回复
         try:
             full_response = ""
+            evidence_instruction = ""
+            if rag_context:
+                evidence_instruction = (
+                    "请优先依据以下证据回答，并在关键事实后使用 [S1]、[S2] 这类证据编号。"
+                    "如果资料中找不到支持信息，请明确说明“资料中未找到”。\n\n"
+                )
             # 注意：OllamaService.generate 会自动构建包含 context 的 prompt
             async for chunk in self.ollama_service.generate(
                 prompt=task,
-                context=rag_context if rag_context else None,
+                context=(evidence_instruction + rag_context) if rag_context else None,
                 stream=stream,
                 document_id=document_id,
                 # document_info=document_info, # 可以根据需要获取并传入
@@ -146,11 +159,16 @@ class GeneralAssistantAgent(BaseAgent):
                     }
             
             if not stream or full_response:
+                citation_warnings = validate_citations(full_response, evidence) if evidence else []
                 yield {
                     "type": "complete",
                     "content": full_response,
                     "agent_type": "general_assistant",
                     "sources": sources,
+                    "evidence": evidence,
+                    "query_plan": query_plan,
+                    "trace": rag_trace,
+                    "citation_warnings": citation_warnings,
                     "recommended_resources": recommended_resources,
                     "confidence": 0.9 # 高阶RAG通常置信度较高
                 }
@@ -162,5 +180,8 @@ class GeneralAssistantAgent(BaseAgent):
                 "content": f"生成回复时出错: {str(e)}",
                 "agent_type": "general_assistant",
                 "sources": sources,
+                "evidence": evidence,
+                "query_plan": query_plan,
+                "trace": rag_trace,
                 "recommended_resources": recommended_resources
             }

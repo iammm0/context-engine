@@ -168,15 +168,9 @@ class QdrantVectorDB:
                 existing_size = None
             
             if existing_size and existing_size != vector_size:
-                logger.warning(
-                    f"检测到 Qdrant 集合维度不匹配，期望 {vector_size}，现有 {existing_size}，将重建集合（数据将被清空）。"
-                )
-                self.client.recreate_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=vector_size,
-                        distance=distance
-                    )
+                raise ValueError(
+                    f"Qdrant 集合维度不匹配，集合 {self.collection_name} 现有维度 {existing_size}，"
+                    f"请求维度 {vector_size}。为避免数据丢失，已禁止自动重建；请运行 scripts/reindex_collection.py 重建索引。"
                 )
             else:
                 # 已存在且维度匹配，直接返回
@@ -258,10 +252,10 @@ class QdrantVectorDB:
                     elif hasattr(vec_cfg, "size"):
                         existing_size = vec_cfg.size
                 if existing_size and existing_size != current_dim:
-                    logger.warning(
-                        f"检测到集合维度不匹配，现有 {existing_size}，即将自动重建为 {current_dim}"
+                    raise ValueError(
+                        f"Qdrant 集合维度不匹配，集合 {self.collection_name} 现有维度 {existing_size}，"
+                        f"请求维度 {current_dim}。为避免数据丢失，已禁止自动重建；请运行 scripts/reindex_collection.py 重建索引。"
                     )
-                    self.create_collection(vector_size=current_dim)
             except Exception:
                 # 无法获取集合信息时忽略，后续插入可能失败但会进入重试
                 pass
@@ -296,16 +290,12 @@ class QdrantVectorDB:
                     logger.error(f"Qdrant 插入失败（已重试 {max_retries} 次）: {error_msg}")
                     raise
                 
-                # 维度错误：尝试自动重建并重试
+                # 维度错误：明确失败，不自动重建，避免清空用户数据
                 if "vector dimension error" in error_msg.lower() or "expected dim" in error_msg.lower():
-                    try:
-                        expected = len(vectors[0]) if vectors else None
-                        if expected:
-                            logger.warning(f"检测到向量维度错误，尝试重建集合为维度 {expected}")
-                            self.create_collection(vector_size=expected)
-                            continue
-                    except Exception as rebuild_err:
-                        logger.error(f"自动重建集合失败: {rebuild_err}")
+                    raise ValueError(
+                        f"Qdrant 集合 {self.collection_name} 向量维度不匹配。"
+                        "为避免数据丢失，已禁止自动重建；请运行 scripts/reindex_collection.py 重建索引。"
+                    ) from e
                 
                 # 检查是否是临时性错误（502, 503, 504, timeout等）
                 is_retryable = (
@@ -527,6 +517,7 @@ class QdrantVectorDB:
 
 # 全局Qdrant客户端实例（默认集合）
 qdrant_client = QdrantVectorDB()
+_QDRANT_CLIENT_CACHE: Dict[str, QdrantVectorDB] = {qdrant_client.collection_name: qdrant_client}
 
 
 def get_qdrant_client(collection_name: str) -> QdrantVectorDB:
@@ -539,5 +530,8 @@ def get_qdrant_client(collection_name: str) -> QdrantVectorDB:
     Returns:
         QdrantVectorDB实例
     """
-    return QdrantVectorDB(collection_name=collection_name)
-
+    if collection_name in _QDRANT_CLIENT_CACHE:
+        return _QDRANT_CLIENT_CACHE[collection_name]
+    client = QdrantVectorDB(collection_name=collection_name)
+    _QDRANT_CLIENT_CACHE[collection_name] = client
+    return client

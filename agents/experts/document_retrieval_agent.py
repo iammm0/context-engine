@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
 from utils.logger import logger
+from utils.citation import validate_citations
 
 
 class DocumentRetrievalAgent(BaseAgent):
@@ -39,18 +40,22 @@ class DocumentRetrievalAgent(BaseAgent):
             retrieval_result = await rag_service.retrieve_context(
                 query=task,
                 document_id=document_id,
-                assistant_id=assistant_id
+                assistant_id=assistant_id,
+                knowledge_space_ids=context.get("knowledge_space_ids") if context else None,
+                embedding_model=context.get("generation_config", {}).get("embedding_model") if context else None
             )
             
             context_text = retrieval_result.get("context", "")
             sources = retrieval_result.get("sources", [])
+            evidence = retrieval_result.get("evidence", [])
             recommended_resources = retrieval_result.get("recommended_resources", [])
             
             # 使用LLM总结检索结果
-            summary_prompt = f"""基于以下检索到的文档内容，总结与问题"{task}"相关的关键信息：
+            summary_prompt = f"""基于以下检索到的文档证据，总结与问题"{task}"相关的关键信息。
+请在关键事实后使用 [S1]、[S2] 这类证据编号；如果证据不足，请明确说明“资料中未找到”。
 
 检索到的文档内容：
-{context_text[:2000]}  # 限制长度
+{context_text[:4000]}
 
 请总结关键信息，并标注信息来源。"""
             
@@ -63,6 +68,9 @@ class DocumentRetrievalAgent(BaseAgent):
                 "content": summary,
                 "agent_type": "document_retrieval",
                 "sources": sources,
+                "evidence": evidence,
+                "evidence_ids": [item.get("id") for item in evidence if item.get("id")],
+                "citation_warnings": validate_citations(summary, evidence) if evidence else [],
                 "recommended_resources": recommended_resources,
                 "confidence": 0.85,
                 "raw_context": context_text
@@ -75,4 +83,3 @@ class DocumentRetrievalAgent(BaseAgent):
                 "content": f"文档检索失败: {str(e)}",
                 "agent_type": "document_retrieval"
             }
-

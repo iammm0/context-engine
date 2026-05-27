@@ -1,8 +1,11 @@
 """RAG服务核心逻辑"""
 from typing import Dict, Any, Optional
 import asyncio
+import time
 from utils.logger import logger
 from utils.token_utils import estimate_tokens, truncate_to_tokens
+from models.rag import EvidenceItem
+from utils.citation import format_evidence_context
 
 
 class RAGService:
@@ -56,15 +59,33 @@ class RAGService:
             包含上下文、来源信息和推荐资源的字典
         """
         from database.mongodb import mongodb
+        trace: Dict[str, Any] = {"query": query, "started_at": int(time.time() * 1000)}
         # 运行时开关：决定是否启用图谱检索/重排等高耗模块
         try:
             from services.runtime_config import get_runtime_config
 
             runtime_cfg = await get_runtime_config()
             modules = runtime_cfg.get("modules") or {}
+            params = runtime_cfg.get("params") or {}
             rerank_enabled = bool(modules.get("rerank_enabled", True))
         except Exception:
+            modules = {}
+            params = {}
             rerank_enabled = True
+
+        from services.query_planner import query_planner
+        plan = query_planner.build_plan(
+            query,
+            runtime_modules=modules,
+            runtime_params=params,
+            filters={
+                "document_id": document_id,
+                "assistant_id": assistant_id,
+                "collection_name": collection_name,
+                "knowledge_space_ids": knowledge_space_ids or [],
+            },
+        )
+        trace["query_plan"] = plan.model_dump()
         # 解析需要检索的集合列表（知识空间优先）
         collection_names: list[str] = []
         if knowledge_space_ids:
@@ -99,17 +120,24 @@ class RAGService:
         
         # 文档检索任务（知识空间集合，可多集合并行）
         from retrieval.rag_retriever import RAGRetriever
-        dyn = self._dynamic_retrieval_params(query)
         doc_retriever = RAGRetriever(
-            final_k=dyn["final_k"],
-            prefetch_k=dyn["prefetch_k"],
+            final_k=plan.final_k,
+            prefetch_k=plan.prefetch_k,
             score_threshold=0.7,
             enable_reranker=rerank_enabled,
+            fusion_strategy=plan.fusion_strategy,
         )
         
         # 使用异步检索方法 (retrieve_async)
         doc_tasks = [
-            doc_retriever.retrieve_async(query, document_id, cn, embedding_model=embedding_model)
+            doc_retriever.retrieve_async(
+                query,
+                document_id,
+                cn,
+                embedding_model=embedding_model,
+                query_variants=plan.rewritten_queries,
+                graph_enabled=plan.need_graph,
+            )
             for cn in collection_names
         ]
         
@@ -118,11 +146,17 @@ class RAGService:
         results = []
         for part in results_list:
             results.extend(part or [])
+        trace["retrieval"] = {
+            "collection_count": len(collection_names),
+            "result_count": len(results),
+            "fusion_strategy": plan.fusion_strategy,
+            "rewritten_queries": plan.rewritten_queries,
+        }
         logger.info(f"知识空间检索完成 - 集合数: {len(collection_names)}, 结果数: {len(results)}")
         logger.info(f"RAG检索完成 - 文档结果: {len(results)} 个")
         
         # 构建上下文和来源（包含文档信息）
-        context_parts = []
+        evidence_items: list[EvidenceItem] = []
         sources = []
 
         # 邻居扩展：对命中 chunk 拉取前后窗口补齐定义/条件/例外
@@ -131,7 +165,7 @@ class RAGService:
         chunk_repo = ChunkRepository(mongodb_client)
         neighbor_window = int((0 or 1))
         seen_chunk_ids = set()
-        expanded_parts = []
+        expanded_evidence: list[EvidenceItem] = []
         
         # 获取所有涉及的文档ID和文件ID（对话附件兼容）
         document_ids = set()
@@ -183,12 +217,45 @@ class RAGService:
         for result in results:
             text = result["payload"].get("text", "")
             if text:
-                # 先记录命中本体
-                context_parts.append(text)
-
                 chunk_id = result["payload"].get("chunk_id")
                 doc_id = result["payload"].get("document_id")
                 chunk_index = result["payload"].get("chunk_index")
+                metadata = result["payload"].get("metadata", {}) or {}
+                file_id = result["payload"].get("file_id")
+                conversation_id = result["payload"].get("conversation_id")
+                score = result.get("score", 0) or result.get("combined_score", 0)
+                doc_info = document_info_map.get(doc_id, {}) if doc_id else {}
+                document_title = (
+                    result["payload"].get("filename")
+                    or doc_info.get("title")
+                    or (f"文档_{doc_id[:8]}" if doc_id else None)
+                    or "Knowledge Graph"
+                )
+                section_path = metadata.get("section_path") or []
+                if isinstance(section_path, str):
+                    section_path = [section_path]
+                elif not isinstance(section_path, list):
+                    section_path = []
+                page = metadata.get("page") or metadata.get("page_number")
+                try:
+                    page = int(page) if page is not None else None
+                except Exception:
+                    page = None
+                evidence_items.append(EvidenceItem(
+                    id=f"S{len(evidence_items) + 1}",
+                    text=text,
+                    document_id=doc_id,
+                    file_id=file_id,
+                    conversation_id=conversation_id,
+                    chunk_id=chunk_id,
+                    chunk_index=chunk_index if isinstance(chunk_index, int) else None,
+                    document_title=document_title,
+                    section_path=[str(s) for s in section_path],
+                    page=page,
+                    score=float(score or 0.0),
+                    retrieval_type=result.get("retrieval_type") or result["payload"].get("retrieval_type") or metadata.get("retrieval_type") or "vector",
+                    metadata=metadata,
+                ))
 
                 # 邻居扩展（仅对普通文档 chunk 生效）
                 if chunk_id and doc_id is not None and chunk_index is not None and isinstance(chunk_index, int):
@@ -200,14 +267,26 @@ class RAGService:
                                 nb_id = nb.get("_id")
                                 if nb_id and nb_id not in seen_chunk_ids:
                                     seen_chunk_ids.add(nb_id)
-                                    expanded_parts.append(nb.get("text", ""))
+                                    nb_meta = nb.get("metadata") or {}
+                                    nb_section_path = nb_meta.get("section_path") or []
+                                    if isinstance(nb_section_path, str):
+                                        nb_section_path = [nb_section_path]
+                                    elif not isinstance(nb_section_path, list):
+                                        nb_section_path = []
+                                    expanded_evidence.append(EvidenceItem(
+                                        id=f"S{len(evidence_items) + len(expanded_evidence) + 1}",
+                                        text=nb.get("text", ""),
+                                        document_id=doc_id,
+                                        chunk_id=nb_id,
+                                        chunk_index=nb.get("chunk_index") if isinstance(nb.get("chunk_index"), int) else None,
+                                        document_title=document_title,
+                                        section_path=[str(s) for s in nb_section_path],
+                                        score=float(score or 0.0),
+                                        retrieval_type="neighbor",
+                                        metadata=nb_meta,
+                                    ))
                         except Exception:
                             pass
-                doc_id = result["payload"].get("document_id")
-                file_id = result["payload"].get("file_id")
-                conversation_id = result["payload"].get("conversation_id")
-                
-                score = result.get("score", 0) or result.get("combined_score", 0)
                 
                 # 判断是文档还是对话附件
                 if file_id and conversation_id:
@@ -216,24 +295,25 @@ class RAGService:
                     source_key = f"conversation_{conversation_id}_{file_id}"
                     source_info = {
                         "chunk_id": result["payload"].get("chunk_id"),
+                        "evidence_id": evidence_items[-1].id if evidence_items else None,
                         "file_id": file_id,
                         "conversation_id": conversation_id,
                         "score": score,
-                        "retrieval_type": result.get("retrieval_type", "vector"),
+                        "retrieval_type": result.get("retrieval_type") or result["payload"].get("retrieval_type", "vector"),
                         "document_title": filename,
                         "file_type": result["payload"].get("metadata", {}).get("file_type", ""),
                         "is_conversation_attachment": True
                     }
                 else:
                     # 普通文档
-                    doc_info = document_info_map.get(doc_id, {})
-                    doc_title = doc_info.get("title") or f"文档_{doc_id[:8]}"
-                    source_key = doc_id
+                    doc_title = doc_info.get("title") or (f"文档_{doc_id[:8]}" if doc_id else document_title)
+                    source_key = doc_id or result.get("id") or (evidence_items[-1].id if evidence_items else "unknown")
                     source_info = {
                         "chunk_id": result["payload"].get("chunk_id"),
+                        "evidence_id": evidence_items[-1].id if evidence_items else None,
                         "document_id": doc_id,
                         "score": score,
-                        "retrieval_type": result.get("retrieval_type", "vector"),
+                        "retrieval_type": result.get("retrieval_type") or result["payload"].get("retrieval_type", "vector"),
                         "document_title": doc_title,
                         "file_type": doc_info.get("file_type", ""),
                         "status": doc_info.get("status", ""),
@@ -248,20 +328,29 @@ class RAGService:
         sources = list(document_sources_map.values())
         sources.sort(key=lambda x: x["score"], reverse=True)
 
-        # 拼接上下文：命中块 + 邻居补齐，并控制总 token 预算（行业报告允许更大窗口，但仍需上限）
-        all_parts = context_parts + expanded_parts
-        # 先去空
-        all_parts = [p for p in all_parts if isinstance(p, str) and p.strip()]
-        # 近似预算：默认 30k tokens，避免极端情况下 prompt 过大
-        max_context_tokens = int(30_000)
-        joined = "\n\n".join(all_parts)
+        # 拼接上下文：证据块 + 邻居补齐，并控制总 token 预算
+        evidence_items.extend([e for e in expanded_evidence if e.text and e.text.strip()])
+        # 重新编号，确保邻居扩展后编号连续
+        for idx, item in enumerate(evidence_items, start=1):
+            item.id = f"S{idx}"
+        max_context_tokens = int(plan.context_budget or 30_000)
+        joined = format_evidence_context(evidence_items)
         if estimate_tokens(joined) > max_context_tokens:
             joined = truncate_to_tokens(joined, max_context_tokens)
         context = joined
+        trace["context"] = {
+            "evidence_count": len(evidence_items),
+            "context_tokens_estimate": estimate_tokens(context),
+            "context_budget": max_context_tokens,
+        }
+        trace["finished_at"] = int(time.time() * 1000)
         
         return {
             "context": context,
             "sources": sources,
+            "evidence": [item.model_dump() for item in evidence_items],
+            "query_plan": plan.model_dump(),
+            "trace": trace,
             "recommended_resources": []
         }
     
@@ -290,6 +379,7 @@ class RAGService:
         """
         context = None
         sources = []
+        retrieval_result: Dict[str, Any] = {"recommended_resources": [], "evidence": [], "query_plan": {}, "trace": {}}
         
         if use_context:
             try:
@@ -313,10 +403,12 @@ class RAGService:
         return {
             "context": context,
             "sources": sources,
+            "evidence": retrieval_result.get("evidence", []),
+            "query_plan": retrieval_result.get("query_plan", {}),
+            "trace": retrieval_result.get("trace", {}),
             "recommended_resources": retrieval_result.get("recommended_resources", [])
         }
 
 
 # 全局RAG服务实例
 rag_service = RAGService()
-
