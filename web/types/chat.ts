@@ -19,25 +19,27 @@ export interface RAGEvaluationMetrics {
 }
 
 export interface ChatMessage {
-  message_id?: string;  // 消息唯一ID
+  message_id?: string; // 消息唯一ID
   role: "user" | "assistant";
   content: string;
   timestamp?: string;
-  sources?: SourceInfo[];  // 文档来源（普通模式）
-  recommended_resources?: RecommendedResource[];  // 推荐的相关资源（普通模式）
-  recommended_users?: RecommendedUser[];  // 推荐用户（网络模式）
-  user_relationships?: UserRelationship[];  // 用户关系（网络模式）
-  recommendation_reason?: string;  // 推荐理由（网络模式）
-  cypher_queries?: CypherQuery[];  // Cypher查询思维链（网络模式）
+  sources?: SourceInfo[]; // 文档来源（普通模式）
+  evidence?: EvidenceItem[]; // chunk级证据（普通模式）
+  citation_warnings?: string[]; // 引用校验提醒
+  recommended_resources?: RecommendedResource[]; // 推荐的相关资源（普通模式）
+  recommended_users?: RecommendedUser[]; // 推荐用户（网络模式）
+  user_relationships?: UserRelationship[]; // 用户关系（网络模式）
+  recommendation_reason?: string; // 推荐理由（网络模式）
+  cypher_queries?: CypherQuery[]; // Cypher查询思维链（网络模式）
   /** 本条回复的 RAG 评测指标（仅助手消息，折叠展示） */
   rag_metrics?: RAGEvaluationMetrics;
 }
 
 export interface CypherQuery {
-  step: string;  // 步骤名称
-  description: string;  // 步骤描述
-  query: string;  // Cypher查询语句
-  result_count?: number;  // 查询结果数量
+  step: string; // 步骤名称
+  description: string; // 步骤描述
+  query: string; // Cypher查询语句
+  result_count?: number; // 查询结果数量
 }
 
 export interface RecommendedUser {
@@ -76,12 +78,29 @@ export interface RecommendedResource {
 
 export interface SourceInfo {
   chunk_id: string;
+  evidence_id?: string;
   document_id: string;
   score: number;
   retrieval_type: string;
-  document_title?: string;  // 文档标题
-  file_type?: string;  // 文件类型
-  status?: string;  // 文档状态
+  document_title?: string; // 文档标题
+  file_type?: string; // 文件类型
+  status?: string; // 文档状态
+}
+
+export interface EvidenceItem {
+  id: string;
+  text: string;
+  document_id?: string;
+  file_id?: string;
+  conversation_id?: string;
+  chunk_id?: string;
+  chunk_index?: number;
+  document_title?: string;
+  section_path?: string[];
+  page?: number;
+  score: number;
+  retrieval_type: string;
+  metadata?: Record<string, any>;
 }
 
 export interface ChatRequest {
@@ -94,5 +113,6 @@ export interface ChatResponse {
   response: string;
   conversation_id: string;
   sources?: SourceInfo[];
+  evidence?: EvidenceItem[];
+  citation_warnings?: string[];
 }
-
