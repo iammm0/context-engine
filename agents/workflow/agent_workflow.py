@@ -2,6 +2,7 @@
 from typing import Dict, Any, Optional, List, AsyncGenerator
 import asyncio
 import time
+import uuid
 from utils.logger import logger
 
 from agents.coordinator.coordinator_agent import CoordinatorAgent
@@ -13,6 +14,8 @@ from agents.experts.example_generation_agent import ExampleGenerationAgent
 from agents.experts.summary_agent import SummaryAgent
 from agents.experts.exercise_agent import ExerciseAgent
 from agents.experts.scientific_coding_agent import ScientificCodingAgent
+from agents.experts.critic_agent import CriticAgent
+from agents.experts.argument_analysis_agent import ArgumentAnalysisAgent
 
 
 async def get_agent_config(agent_type: str) -> Dict[str, Optional[str]]:
@@ -41,6 +44,8 @@ class AgentWorkflow:
         "summary": SummaryAgent,
         "exercise": ExerciseAgent,
         "scientific_coding": ScientificCodingAgent,
+        "critic": CriticAgent,
+        "argument_analysis": ArgumentAnalysisAgent,
     }
     
     def __init__(self):
@@ -141,7 +146,10 @@ class AgentWorkflow:
             
             selected_agents_from_coordinator = None
             agent_tasks = {}
+            dependencies = {}
+            parallel_groups = []
             planning_reasoning = ""
+            run_id = str(uuid.uuid4())
             
             async for planning_result in self.coordinator.execute(
                 task=query,
@@ -152,14 +160,19 @@ class AgentWorkflow:
                     # 获取协调型Agent选择的Agent列表
                     selected_agents_from_coordinator = planning_result.get("selected_agents")
                     agent_tasks = planning_result.get("agent_tasks", {})
+                    dependencies = planning_result.get("dependencies", {}) or {}
+                    parallel_groups = planning_result.get("parallel_groups", []) or []
                     planning_reasoning = planning_result.get("reasoning", "")
                     
                     yield {
                         "type": "planning",
+                        "run_id": run_id,
                         "content": planning_result.get("content", ""),
                         "agent_type": "coordinator",
                         "selected_agents": selected_agents_from_coordinator,
                         "agent_tasks": agent_tasks,
+                        "dependencies": dependencies,
+                        "parallel_groups": parallel_groups,
                         "reasoning": planning_reasoning
                     }
                     
@@ -172,6 +185,7 @@ class AgentWorkflow:
                                 # 被选中的Agent，状态为pending（等待执行）
                                 yield {
                                     "type": "agent_status",
+                                    "run_id": run_id,
                                     "agent_type": agent_type,
                                     "status": "pending",
                                     "reason": "等待执行"
@@ -180,6 +194,7 @@ class AgentWorkflow:
                                 # 未被选中的Agent，状态为skipped
                                 yield {
                                     "type": "agent_status",
+                                    "run_id": run_id,
                                     "agent_type": agent_type,
                                     "status": "skipped",
                                     "reason": planning_reasoning or "协调型Agent未选择此Agent"
@@ -208,6 +223,9 @@ class AgentWorkflow:
             if not agent_types:
                 logger.warning("AgentWorkflow: 没有有效的Agent类型，使用默认Agent")
                 agent_types = ["concept_explanation"]
+
+            dependencies = self._sanitize_dependencies(dependencies, agent_types)
+            execution_groups = self._build_execution_groups(agent_types, dependencies, parallel_groups)
             
             logger.info(f"AgentWorkflow: 将执行 {len(agent_types)} 个专家Agent: {agent_types}")
             
@@ -217,100 +235,194 @@ class AgentWorkflow:
             # 将Agent任务描述添加到上下文中
             if agent_tasks:
                 expert_context["agent_tasks"] = agent_tasks
+            expert_context["run_id"] = run_id
+            expert_context["dependencies"] = dependencies
             
             agent_results = []
             
             # 注意：Agent的初始状态已经在planning事件中发送了
             # 这里只需要确保第一个Agent开始执行
             
-            # 顺序执行每个被选中的Agent
-            for agent_type in agent_types:
-                # 发送Agent开始执行的状态
+            for group in execution_groups:
+                group = [agent_type for agent_type in group if agent_type in agent_types]
+                if not group:
+                    continue
+
+                if len(group) > 1:
+                    if stream:
+                        for agent_type in group:
+                            yield {
+                                "type": "agent_status",
+                                "run_id": run_id,
+                                "agent_type": agent_type,
+                                "status": "running",
+                                "current_step": "并行执行中...",
+                                "progress": 0,
+                                "started_at": int(time.time() * 1000),
+                                "dependencies": dependencies.get(agent_type, []),
+                            }
+
+                    async def _run_parallel(agent_type: str) -> Dict[str, Any]:
+                        agent = await self._get_expert_agent(agent_type, generation_config)
+                        if not agent:
+                            return {
+                                "agent_type": agent_type,
+                                "content": "Agent未找到",
+                                "error": True,
+                            }
+                        ctx = dict(expert_context)
+                        ctx["other_results"] = list(agent_results)
+                        ctx["agent_task"] = agent_tasks.get(agent_type, query)
+                        return await self._execute_expert_agent(
+                            agent,
+                            agent_type,
+                            agent_tasks.get(agent_type, query),
+                            ctx,
+                            stream=False,
+                        )
+
+                    group_results = await asyncio.gather(*[_run_parallel(agent_type) for agent_type in group])
+                    for result in group_results:
+                        agent_results.append(result)
+                        if stream:
+                            status = "error" if result.get("error") else "completed"
+                            yield {
+                                "type": "agent_status",
+                                "run_id": run_id,
+                                "agent_type": result.get("agent_type"),
+                                "status": status,
+                                "progress": 100 if not result.get("error") else 0,
+                                "completed_at": int(time.time() * 1000),
+                                "details": result.get("content") if result.get("error") else None,
+                                "dependencies": dependencies.get(result.get("agent_type"), []),
+                            }
+                            if not result.get("error"):
+                                yield {
+                                    "type": "agent_result",
+                                    "run_id": run_id,
+                                    "agent_type": result.get("agent_type"),
+                                    "content": result.get("content", ""),
+                                    "sources": result.get("sources", []),
+                                    "evidence": result.get("evidence", []),
+                                    "evidence_ids": result.get("evidence_ids", []),
+                                    "claims": result.get("claims", []),
+                                    "open_questions": result.get("open_questions", []),
+                                    "confidence": result.get("confidence", 0.5),
+                                    "dependencies": dependencies.get(result.get("agent_type"), []),
+                                }
+                    continue
+
+                agent_type = group[0]
                 if stream:
                     yield {
                         "type": "agent_status",
+                        "run_id": run_id,
                         "agent_type": agent_type,
                         "status": "running",
                         "current_step": "开始工作...",
                         "progress": 0,
-                        "started_at": int(time.time() * 1000)
+                        "started_at": int(time.time() * 1000),
+                        "dependencies": dependencies.get(agent_type, []),
                     }
-                
+
                 try:
-                    # 获取Agent实例
                     agent = await self._get_expert_agent(agent_type, generation_config)
                     if not agent:
                         logger.warning(f"AgentWorkflow: {agent_type} 未找到，跳过")
                         if stream:
                             yield {
                                 "type": "agent_status",
+                                "run_id": run_id,
                                 "agent_type": agent_type,
                                 "status": "error",
-                                "details": "Agent未找到"
+                                "details": "Agent未找到",
                             }
                         continue
-                    
-                    # 执行Agent任务
+
                     result_content = ""
                     sources = []
+                    evidence = []
+                    evidence_ids = []
+                    claims = []
+                    open_questions = []
                     confidence = 0.5
                     progress = 0
-                    
-                    async for result in agent.execute(task=query, context=expert_context, stream=stream):
+                    ctx = dict(expert_context)
+                    ctx["other_results"] = list(agent_results)
+                    ctx["agent_task"] = agent_tasks.get(agent_type, query)
+                    task_for_agent = agent_tasks.get(agent_type, query)
+
+                    async for result in agent.execute(task=task_for_agent, context=ctx, stream=stream):
                         if result.get("type") == "complete":
                             result_content = result.get("content", "")
                             sources = result.get("sources", [])
+                            evidence = result.get("evidence", [])
+                            evidence_ids = result.get("evidence_ids", [])
+                            claims = result.get("claims", [])
+                            open_questions = result.get("open_questions", [])
                             confidence = result.get("confidence", 0.5)
                             progress = 100
-                            
-                            # 发送完成状态
+
                             if stream:
                                 yield {
                                     "type": "agent_status",
+                                    "run_id": run_id,
                                     "agent_type": agent_type,
                                     "status": "completed",
                                     "progress": 100,
-                                    "completed_at": int(time.time() * 1000)
+                                    "completed_at": int(time.time() * 1000),
+                                    "dependencies": dependencies.get(agent_type, []),
                                 }
-                                
+
                                 yield {
                                     "type": "agent_result",
+                                    "run_id": run_id,
                                     "agent_type": agent_type,
                                     "content": result_content,
                                     "sources": sources,
-                                    "confidence": confidence
+                                    "evidence": evidence,
+                                    "evidence_ids": evidence_ids,
+                                    "claims": claims,
+                                    "open_questions": open_questions,
+                                    "confidence": confidence,
+                                    "dependencies": dependencies.get(agent_type, []),
                                 }
                         elif result.get("type") == "chunk" and stream:
                             result_content += result.get("content", "")
-                            # 更新进度（简单估算）
                             progress = min(progress + 2, 95)
                             yield {
                                 "type": "agent_status",
+                                "run_id": run_id,
                                 "agent_type": agent_type,
                                 "status": "running",
                                 "current_step": result.get("current_step", "正在生成内容..."),
-                                "progress": progress
+                                "progress": progress,
+                                "dependencies": dependencies.get(agent_type, []),
                             }
                         elif result.get("type") == "status" and stream:
-                            # Agent发送的状态更新
                             yield {
                                 "type": "agent_status",
+                                "run_id": run_id,
                                 "agent_type": agent_type,
                                 "status": result.get("status", "running"),
                                 "current_step": result.get("current_step"),
                                 "progress": result.get("progress", progress),
-                                "details": result.get("details")
+                                "details": result.get("details"),
+                                "dependencies": dependencies.get(agent_type, []),
                             }
-                    
-                    # 保存结果
+
                     agent_results.append({
                         "agent_type": agent_type,
                         "content": result_content,
                         "sources": sources,
+                        "evidence": evidence,
+                        "evidence_ids": evidence_ids,
+                        "claims": claims,
+                        "open_questions": open_questions,
                         "confidence": confidence,
                         "error": False
                     })
-                    
+
                 except Exception as e:
                     logger.error(f"AgentWorkflow: {agent_type} 执行失败: {e}", exc_info=True)
                     error_msg = f"执行失败: {str(e)}"
@@ -319,19 +431,30 @@ class AgentWorkflow:
                         "content": error_msg,
                         "error": True
                     })
-                    # 发送错误状态
                     if stream:
                         yield {
                             "type": "agent_status",
+                            "run_id": run_id,
                             "agent_type": agent_type,
                             "status": "error",
-                            "details": error_msg
+                            "details": error_msg,
+                            "dependencies": dependencies.get(agent_type, []),
                         }
             
             # 5. 返回所有结果
             yield {
                 "type": "complete",
+                "run_id": run_id,
                 "agent_results": agent_results,
+                "selected_agents": agent_types,
+                "dependencies": dependencies,
+                "parallel_groups": execution_groups,
+                "artifact": {
+                    "query": query,
+                    "agent_results": agent_results,
+                    "dependencies": dependencies,
+                    "parallel_groups": execution_groups,
+                },
                 "total_agents": len(agent_types),
                 "successful_agents": len([r for r in agent_results if not r.get("error")])
             }
@@ -367,12 +490,20 @@ class AgentWorkflow:
         try:
             result_content = ""
             sources = []
+            evidence = []
+            evidence_ids = []
+            claims = []
+            open_questions = []
             confidence = 0.5
             
             async for result in agent.execute(task=task, context=context, stream=stream):
                 if result.get("type") == "complete":
                     result_content = result.get("content", "")
                     sources = result.get("sources", [])
+                    evidence = result.get("evidence", [])
+                    evidence_ids = result.get("evidence_ids", [])
+                    claims = result.get("claims", [])
+                    open_questions = result.get("open_questions", [])
                     confidence = result.get("confidence", 0.5)
                 elif result.get("type") == "chunk" and stream:
                     result_content += result.get("content", "")
@@ -381,6 +512,10 @@ class AgentWorkflow:
                 "agent_type": agent_type,
                 "content": result_content,
                 "sources": sources,
+                "evidence": evidence,
+                "evidence_ids": evidence_ids,
+                "claims": claims,
+                "open_questions": open_questions,
                 "confidence": confidence,
                 "error": False
             }
@@ -393,3 +528,53 @@ class AgentWorkflow:
                 "error": True
             }
 
+    def _sanitize_dependencies(self, dependencies: Dict[str, List[str]], agent_types: List[str]) -> Dict[str, List[str]]:
+        allowed = set(agent_types)
+        clean: Dict[str, List[str]] = {}
+        for agent_type, deps in (dependencies or {}).items():
+            if agent_type not in allowed:
+                continue
+            clean[agent_type] = [dep for dep in deps if dep in allowed and dep != agent_type]
+        if "critic" in allowed and "critic" not in clean:
+            clean["critic"] = [a for a in agent_types if a not in {"critic", "summary"}]
+        if "summary" in allowed and "summary" not in clean:
+            clean["summary"] = [a for a in agent_types if a != "summary"]
+        return clean
+
+    def _build_execution_groups(
+        self,
+        agent_types: List[str],
+        dependencies: Dict[str, List[str]],
+        parallel_groups: Optional[List[List[str]]] = None,
+    ) -> List[List[str]]:
+        pending = list(agent_types)
+        completed = set()
+        groups: List[List[str]] = []
+
+        # Prefer retrieval as the first evidence-producing step whenever selected.
+        if "document_retrieval" in pending:
+            groups.append(["document_retrieval"])
+            pending.remove("document_retrieval")
+            completed.add("document_retrieval")
+
+        while pending:
+            ready = [
+                agent_type
+                for agent_type in pending
+                if all(dep in completed for dep in dependencies.get(agent_type, []))
+            ]
+            if not ready:
+                # Break dependency cycles gracefully by advancing one agent.
+                ready = [pending[0]]
+
+            # Keep synthesis-style agents late even if a planner forgets dependencies.
+            if len(ready) > 1:
+                ready = [a for a in ready if a not in {"critic", "summary"}] or ready
+
+            groups.append(ready)
+            for agent_type in ready:
+                if agent_type in pending:
+                    pending.remove(agent_type)
+                completed.add(agent_type)
+
+        return groups

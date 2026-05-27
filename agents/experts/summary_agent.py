@@ -31,6 +31,9 @@ class SummaryAgent(BaseAgent):
         try:
             # 获取其他Agent的结果（如果有）
             other_results = context.get("other_results", []) if context else []
+            evidence_ids = []
+            for item in other_results:
+                evidence_ids.extend(item.get("evidence_ids", []) or [])
             
             summary_prompt = f"""请总结以下信息：
 
@@ -43,7 +46,7 @@ class SummaryAgent(BaseAgent):
 1. 核心要点总结
 2. 关键概念归纳
 3. 重要结论
-4. 学习建议"""
+4. 后续建议或下一步行动"""
             
             result = ""
             async for chunk in self._call_llm(prompt=self.merge_system_into_task_prompt(summary_prompt), stream=stream):
@@ -60,6 +63,12 @@ class SummaryAgent(BaseAgent):
                     "type": "complete",
                     "content": result,
                     "agent_type": "summary",
+                    "evidence_ids": list(dict.fromkeys(evidence_ids)),
+                    "claims": [{
+                        "source_agent": "summary",
+                        "content": result[:240],
+                        "status": "synthesized",
+                    }],
                     "confidence": 0.9
                 }
         
@@ -83,4 +92,3 @@ class SummaryAgent(BaseAgent):
             formatted.append(f"[{agent_type}]: {content[:500]}")  # 限制长度
         
         return "\n\n".join(formatted)
-

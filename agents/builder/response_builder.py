@@ -65,8 +65,10 @@ class ResponseBuilder:
                 html_parts.append(f'<h3>来源：</h3>')
                 html_parts.append(f'<ul>')
                 for source in sources[:5]:  # 限制显示数量
-                    source_title = source.get("title", "未知来源")
-                    html_parts.append(f'<li>{html.escape(source_title)}</li>')
+                    source_title = source.get("document_title") or source.get("title") or "未知来源"
+                    evidence_id = source.get("evidence_id")
+                    prefix = f"[{evidence_id}] " if evidence_id else ""
+                    html_parts.append(f'<li>{html.escape(prefix + source_title)}</li>')
                 html_parts.append(f'</ul>')
                 html_parts.append(f'</div>')
             
@@ -87,7 +89,9 @@ class ResponseBuilder:
             "example_generation": "📝 示例生成",
             "summary": "📋 总结",
             "exercise": "✏️ 习题",
-            "scientific_coding": "🔬 科学计算编码"
+            "scientific_coding": "🛠️ 实现方案",
+            "critic": "🧭 批判性分析",
+            "argument_analysis": "🧩 论证分析",
         }
         return titles.get(agent_type, agent_type)
     
@@ -268,4 +272,3 @@ class ResponseBuilder:
         """获取HTML尾部"""
         return """</body>
 </html>"""
-

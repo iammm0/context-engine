@@ -35,6 +35,11 @@ class CriticAgent(BaseAgent):
         # 1. 执行RAG检索 (获取验证素材)
         rag_context = ""
         sources = []
+        evidence = []
+        other_results = context.get("other_results", []) if context else []
+        inherited_evidence = []
+        for item in other_results:
+            inherited_evidence.extend(item.get("evidence", []) or [])
         
         try:
             logger.info(f"CriticAgent: 开始检索验证素材 - {task[:50]}...")
@@ -47,20 +52,44 @@ class CriticAgent(BaseAgent):
             )
             rag_context = retrieval_result.get("context", "")
             sources = retrieval_result.get("sources", [])
+            evidence = inherited_evidence or retrieval_result.get("evidence", [])
         except Exception as e:
             logger.error(f"CriticAgent: 检索失败: {e}")
-            yield {
-                "type": "error",
-                "content": f"检索失败: {str(e)}",
-                "agent_type": "critic"
-            }
-            return
+            if not other_results:
+                yield {
+                    "type": "error",
+                    "content": f"检索失败: {str(e)}",
+                    "agent_type": "critic"
+                }
+                return
 
         # 2. 生成分析
         full_response = ""
         try:
+            reviewed_content = "\n\n".join(
+                f"[{r.get('agent_type', 'unknown')}]\n{r.get('content', '')}"
+                for r in other_results
+                if r.get("content")
+            )
+            if not reviewed_content:
+                reviewed_content = task
+
+            evidence_context = rag_context
+            if inherited_evidence and not evidence_context:
+                evidence_context = "\n\n".join(
+                    f"[{item.get('id')}] {item.get('text', '')}"
+                    for item in inherited_evidence
+                    if item.get("id") and item.get("text")
+                )
+
             async for chunk in self.ollama_service.generate(
-                prompt=f"请批判性地分析以下陈述/问题：'{task}'\n\n基于事实证据：\n{rag_context}",
+                prompt=(
+                    "请审查以下其他Agent的结论或用户问题，逐条判断其证据状态。"
+                    "输出必须包含：准确性评估、支持充分的结论、证据不足的结论、可能矛盾或需修正的结论。"
+                    "每条判断请使用 supported / unsupported / contradicted / insufficient 之一标注。\n\n"
+                    f"待审查内容：\n{reviewed_content}\n\n"
+                    f"可用证据：\n{evidence_context}"
+                ),
                 context=None,
                 stream=stream
             ):
@@ -77,7 +106,11 @@ class CriticAgent(BaseAgent):
                     "type": "complete",
                     "content": full_response,
                     "agent_type": "critic",
-                    "sources": sources
+                    "sources": sources,
+                    "evidence": evidence,
+                    "evidence_ids": [item.get("id") for item in evidence if item.get("id")],
+                    "claims": self._build_review_claims(other_results, full_response),
+                    "open_questions": []
                 }
                 
         except Exception as e:
@@ -87,3 +120,22 @@ class CriticAgent(BaseAgent):
                 "content": f"生成失败: {str(e)}",
                 "agent_type": "critic"
             }
+
+    def _build_review_claims(self, other_results, critique_text: str):
+        claims = []
+        for result in other_results or []:
+            content = (result.get("content") or "").strip()
+            if not content:
+                continue
+            claims.append({
+                "source_agent": result.get("agent_type", "unknown"),
+                "content": content[:240],
+                "status": "reviewed",
+            })
+        if not claims and critique_text:
+            claims.append({
+                "source_agent": "critic",
+                "content": critique_text[:240],
+                "status": "reviewed",
+            })
+        return claims
