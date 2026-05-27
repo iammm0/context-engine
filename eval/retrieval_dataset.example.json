@@ -3,7 +3,7 @@
     "id": "q1",
     "query": "报告中对行业景气度的主要结论是什么？",
     "gold": {
-      "document_id": "PUT_DOC_ID_HERE",
+      "document_id": "demo_doc_001",
       "chunk_indices": [12, 13, 14]
     }
   },
@@ -11,9 +11,8 @@
     "id": "q2",
     "query": "报告对风险提示有哪些条款？请列举要点。",
     "gold": {
-      "document_id": "PUT_DOC_ID_HERE",
+      "document_id": "demo_doc_001",
       "chunk_indices": [80, 81]
     }
   }
 ]
-

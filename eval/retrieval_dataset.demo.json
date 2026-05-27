@@ -1,0 +1,18 @@
+[
+  {
+    "id": "demo-q1",
+    "query": "advanced-rag 的 RAG 流程包含哪些关键步骤？",
+    "gold": {
+      "document_id": "demo_doc_001",
+      "chunk_indices": [0, 1]
+    }
+  },
+  {
+    "id": "demo-q2",
+    "query": "多智能体深度研究中 critic 的职责是什么？",
+    "gold": {
+      "document_id": "demo_doc_001",
+      "chunk_indices": [2]
+    }
+  }
+]
