@@ -158,6 +158,10 @@ export interface DocumentChunksResponse {
   skip: number
   limit: number
   parse_quality?: ParseQualitySummary | null
+  target_chunk_id?: string | null
+  target_chunk_index?: number | null
+  target_found?: boolean | null
+  target_offset?: number | null
   filters?: {
     content_type?: string | null
     feature?: string | null

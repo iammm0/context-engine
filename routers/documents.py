@@ -1138,6 +1138,10 @@ class DocumentChunksResponse(BaseModel):
     limit: int
     parse_quality: Optional[Dict[str, Any]] = None
     filters: Optional[Dict[str, Any]] = None
+    target_chunk_id: Optional[str] = None
+    target_chunk_index: Optional[int] = None
+    target_found: Optional[bool] = None
+    target_offset: Optional[int] = None
 
 
 @router.post("/{doc_id}/retry")
@@ -1249,6 +1253,9 @@ async def get_document_chunks(
     content_type: Optional[str] = Query(None),
     feature: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    target_chunk_id: Optional[str] = Query(None),
+    target_chunk_index: Optional[int] = Query(None, ge=0),
+    context_window: int = Query(4, ge=0, le=50),
 ):
     """获取文档分块预览，用于切块可视化和证据定位。"""
     logger.info(f"获取文档分块预览请求 - 文档ID: {doc_id}, skip: {skip}, limit: {limit}")
@@ -1273,8 +1280,36 @@ async def get_document_chunks(
             query=q,
         )
         total = len(filtered_chunks)
+
+        target_position: Optional[int] = None
+        target_found = False
+        if target_chunk_id or target_chunk_index is not None:
+            for index, chunk in enumerate(filtered_chunks):
+                chunk_id = str(chunk.get("_id") or chunk.get("id") or "")
+                chunk_index = chunk.get("chunk_index")
+                if target_chunk_id and chunk_id == target_chunk_id:
+                    target_position = index
+                    break
+                if target_chunk_id:
+                    continue
+                if target_chunk_index is not None and chunk_index == target_chunk_index:
+                    target_position = index
+                    break
+
+            target_found = target_position is not None
+            if target_found:
+                max_skip = max(total - limit, 0)
+                desired_skip = max(0, int(target_position or 0) - min(context_window, max(limit - 1, 0)))
+                skip = min(desired_skip, max_skip)
+
         page = filtered_chunks[skip: skip + limit]
         previews = [build_chunk_preview(chunk, include_text=include_text) for chunk in page]
+        target_offset = (target_position - skip) if target_position is not None and skip <= target_position < skip + len(page) else None
+        if target_found and target_position is not None:
+            target_chunk = filtered_chunks[target_position]
+            target_chunk_id = target_chunk_id or str(target_chunk.get("_id") or target_chunk.get("id") or "")
+            raw_target_index = target_chunk.get("chunk_index")
+            target_chunk_index = raw_target_index if isinstance(raw_target_index, int) else target_chunk_index
         parse_quality = (doc.get("metadata") or {}).get("parse_quality")
         if not parse_quality and chunks:
             parse_quality = ((chunks[0].get("metadata") or {}).get("parse_summary") or None)
@@ -1294,6 +1329,10 @@ async def get_document_chunks(
                 "feature": feature,
                 "q": q,
             },
+            target_chunk_id=target_chunk_id,
+            target_chunk_index=target_chunk_index,
+            target_found=target_found if target_chunk_id or target_chunk_index is not None else None,
+            target_offset=target_offset,
         )
     except HTTPException:
         raise

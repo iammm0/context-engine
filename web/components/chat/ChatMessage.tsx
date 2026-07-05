@@ -5,6 +5,7 @@ import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
 import type { ChatMessage as MessageType, EvidenceArtifact, EvidenceItem, OcrImageRef, SourceInfo } from "@/types/chat";
+import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -46,6 +47,22 @@ function formatEvidenceLocation(item: EvidenceItem) {
 
 function getEvidenceType(item: EvidenceItem) {
   return item.metadata?.content_type || "text";
+}
+
+function buildSourceChunkHref(source: SourceInfo) {
+  if (!source.document_id) return "";
+  const params = new URLSearchParams({ document_id: source.document_id });
+  if (source.chunk_id) params.set("chunk_id", source.chunk_id);
+  if (typeof source.chunk_index === "number") params.set("chunk_index", String(source.chunk_index));
+  return `/documents?${params.toString()}`;
+}
+
+function buildEvidenceChunkHref(item: EvidenceItem) {
+  if (!item.document_id) return "";
+  const params = new URLSearchParams({ document_id: item.document_id });
+  if (item.chunk_id) params.set("chunk_id", item.chunk_id);
+  if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
+  return `/documents?${params.toString()}`;
 }
 
 function formatOcrConfidence(value?: number | null) {
@@ -338,40 +355,46 @@ function ChatMessageImpl({
           <div className="mt-2 w-full text-xs text-gray-600 dark:text-gray-300">
             <div className="font-semibold mb-1">参考来源</div>
             <ul className="space-y-1">
-              {message.sources.slice(0, 10).map((source) => (
-                <li
-                  key={`${source.chunk_id || source.document_id || source.file_id || source.evidence_id || source.document_title || source.score}`}
-                  className={`rounded border px-2 py-1 transition-colors ${
-                    source.evidence_id && source.evidence_id === activeCitationId
-                      ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
-                      : "border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    {source.evidence_id && (
-                      <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-gray-100 dark:text-gray-900">
-                        {source.evidence_id}
+              {message.sources.slice(0, 10).map((source) => {
+                const chunkHref = buildSourceChunkHref(source);
+                return (
+                  <li
+                    key={`${source.chunk_id || source.document_id || source.file_id || source.evidence_id || source.document_title || source.score}`}
+                    className={`rounded border px-2 py-1 transition-colors ${
+                      source.evidence_id && source.evidence_id === activeCitationId
+                        ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {source.evidence_id && (
+                        <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-gray-100 dark:text-gray-900">
+                          {source.evidence_id}
+                        </span>
+                      )}
+                      {source.content_type && (
+                        <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
+                          {evidenceTypeLabel[source.content_type] || source.content_type}
+                        </span>
+                      )}
+                      <span className="truncate font-medium">
+                        {source.document_title || source.document_id || source.chunk_id || "来源"}
                       </span>
-                    )}
-                    {source.content_type && (
-                      <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
-                        {evidenceTypeLabel[source.content_type] || source.content_type}
-                      </span>
-                    )}
-                    <span className="truncate font-medium">
-                      {source.document_title || source.document_id || source.chunk_id || "来源"}
-                    </span>
-                    {typeof source.score === "number" && (
-                      <span className="shrink-0 text-gray-400">{source.score.toFixed(3)}</span>
-                    )}
-                  </div>
-                  {formatSourceLocation(source) && (
-                    <div className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">
-                      {formatSourceLocation(source)}
+                      {typeof source.score === "number" && (
+                        <span className="shrink-0 text-gray-400">{source.score.toFixed(3)}</span>
+                      )}
                     </div>
-                  )}
-                </li>
-              ))}
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      {formatSourceLocation(source) && <span>{formatSourceLocation(source)}</span>}
+                      {chunkHref && (
+                        <Link href={chunkHref} className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
+                          查看切块
+                        </Link>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -384,42 +407,50 @@ function ChatMessageImpl({
           >
             <summary className="cursor-pointer font-semibold">检索证据</summary>
             <ul className="mt-1 space-y-1">
-              {message.evidence.slice(0, 8).map((item) => (
-                <li
-                  key={item.id}
-                  ref={(node) => {
-                    evidenceRefs.current[item.id] = node;
-                  }}
-                  className={`rounded border px-2 py-1 transition-colors ${
-                    item.id === activeCitationId
-                      ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
-                      : "border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-gray-100 dark:text-gray-900">
-                      {item.id}
-                    </span>
-                    <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
-                      {evidenceTypeLabel[getEvidenceType(item)] || getEvidenceType(item)}
-                    </span>
-                    <span className="truncate font-medium">
-                      {item.document_title || item.document_id || item.file_id || "证据"}
-                    </span>
-                    {typeof item.score === "number" && (
-                      <span className="shrink-0 text-gray-400">{item.score.toFixed(3)}</span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                    {formatEvidenceLocation(item) && <span>{formatEvidenceLocation(item)}</span>}
-                    <span>{item.retrieval_type}</span>
-                  </div>
-                  <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
-                    {item.metadata?.preview || item.text}
-                  </div>
-                  <EvidenceArtifactPreview artifact={item.metadata?.artifact} />
-                </li>
-              ))}
+              {message.evidence.slice(0, 8).map((item) => {
+                const chunkHref = buildEvidenceChunkHref(item);
+                return (
+                  <li
+                    key={item.id}
+                    ref={(node) => {
+                      evidenceRefs.current[item.id] = node;
+                    }}
+                    className={`rounded border px-2 py-1 transition-colors ${
+                      item.id === activeCitationId
+                        ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-gray-100 dark:text-gray-900">
+                        {item.id}
+                      </span>
+                      <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
+                        {evidenceTypeLabel[getEvidenceType(item)] || getEvidenceType(item)}
+                      </span>
+                      <span className="truncate font-medium">
+                        {item.document_title || item.document_id || item.file_id || "证据"}
+                      </span>
+                      {typeof item.score === "number" && (
+                        <span className="shrink-0 text-gray-400">{item.score.toFixed(3)}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      {formatEvidenceLocation(item) && <span>{formatEvidenceLocation(item)}</span>}
+                      <span>{item.retrieval_type}</span>
+                      {chunkHref && (
+                        <Link href={chunkHref} className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
+                          查看切块
+                        </Link>
+                      )}
+                    </div>
+                    <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
+                      {item.metadata?.preview || item.text}
+                    </div>
+                    <EvidenceArtifactPreview artifact={item.metadata?.artifact} />
+                  </li>
+                );
+              })}
             </ul>
           </details>
         )}

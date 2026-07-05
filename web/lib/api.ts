@@ -70,6 +70,7 @@ export type DocumentDetail = {
   progress_percentage?: number | null;
   current_stage?: string | null;
   stage_details?: string | null;
+  parse_quality?: ParseQualitySummary | null;
   file_path: string;
   metadata?: Record<string, unknown> | null;
   processing_stages: Array<Record<string, unknown>>;
@@ -131,6 +132,10 @@ export type DocumentChunksResponse = {
   skip: number;
   limit: number;
   parse_quality?: ParseQualitySummary | null;
+  target_chunk_id?: string | null;
+  target_chunk_index?: number | null;
+  target_found?: boolean | null;
+  target_offset?: number | null;
   filters?: {
     content_type?: string | null;
     feature?: string | null;
@@ -344,7 +349,17 @@ const apiClientImpl = {
 
   async getDocumentChunks(
     docId: string,
-    options?: { skip?: number; limit?: number; includeText?: boolean; contentType?: string; feature?: string; query?: string },
+    options?: {
+      skip?: number;
+      limit?: number;
+      includeText?: boolean;
+      contentType?: string;
+      feature?: string;
+      query?: string;
+      targetChunkId?: string;
+      targetChunkIndex?: number;
+      contextWindow?: number;
+    },
   ): Promise<ApiResult<DocumentChunksResponse>> {
     const q = new URLSearchParams();
     q.set("skip", String(options?.skip ?? 0));
@@ -353,6 +368,9 @@ const apiClientImpl = {
     if (options?.contentType && options.contentType !== "all") q.set("content_type", options.contentType);
     if (options?.feature && options.feature !== "all") q.set("feature", options.feature);
     if (options?.query?.trim()) q.set("q", options.query.trim());
+    if (options?.targetChunkId) q.set("target_chunk_id", options.targetChunkId);
+    if (typeof options?.targetChunkIndex === "number") q.set("target_chunk_index", String(options.targetChunkIndex));
+    if (typeof options?.contextWindow === "number") q.set("context_window", String(options.contextWindow));
     return requestJson<DocumentChunksResponse>(
       `/api/documents/${encodeURIComponent(docId)}/chunks?${q.toString()}`,
     );

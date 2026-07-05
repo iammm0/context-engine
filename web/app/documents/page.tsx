@@ -7,7 +7,7 @@ import Layout from "@/components/ui/Layout";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, type Document, type DocumentChunkPreview, type OcrImageRef, type ParseQualitySummary } from "@/lib/api";
+import { apiClient, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -24,6 +24,52 @@ type ChunkFilterOption = {
   label: string;
   count?: number;
 };
+
+type ChunkDeepLinkTarget = {
+  documentId: string;
+  chunkId?: string;
+  chunkIndex?: number;
+};
+
+function parseChunkDeepLinkTarget(): ChunkDeepLinkTarget | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const documentId = params.get("document_id")?.trim();
+  if (!documentId) return null;
+
+  const chunkId = params.get("chunk_id")?.trim() || undefined;
+  const rawChunkIndex = params.get("chunk_index");
+  const parsedIndex = rawChunkIndex !== null ? Number.parseInt(rawChunkIndex, 10) : Number.NaN;
+  const chunkIndex = Number.isFinite(parsedIndex) && parsedIndex >= 0 ? parsedIndex : undefined;
+  return { documentId, chunkId, chunkIndex };
+}
+
+function chunkTargetKey(target: ChunkDeepLinkTarget) {
+  return [target.documentId, target.chunkId || "", typeof target.chunkIndex === "number" ? target.chunkIndex : ""].join(":");
+}
+
+function documentFromDetail(detail: DocumentDetail): Document {
+  return {
+    id: detail.id,
+    title: detail.title,
+    file_type: detail.file_type,
+    file_size: detail.file_size,
+    created_at: detail.created_at,
+    status: detail.status,
+    progress_percentage: detail.progress_percentage,
+    current_stage: detail.current_stage,
+    stage_details: detail.stage_details,
+    parse_quality:
+      detail.parse_quality ||
+      ((detail.metadata?.parse_quality as ParseQualitySummary | undefined) ?? null),
+  };
+}
+
+function isHighlightedChunk(chunk: DocumentChunkPreview, target: ChunkDeepLinkTarget | null) {
+  if (!target) return false;
+  if (target.chunkId && chunk.id === target.chunkId) return true;
+  return typeof target.chunkIndex === "number" && chunk.chunk_index === target.chunkIndex;
+}
 
 function getChunkFilterOptions(quality?: ParseQualitySummary | null): ChunkFilterOption[] {
   const counts = quality?.content_type_counts || {};
@@ -218,8 +264,11 @@ export default function DocumentsPage() {
   const [chunkPreviewLoadingMore, setChunkPreviewLoadingMore] = useState(false);
   const [chunkPreviewError, setChunkPreviewError] = useState("");
   const [chunkPanelQuality, setChunkPanelQuality] = useState<ParseQualitySummary | null>(null);
+  const [highlightedChunkTarget, setHighlightedChunkTarget] = useState<ChunkDeepLinkTarget | null>(null);
 
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const processedChunkDeepLinkRef = useRef<string | null>(null);
+  const highlightedChunkRef = useRef<HTMLDivElement | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [refreshIntervalMs, setRefreshIntervalMs] = useState(3000);
   const [toast, setToast] = useState<{ isOpen: boolean; message: string; type: ToastType }>({
@@ -230,7 +279,9 @@ export default function DocumentsPage() {
 
   const loadingSteps = ["正在加载知识空间列表...", "正在加载文档列表...", "准备就绪"];
 
-  const showToast = (message: string, type: ToastType) => setToast({ isOpen: true, message, type });
+  const showToast = useCallback((message: string, type: ToastType) => {
+    setToast({ isOpen: true, message, type });
+  }, []);
 
   const loadKnowledgeSpaces = useCallback(async () => {
     const result = await apiClient.listKnowledgeSpaces();
@@ -331,64 +382,96 @@ export default function DocumentsPage() {
     await loadDocuments(selectedKnowledgeSpaceId, page);
   };
 
-  const loadChunkPreview = async (
-    doc: Document,
-    filter: string,
-    query: string,
-    options?: { skip?: number; append?: boolean },
-  ) => {
-    const append = options?.append ?? false;
-    const skip = options?.skip ?? 0;
-    setChunkPanelDoc(doc);
-    setChunkPreviewError("");
-    if (append) {
-      setChunkPreviewLoadingMore(true);
-    } else {
-      setChunkPreview([]);
-      setChunkPreviewTotal(0);
-      setChunkPreviewAllTotal(0);
-      setChunkPanelQuality(doc.parse_quality || null);
-      setChunkPreviewLoading(true);
-    }
-    try {
-      const result = await apiClient.getDocumentChunks(doc.id, {
-        skip,
-        limit: 80,
-        includeText: false,
-        contentType: filter,
-        query,
-      });
-      if (result.error) throw new Error(result.error);
-      const nextChunks = result.data?.chunks || [];
-      setChunkPreview((prev) => (append ? [...prev, ...nextChunks] : nextChunks));
-      setChunkPreviewTotal(result.data?.total_chunks || 0);
-      setChunkPreviewAllTotal(result.data?.total_all_chunks ?? result.data?.total_chunks ?? 0);
-      setChunkPanelQuality(
-        result.data?.parse_quality ||
-          doc.parse_quality ||
-          ((result.data?.chunks?.[0]?.parse_summary as ParseQualitySummary | undefined) ?? null),
-      );
-    } catch (e) {
-      setChunkPreviewError((e as Error).message || "加载切块失败");
-    } finally {
+  const loadChunkPreview = useCallback(
+    async (
+      doc: Document,
+      filter: string,
+      query: string,
+      options?: {
+        skip?: number;
+        append?: boolean;
+        targetChunkId?: string;
+        targetChunkIndex?: number;
+        contextWindow?: number;
+      },
+    ) => {
+      const append = options?.append ?? false;
+      const skip = options?.skip ?? 0;
+      setChunkPanelDoc(doc);
+      setChunkPreviewError("");
       if (append) {
-        setChunkPreviewLoadingMore(false);
+        setChunkPreviewLoadingMore(true);
       } else {
-        setChunkPreviewLoading(false);
+        setChunkPreview([]);
+        setChunkPreviewTotal(0);
+        setChunkPreviewAllTotal(0);
+        setChunkPanelQuality(doc.parse_quality || null);
+        setChunkPreviewLoading(true);
       }
-    }
-  };
+      try {
+        const result = await apiClient.getDocumentChunks(doc.id, {
+          skip,
+          limit: 80,
+          includeText: false,
+          contentType: filter,
+          query,
+          targetChunkId: options?.targetChunkId,
+          targetChunkIndex: options?.targetChunkIndex,
+          contextWindow: options?.contextWindow,
+        });
+        if (result.error) throw new Error(result.error);
+        const nextChunks = result.data?.chunks || [];
+        setChunkPreview((prev) => (append ? [...prev, ...nextChunks] : nextChunks));
+        setChunkPreviewTotal(result.data?.total_chunks || 0);
+        setChunkPreviewAllTotal(result.data?.total_all_chunks ?? result.data?.total_chunks ?? 0);
+        setChunkPanelQuality(
+          result.data?.parse_quality ||
+            doc.parse_quality ||
+            ((result.data?.chunks?.[0]?.parse_summary as ParseQualitySummary | undefined) ?? null),
+        );
+        if (options?.targetChunkId || typeof options?.targetChunkIndex === "number") {
+          if (result.data?.target_found === false) {
+            setHighlightedChunkTarget(null);
+            highlightedChunkRef.current = null;
+            showToast("未在当前切块结果中找到目标证据", "warning");
+          } else {
+            setHighlightedChunkTarget({
+              documentId: doc.id,
+              chunkId: result.data?.target_chunk_id || options.targetChunkId,
+              chunkIndex:
+                typeof result.data?.target_chunk_index === "number"
+                  ? result.data.target_chunk_index
+                  : options.targetChunkIndex,
+            });
+          }
+        }
+      } catch (e) {
+        setChunkPreviewError((e as Error).message || "加载切块失败");
+      } finally {
+        if (append) {
+          setChunkPreviewLoadingMore(false);
+        } else {
+          setChunkPreviewLoading(false);
+        }
+      }
+    },
+    [showToast],
+  );
 
   const handleViewChunks = async (doc: Document) => {
     setChunkPreviewFilter("all");
     setChunkPreviewQuery("");
     setChunkPreviewAppliedQuery("");
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
     await loadChunkPreview(doc, "all", "");
   };
 
   const handleChunkFilterChange = async (filter: string) => {
     if (!chunkPanelDoc || filter === chunkPreviewFilter) return;
     setChunkPreviewFilter(filter);
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
     await loadChunkPreview(chunkPanelDoc, filter, chunkPreviewAppliedQuery);
   };
 
@@ -396,6 +479,8 @@ export default function DocumentsPage() {
     if (!chunkPanelDoc) return;
     const nextQuery = chunkPreviewQuery.trim();
     setChunkPreviewAppliedQuery(nextQuery);
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
     await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, nextQuery);
   };
 
@@ -403,6 +488,8 @@ export default function DocumentsPage() {
     if (!chunkPanelDoc) return;
     setChunkPreviewQuery("");
     setChunkPreviewAppliedQuery("");
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
     await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, "");
   };
 
@@ -413,6 +500,47 @@ export default function DocumentsPage() {
       append: true,
     });
   };
+
+  useEffect(() => {
+    if (loading || error) return;
+    const target = parseChunkDeepLinkTarget();
+    if (!target) return;
+
+    const key = chunkTargetKey(target);
+    if (processedChunkDeepLinkRef.current === key) return;
+    processedChunkDeepLinkRef.current = key;
+
+    const openTargetChunk = async () => {
+      let targetDoc = documents.find((doc) => doc.id === target.documentId);
+      if (!targetDoc) {
+        const detail = await apiClient.getDocumentDetail(target.documentId);
+        if (detail.error || !detail.data) throw new Error(detail.error || "文档不存在");
+        targetDoc = documentFromDetail(detail.data);
+      }
+
+      setChunkPreviewFilter("all");
+      setChunkPreviewQuery("");
+      setChunkPreviewAppliedQuery("");
+      setHighlightedChunkTarget(target);
+      highlightedChunkRef.current = null;
+      await loadChunkPreview(targetDoc, "all", "", {
+        targetChunkId: target.chunkId,
+        targetChunkIndex: target.chunkIndex,
+        contextWindow: 6,
+      });
+    };
+
+    openTargetChunk().catch((e) => {
+      showToast((e as Error).message || "定位证据切块失败", "error");
+    });
+  }, [documents, error, loading, loadChunkPreview, showToast]);
+
+  useEffect(() => {
+    if (!highlightedChunkTarget || chunkPreviewLoading || chunkPreview.length === 0) return;
+    window.setTimeout(() => {
+      highlightedChunkRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }, [chunkPreview.length, chunkPreviewLoading, highlightedChunkTarget]);
 
   const handleCreateSpace = async () => {
     const name = newSpaceName.trim();
@@ -687,6 +815,8 @@ export default function DocumentsPage() {
                   setChunkPreviewLoadingMore(false);
                   setChunkPreviewError("");
                   setChunkPanelQuality(null);
+                  setHighlightedChunkTarget(null);
+                  highlightedChunkRef.current = null;
                 }}
               >
                 关闭
@@ -865,10 +995,18 @@ export default function DocumentsPage() {
                   const featureFlags = Object.entries(chunk.features || {})
                     .filter(([, enabled]) => enabled)
                     .map(([key]) => key.replace(/^has_/, ""));
+                  const highlighted = isHighlightedChunk(chunk, highlightedChunkTarget);
                   return (
                     <div
                       key={chunk.id || `${chunk.chunk_index}`}
-                      className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900"
+                      ref={(node) => {
+                        if (highlighted) highlightedChunkRef.current = node;
+                      }}
+                      className={`rounded-lg border p-4 transition-colors ${
+                        highlighted
+                          ? "border-amber-400 bg-amber-50 ring-2 ring-amber-300 dark:border-amber-500 dark:bg-amber-950/30 dark:ring-amber-700"
+                          : "border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                      }`}
                     >
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded bg-gray-900 px-2 py-1 font-medium text-white dark:bg-gray-100 dark:text-gray-900">

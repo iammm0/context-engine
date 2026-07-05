@@ -300,6 +300,7 @@ class RAGService:
                     source_key = f"conversation_{conversation_id}_{file_id}"
                     source_info = {
                         "chunk_id": result["payload"].get("chunk_id"),
+                        "chunk_index": chunk_index if isinstance(chunk_index, int) else None,
                         "evidence_id": evidence_items[-1].id if evidence_items else None,
                         "file_id": file_id,
                         "conversation_id": conversation_id,
@@ -321,6 +322,7 @@ class RAGService:
                     source_key = doc_id or result.get("id") or (evidence_items[-1].id if evidence_items else "unknown")
                     source_info = {
                         "chunk_id": result["payload"].get("chunk_id"),
+                        "chunk_index": chunk_index if isinstance(chunk_index, int) else None,
                         "evidence_id": evidence_items[-1].id if evidence_items else None,
                         "document_id": doc_id,
                         "score": score,

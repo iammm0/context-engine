@@ -65,9 +65,17 @@ Query parameters:
   `has_image_ocr`.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
+- `target_chunk_id` / `target_chunk_index`: optional evidence locator. When
+  provided, the API shifts the returned window so the matching chunk is included
+  near its surrounding context.
+- `context_window`: number of chunks to keep before the target when using a
+  target locator, default `4`.
 
 The response includes `total_chunks` for the current filtered result and
-`total_all_chunks` for the full document chunk count.
+`total_all_chunks` for the full document chunk count. When a target locator is
+used, the response also returns `target_found`, `target_offset`,
+`target_chunk_id`, and `target_chunk_index` so clients can highlight the exact
+source chunk.
 
 The Next.js document page uses this endpoint to show chunk type, page/section
 location, feature flags, token count, parse quality, and preview text. The
@@ -89,6 +97,8 @@ retrieval type, and score so generated citations such as `[S1]` are easier to
 trace back to source chunks. In the chat UI, inline citations such as `[S1]`
 are rendered as citation chips when matching evidence is available; selecting a
 chip opens the evidence list and highlights the corresponding source chunk.
+Evidence and source cards also link to `/documents` with the document and chunk
+locator, opening the chunk inspector around the cited chunk for source review.
 
 ## EvidenceItem
 

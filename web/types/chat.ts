@@ -78,6 +78,7 @@ export interface RecommendedResource {
 
 export interface SourceInfo {
   chunk_id?: string;
+  chunk_index?: number;
   evidence_id?: string;
   document_id?: string;
   file_id?: string;
