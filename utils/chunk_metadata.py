@@ -487,3 +487,30 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
     if include_text:
         item["text"] = text
     return item
+
+
+def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Build compact chunk metadata safe to store in vector payloads."""
+    meta = metadata or {}
+    section_path = meta.get("section_path")
+    if isinstance(section_path, list):
+        section_path = [str(s)[:200] for s in section_path[:12]]
+    elif section_path is not None:
+        section_path = [str(section_path)[:200]]
+
+    return {
+        "content_type": meta.get("content_type", "text"),
+        "chunker_type": meta.get("chunker_type"),
+        "token_count": meta.get("token_count"),
+        "section_path": section_path,
+        "page": meta.get("page"),
+        "page_start": meta.get("page_start"),
+        "page_end": meta.get("page_end"),
+        "char_start": meta.get("char_start"),
+        "char_end": meta.get("char_end"),
+        "preview": meta.get("preview"),
+        "artifact": meta.get("artifact"),
+        "features": meta.get("features") or {},
+        "parse_summary": meta.get("parse_summary") or {},
+        "file_type": meta.get("file_type"),
+    }

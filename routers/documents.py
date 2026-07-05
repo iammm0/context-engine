@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 from utils.logger import logger
-from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, enrich_chunks_for_visualization
+from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization
 
 router = APIRouter()
 
@@ -687,33 +687,13 @@ def process_document_background(
                     meta = (chunk.get("metadata") or {}).copy()
                     # 仅保留对检索/拼接有价值且体积可控的字段
                     # section_path 可能较长，这里限制单个元素长度，避免 payload 过大
-                    section_path = meta.get("section_path")
-                    if isinstance(section_path, list):
-                        section_path = [str(s)[:200] for s in section_path[:12]]
-                    elif section_path is not None:
-                        section_path = [str(section_path)[:200]]
-
                     batch_payloads.append({
                         "chunk_id": chunk_id,
                         "document_id": doc_id,
                         "text": chunk["text"],
                         "chunk_index": batch_start + i,
                         # 用于邻居扩展与上下文去重的关键元数据
-                        "metadata": {
-                            "content_type": meta.get("content_type", "text"),
-                            "chunker_type": meta.get("chunker_type"),
-                            "token_count": meta.get("token_count"),
-                            "section_path": section_path,
-                            "page": meta.get("page"),
-                            "page_start": meta.get("page_start"),
-                            "page_end": meta.get("page_end"),
-                            "char_start": meta.get("char_start"),
-                            "char_end": meta.get("char_end"),
-                            "preview": meta.get("preview"),
-                            "features": meta.get("features") or {},
-                            "parse_summary": meta.get("parse_summary") or {},
-                            "file_type": meta.get("file_type"),
-                        }
+                        "metadata": build_retrieval_payload_metadata(meta)
                     })
                     batch_ids.append(chunk_id)
                 

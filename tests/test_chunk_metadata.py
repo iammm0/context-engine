@@ -5,7 +5,12 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, enrich_chunks_for_visualization
+from utils.chunk_metadata import (
+    build_chunk_preview,
+    build_parse_quality_summary,
+    build_retrieval_payload_metadata,
+    enrich_chunks_for_visualization,
+)
 
 
 def test_enrich_chunks_adds_visual_metadata_and_compacts_heavy_fields():
@@ -114,6 +119,35 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
     assert artifact["images"][0]["line_count"] == 4
     assert artifact["images"][0]["width"] == 640
     assert artifact["images"][0]["height"] == 320
+
+
+def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
+    metadata = {
+        "content_type": "table",
+        "section_path": ["A" * 260, "Methods"],
+        "page_start": 2,
+        "page_end": 2,
+        "preview": "table preview",
+        "artifact": {
+            "type": "table",
+            "headers": ["指标", "数值"],
+            "rows": [["recall", "0.9"]],
+            "row_count": 1,
+            "column_count": 2,
+        },
+        "pages": [{"page": 1, "text": "heavy"}],
+        "tables": [{"markdown": "heavy"}],
+    }
+
+    payload = build_retrieval_payload_metadata(metadata)
+
+    assert payload["content_type"] == "table"
+    assert payload["section_path"] == ["A" * 200, "Methods"]
+    assert payload["artifact"]["type"] == "table"
+    assert payload["artifact"]["headers"] == ["指标", "数值"]
+    assert payload["artifact"]["rows"] == [["recall", "0.9"]]
+    assert "pages" not in payload
+    assert "tables" not in payload
 
 
 def test_build_parse_quality_summary_scores_and_warns_on_low_coverage_ocr_gap():

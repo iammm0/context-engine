@@ -4,7 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, EvidenceItem, SourceInfo } from "@/types/chat";
+import type { ChatMessage as MessageType, EvidenceArtifact, EvidenceItem, OcrImageRef, SourceInfo } from "@/types/chat";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -46,6 +46,102 @@ function formatEvidenceLocation(item: EvidenceItem) {
 
 function getEvidenceType(item: EvidenceItem) {
   return item.metadata?.content_type || "text";
+}
+
+function formatOcrConfidence(value?: number | null) {
+  if (typeof value !== "number") return "";
+  const percent = value <= 1 ? value * 100 : value;
+  return `置信度 ${Math.round(percent)}%`;
+}
+
+function formatOcrImageRef(image: OcrImageRef, index: number) {
+  const bits = [];
+  if (typeof image.page === "number") bits.push(`第 ${image.page} 页`);
+  if (typeof image.image_index === "number") bits.push(`图片 ${image.image_index}`);
+  const confidence = formatOcrConfidence(image.confidence);
+  if (confidence) bits.push(confidence);
+  if (typeof image.line_count === "number") bits.push(`${image.line_count} 行`);
+  if (typeof image.width === "number" && typeof image.height === "number") {
+    bits.push(`${image.width}x${image.height}`);
+  }
+  return bits.join(" · ") || `图片 ${index + 1}`;
+}
+
+function EvidenceArtifactPreview({ artifact }: { artifact?: EvidenceArtifact | null }) {
+  if (!artifact) return null;
+
+  if (artifact.type === "table") {
+    const headers = artifact.headers || [];
+    const visibleHeaders = headers.slice(0, 5);
+    const rows = (artifact.rows || []).slice(0, 4);
+    if (headers.length > 0 && rows.length > 0) {
+      return (
+        <div className="mt-1 overflow-x-auto rounded border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+          <table className="min-w-full text-left text-[11px]">
+            <thead className="bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <tr>
+                {visibleHeaders.map((header) => (
+                  <th key={header || "empty-header"} className="whitespace-nowrap px-2 py-1 font-medium">
+                    {header || "未命名列"}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {rows.map((row) => (
+                <tr key={row.join("|") || "empty-row"}>
+                  {visibleHeaders.map((header, colIndex) => (
+                    <td key={`${header || "empty-header"}-${row[colIndex] || "empty-cell"}`} className="max-w-[160px] truncate px-2 py-1 text-gray-600 dark:text-gray-300">
+                      {row[colIndex] || ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (artifact.markdown) {
+      return (
+        <pre className="mt-1 max-h-28 overflow-auto rounded border border-gray-200 bg-white p-2 text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300">
+          {artifact.markdown}
+        </pre>
+      );
+    }
+  }
+
+  if (artifact.type === "image_ocr" || artifact.type === "ocr") {
+    const images = artifact.images || [];
+    return (
+      <div className="mt-1 rounded border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        {artifact.text && <div className="line-clamp-2 whitespace-pre-wrap">{artifact.text}</div>}
+        {images.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {images.map((image, index) => (
+              <span
+                key={`${image.page ?? "page"}-${image.image_index ?? "image"}-${image.line_count ?? "lines"}-${image.text_length ?? "text"}`}
+                className="rounded border border-amber-200 bg-white/70 px-1.5 py-0.5 text-[10px] dark:border-amber-800/60 dark:bg-amber-950/50"
+              >
+                {formatOcrImageRef(image, index)}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (artifact.text && (artifact.type === "formula" || artifact.type === "code")) {
+    return (
+      <pre className="mt-1 max-h-24 overflow-auto rounded border border-gray-200 bg-white p-2 text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300">
+        {artifact.text}
+      </pre>
+    );
+  }
+
+  return null;
 }
 
 interface ChatMessageProps {
@@ -321,6 +417,7 @@ function ChatMessageImpl({
                   <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                     {item.metadata?.preview || item.text}
                   </div>
+                  <EvidenceArtifactPreview artifact={item.metadata?.artifact} />
                 </li>
               ))}
             </ul>

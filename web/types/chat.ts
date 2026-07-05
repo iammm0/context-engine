@@ -91,7 +91,30 @@ export interface SourceInfo {
   page_start?: number | null;
   page_end?: number | null;
   content_type?: string;
+  artifact?: EvidenceArtifact | null;
   section_path?: string[];
+}
+
+export interface EvidenceArtifact {
+  type: "table" | "image_ocr" | "ocr" | "formula" | "code" | string;
+  markdown?: string;
+  headers?: string[];
+  rows?: string[][];
+  row_count?: number | null;
+  column_count?: number | null;
+  text?: string;
+  image_count?: number | null;
+  images?: OcrImageRef[];
+}
+
+export interface OcrImageRef {
+  page?: number | null;
+  image_index?: number | null;
+  confidence?: number | null;
+  line_count?: number | null;
+  text_length?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface EvidenceItem {
@@ -112,6 +135,7 @@ export interface EvidenceItem {
     page_start?: number | null;
     page_end?: number | null;
     preview?: string;
+    artifact?: EvidenceArtifact | null;
     [key: string]: unknown;
   };
 }

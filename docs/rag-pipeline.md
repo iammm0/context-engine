@@ -77,6 +77,9 @@ Each evidence item includes `id`, `text`, `document_id` or `file_id`,
 `chunk_id`, `chunk_index`, `document_title`, `section_path`, `page`, `score`,
 `retrieval_type`, and `metadata`. Evidence context now includes the chunk
 `content_type` and can display page ranges when a chunk spans multiple pages.
+When available, compact table/OCR/formula/code `artifact` data is carried in
+`metadata.artifact` so chat evidence cards can render the same source-specific
+preview as the document chunk inspector.
 
 ## Compatibility
 
