@@ -77,15 +77,19 @@ export interface RecommendedResource {
 }
 
 export interface SourceInfo {
-  chunk_id: string;
+  chunk_id?: string;
   evidence_id?: string;
-  document_id: string;
+  document_id?: string;
+  file_id?: string;
+  conversation_id?: string;
   score: number;
   retrieval_type: string;
   document_title?: string; // 文档标题
   file_type?: string; // 文件类型
   status?: string; // 文档状态
   page?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
   content_type?: string;
   section_path?: string[];
 }
@@ -103,7 +107,13 @@ export interface EvidenceItem {
   page?: number;
   score: number;
   retrieval_type: string;
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    content_type?: string;
+    page_start?: number | null;
+    page_end?: number | null;
+    preview?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface ChatRequest {

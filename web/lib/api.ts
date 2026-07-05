@@ -94,8 +94,20 @@ export type DocumentChunkPreview = {
   char_end?: number | null;
   token_count?: number | null;
   features?: Record<string, boolean>;
+  artifact?: ChunkPreviewArtifact | null;
   chunker_type?: string | null;
   parse_summary?: ParseQualitySummary | Record<string, unknown>;
+};
+
+export type ChunkPreviewArtifact = {
+  type: "table" | "image_ocr" | "ocr" | "formula" | "code" | string;
+  markdown?: string;
+  headers?: string[];
+  rows?: string[][];
+  row_count?: number | null;
+  column_count?: number | null;
+  text?: string;
+  image_count?: number | null;
 };
 
 export type DocumentChunksResponse = {

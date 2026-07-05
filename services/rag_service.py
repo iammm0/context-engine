@@ -308,6 +308,8 @@ class RAGService:
                         "document_title": filename,
                         "file_type": result["payload"].get("metadata", {}).get("file_type", ""),
                         "page": page,
+                        "page_start": metadata.get("page_start"),
+                        "page_end": metadata.get("page_end"),
                         "content_type": metadata.get("content_type"),
                         "section_path": section_path,
                         "is_conversation_attachment": True
@@ -326,6 +328,8 @@ class RAGService:
                         "file_type": doc_info.get("file_type", ""),
                         "status": doc_info.get("status", ""),
                         "page": page,
+                        "page_start": metadata.get("page_start"),
+                        "page_end": metadata.get("page_end"),
                         "content_type": metadata.get("content_type"),
                         "section_path": section_path,
                         "is_conversation_attachment": False

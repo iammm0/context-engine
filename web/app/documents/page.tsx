@@ -47,6 +47,62 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
   return bits.join(" · ");
 }
 
+function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
+  const artifact = chunk.artifact;
+  if (!artifact) return null;
+
+  if (artifact.type === "table") {
+    const headers = artifact.headers || [];
+    const rows = artifact.rows || [];
+    if (headers.length > 0 && rows.length > 0) {
+      return (
+        <div className="mt-3 overflow-x-auto rounded border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <tr>
+                {headers.map((header) => (
+                  <th key={header || "empty-column"} className="whitespace-nowrap px-2 py-1.5 font-medium">
+                    {header || "未命名列"}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {rows.map((row) => (
+                <tr key={`${chunk.id}-row-${row.join("|")}`}>
+                  {headers.map((_, colIndex) => (
+                    <td key={`${chunk.id}-cell-${headers[colIndex] || row[colIndex] || "empty"}`} className="max-w-[220px] truncate px-2 py-1.5 text-gray-700 dark:text-gray-200">
+                      {row[colIndex] || ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (artifact.markdown) {
+      return (
+        <pre className="mt-3 overflow-x-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
+          {artifact.markdown}
+        </pre>
+      );
+    }
+  }
+
+  if (artifact.type === "image_ocr" || artifact.type === "ocr") {
+    return (
+      <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        {artifact.text || chunk.preview}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -580,6 +636,7 @@ export default function DocumentsPage() {
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
                         {chunk.preview}
                       </div>
+                      <ChunkArtifactPreview chunk={chunk} />
                     </div>
                   );
                 })}

@@ -57,6 +57,17 @@ location, feature flags, token count, parse quality, and preview text. The
 document list also shows a compact parse quality line for completed documents
 when `metadata.parse_quality` is available.
 
+For table and OCR chunks, preview responses include a compact `artifact`:
+
+- Table artifacts expose `headers`, `rows`, `row_count`, `column_count`, and a
+  Markdown fallback.
+- OCR artifacts expose the normalized OCR text preview and image count when it
+  is known.
+
+Chat evidence cards show the evidence id, content type, page/section location,
+retrieval type, and score so generated citations such as `[S1]` are easier to
+trace back to source chunks.
+
 ## EvidenceItem
 
 Each evidence item includes `id`, `text`, `document_id` or `file_id`,

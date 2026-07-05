@@ -20,6 +20,8 @@ _HEADING_PATTERNS = [
     re.compile(r"^([一二三四五六七八九十]+、|\（[一二三四五六七八九十]+\）|\d+\))\s*(.+?)\s*$"),
 ]
 _HEAVY_METADATA_KEYS = {"pages", "tables", "formulas", "code_blocks"}
+_MARKDOWN_TABLE_LINE_RE = re.compile(r"^\s*\|(.+)\|\s*$")
+_MARKDOWN_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -240,6 +242,67 @@ def _compact_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     return {key: value for key, value in metadata.items() if key not in _HEAVY_METADATA_KEYS}
 
 
+def _extract_markdown_table(text: str, max_rows: int = 12, max_cols: int = 8) -> Optional[Dict[str, Any]]:
+    rows: List[List[str]] = []
+    table_lines: List[str] = []
+    for line in (text or "").splitlines():
+        if _MARKDOWN_TABLE_LINE_RE.match(line):
+            table_lines.append(line.strip())
+            if _MARKDOWN_TABLE_SEPARATOR_RE.match(line):
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if cells:
+                rows.append(cells[:max_cols])
+        elif table_lines:
+            break
+
+    if not rows:
+        return None
+
+    headers = rows[0]
+    body_rows = rows[1:max_rows]
+    return {
+        "type": "table",
+        "markdown": "\n".join(table_lines[: max_rows + 1]),
+        "headers": headers,
+        "rows": body_rows,
+        "row_count": max(len(rows) - 1, 0),
+        "column_count": len(headers),
+    }
+
+
+def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Build a compact preview artifact for non-plain-text chunks."""
+    normalized_type = (content_type or "text").lower()
+    if normalized_type == "table" or bool(_TABLE_RE.search(text or "")):
+        table = _extract_markdown_table(text)
+        if table:
+            return table
+        return {
+            "type": "table",
+            "markdown": _clean_preview(text, max_chars=800),
+            "headers": [],
+            "rows": [],
+            "row_count": None,
+            "column_count": None,
+        }
+
+    if normalized_type in {"image_ocr", "ocr"}:
+        return {
+            "type": "image_ocr",
+            "text": _clean_preview(text, max_chars=800),
+            "image_count": (metadata.get("parse_summary") or {}).get("image_count"),
+        }
+
+    if normalized_type == "formula":
+        return {"type": "formula", "text": _clean_preview(text, max_chars=800)}
+
+    if normalized_type == "code":
+        return {"type": "code", "text": _clean_preview(text, max_chars=800)}
+
+    return None
+
+
 def enrich_chunks_for_visualization(
     chunks: List[Dict[str, Any]],
     document_text: str,
@@ -271,6 +334,7 @@ def enrich_chunks_for_visualization(
         features = _infer_features(text, {**meta, "content_type": content_type})
         preview = _clean_preview(text)
 
+        artifact = _build_chunk_artifact(text, content_type, meta)
         visual = {
             "preview": preview,
             "char_start": start,
@@ -280,6 +344,7 @@ def enrich_chunks_for_visualization(
             "content_type": content_type,
             "section_path": section_path,
             "features": features,
+            "artifact": artifact,
         }
 
         meta.update(
@@ -294,6 +359,7 @@ def enrich_chunks_for_visualization(
                 "char_end": end,
                 "preview": preview,
                 "features": features,
+                "artifact": artifact,
                 "visual": visual,
                 "parse_summary": parse_summary,
             }
@@ -319,13 +385,15 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         section_path = [section_path]
     if not isinstance(section_path, list):
         section_path = []
+    content_type = metadata.get("content_type") or visual.get("content_type") or "text"
+    artifact = metadata.get("artifact") or visual.get("artifact") or _build_chunk_artifact(text, str(content_type), metadata)
 
     item = {
         "id": str(chunk.get("_id") or chunk.get("id") or ""),
         "document_id": chunk.get("document_id") or metadata.get("document_id"),
         "chunk_index": chunk.get("chunk_index"),
         "preview": metadata.get("preview") or visual.get("preview") or _clean_preview(text),
-        "content_type": metadata.get("content_type") or visual.get("content_type") or "text",
+        "content_type": content_type,
         "section_path": [str(part) for part in section_path],
         "page": metadata.get("page"),
         "page_start": metadata.get("page_start") if metadata.get("page_start") is not None else visual.get("page_start"),
@@ -334,6 +402,7 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         "char_end": metadata.get("char_end") if metadata.get("char_end") is not None else visual.get("char_end"),
         "token_count": metadata.get("token_count"),
         "features": metadata.get("features") or visual.get("features") or {},
+        "artifact": artifact,
         "chunker_type": metadata.get("chunker_type"),
         "parse_summary": metadata.get("parse_summary") or {},
     }

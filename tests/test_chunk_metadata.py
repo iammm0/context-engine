@@ -44,6 +44,9 @@ def test_enrich_chunks_adds_visual_metadata_and_compacts_heavy_fields():
     second_meta = enriched[1]["metadata"]
     assert second_meta["content_type"] == "table"
     assert second_meta["features"]["has_table"] is True
+    assert second_meta["artifact"]["type"] == "table"
+    assert second_meta["artifact"]["headers"] == ["指标", "数值"]
+    assert second_meta["artifact"]["rows"] == [["recall", "0.9"]]
 
 
 def test_build_chunk_preview_uses_visual_metadata_without_full_text():
@@ -68,6 +71,8 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert preview["page_start"] == 2
     assert preview["page_end"] == 3
     assert preview["features"]["has_image_ocr"] is True
+    assert preview["artifact"]["type"] == "image_ocr"
+    assert preview["artifact"]["text"] == "A long chunk body"
     assert "text" not in preview
 
 
