@@ -2,7 +2,7 @@
  * 浏览器端 API 客户端：请求经 Next rewrites 转发到 FastAPI（/api/* → 后端）。
  */
 
-import type { CitationQuality, EvidenceItem, SourceInfo } from "@/types/chat";
+import type { CitationQuality, EvidenceItem, EvidenceQuality, SourceInfo } from "@/types/chat";
 
 export type ApiResult<T> = { data?: T; error?: string };
 
@@ -217,6 +217,7 @@ export type ConversationMessage = {
   timestamp?: string | null;
   sources?: unknown[];
   evidence?: unknown[];
+  evidence_quality?: EvidenceQuality | null;
   citation_warnings?: string[];
   citation_quality?: CitationQuality | null;
   recommended_resources?: unknown[];
@@ -449,6 +450,7 @@ const apiClientImpl = {
     sources?: unknown[],
     recommended_resources?: unknown[],
     evidence?: unknown[],
+    evidence_quality?: EvidenceQuality,
     citation_warnings?: string[],
     citation_quality?: CitationQuality,
   ): Promise<ApiResult<{ success?: boolean; timestamp?: string }>> {
@@ -456,6 +458,7 @@ const apiClientImpl = {
     if (sources !== undefined) body.sources = sources;
     if (recommended_resources !== undefined) body.recommended_resources = recommended_resources;
     if (evidence !== undefined) body.evidence = evidence;
+    if (evidence_quality !== undefined) body.evidence_quality = evidence_quality;
     if (citation_warnings !== undefined) body.citation_warnings = citation_warnings;
     if (citation_quality !== undefined) body.citation_quality = citation_quality;
     return requestJson<{ success?: boolean; timestamp?: string }>(
@@ -486,6 +489,7 @@ const apiClientImpl = {
       context: string;
       sources: SourceInfo[];
       evidence?: EvidenceItem[];
+      evidence_quality?: EvidenceQuality;
       citation_warnings?: string[];
       retrieval_count?: number;
       recommended_resources?: Record<string, unknown>[];
@@ -495,6 +499,7 @@ const apiClientImpl = {
       context: string;
       sources: SourceInfo[];
       evidence?: EvidenceItem[];
+      evidence_quality?: EvidenceQuality;
       citation_warnings?: string[];
       retrieval_count?: number;
       recommended_resources?: Record<string, unknown>[];

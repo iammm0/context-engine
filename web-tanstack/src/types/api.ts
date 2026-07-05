@@ -52,6 +52,7 @@ export interface ConversationMessage {
   content: string
   timestamp?: string | null
   sources?: SourceInfo[]
+  evidence_quality?: EvidenceQuality | null
   recommended_resources?: RecommendedResource[]
 }
 
@@ -170,6 +171,28 @@ export interface DocumentChunksResponse {
   }
 }
 
+export interface EvidenceQuality {
+  status: "no_evidence" | "pass" | "warn" | string
+  risk_level: "low" | "medium" | "high" | string
+  evidence_count: number
+  artifact_count: number
+  artifact_coverage?: number | null
+  structured_evidence_count: number
+  structured_artifact_count: number
+  structured_artifact_coverage?: number | null
+  table_count: number
+  table_missing_structure_count: number
+  table_missing_source_count: number
+  ocr_count: number
+  ocr_missing_source_count: number
+  ocr_low_confidence_source_count: number
+  ocr_avg_confidence?: number | null
+  content_type_counts?: Record<string, number>
+  artifact_type_counts?: Record<string, number>
+  warnings?: string[]
+  recommendations?: string[]
+}
+
 export interface ParseQualitySummary {
   parser_type?: string | null
   extraction_method?: string | null
@@ -254,5 +277,6 @@ export interface ChatStreamEvent {
   done?: boolean
   error?: string
   sources?: SourceInfo[]
+  evidence_quality?: EvidenceQuality | null
   recommended_resources?: RecommendedResource[]
 }

@@ -38,6 +38,7 @@ class RetrievalResponse(BaseModel):
     context: str
     sources: List[Dict[str, Any]]
     evidence: Optional[List[Dict[str, Any]]] = []
+    evidence_quality: Optional[Dict[str, Any]] = {}
     query_plan: Optional[Dict[str, Any]] = {}
     trace: Optional[Dict[str, Any]] = {}
     retrieval_count: int
@@ -141,6 +142,7 @@ async def retrieve_context(
             context=retrieval_result.get("context", ""),
             sources=retrieval_result.get("sources", []),
             evidence=retrieval_result.get("evidence", []),
+            evidence_quality=retrieval_result.get("evidence_quality", {}),
             query_plan=retrieval_result.get("query_plan", {}),
             trace=retrieval_result.get("trace", {}),
             retrieval_count=len(retrieval_result.get("sources", [])),

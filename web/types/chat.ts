@@ -25,6 +25,7 @@ export interface ChatMessage {
   timestamp?: string;
   sources?: SourceInfo[]; // 文档来源（普通模式）
   evidence?: EvidenceItem[]; // chunk级证据（普通模式）
+  evidence_quality?: EvidenceQuality; // 结构化证据完整性诊断
   citation_warnings?: string[]; // 引用校验提醒
   citation_quality?: CitationQuality; // 引用覆盖和有效性诊断
   recommended_resources?: RecommendedResource[]; // 推荐的相关资源（普通模式）
@@ -160,6 +161,28 @@ export interface EvidenceItem {
   };
 }
 
+export interface EvidenceQuality {
+  status: "no_evidence" | "pass" | "warn" | string;
+  risk_level: "low" | "medium" | "high" | string;
+  evidence_count: number;
+  artifact_count: number;
+  artifact_coverage?: number | null;
+  structured_evidence_count: number;
+  structured_artifact_count: number;
+  structured_artifact_coverage?: number | null;
+  table_count: number;
+  table_missing_structure_count: number;
+  table_missing_source_count: number;
+  ocr_count: number;
+  ocr_missing_source_count: number;
+  ocr_low_confidence_source_count: number;
+  ocr_avg_confidence?: number | null;
+  content_type_counts?: Record<string, number>;
+  artifact_type_counts?: Record<string, number>;
+  warnings?: string[];
+  recommendations?: string[];
+}
+
 export interface CitationQuality {
   status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string;
   evidence_count: number;
@@ -184,6 +207,7 @@ export interface ChatResponse {
   conversation_id: string;
   sources?: SourceInfo[];
   evidence?: EvidenceItem[];
+  evidence_quality?: EvidenceQuality;
   citation_warnings?: string[];
   citation_quality?: CitationQuality;
 }

@@ -6,6 +6,7 @@ from utils.logger import logger
 from utils.token_utils import estimate_tokens, truncate_to_tokens
 from models.rag import EvidenceItem
 from utils.citation import format_evidence_context
+from utils.evidence_quality import build_evidence_quality_diagnostics
 
 
 class RAGService:
@@ -352,6 +353,7 @@ class RAGService:
         # 重新编号，确保邻居扩展后编号连续
         for idx, item in enumerate(evidence_items, start=1):
             item.id = f"S{idx}"
+        evidence_quality = build_evidence_quality_diagnostics(evidence_items)
         max_context_tokens = int(plan.context_budget or 30_000)
         joined = format_evidence_context(evidence_items)
         if estimate_tokens(joined) > max_context_tokens:
@@ -361,6 +363,8 @@ class RAGService:
             "evidence_count": len(evidence_items),
             "context_tokens_estimate": estimate_tokens(context),
             "context_budget": max_context_tokens,
+            "evidence_quality_status": evidence_quality.get("status"),
+            "structured_artifact_coverage": evidence_quality.get("structured_artifact_coverage"),
         }
         trace["finished_at"] = int(time.time() * 1000)
         
@@ -368,6 +372,7 @@ class RAGService:
             "context": context,
             "sources": sources,
             "evidence": [item.model_dump() for item in evidence_items],
+            "evidence_quality": evidence_quality,
             "query_plan": plan.model_dump(),
             "trace": trace,
             "recommended_resources": []
@@ -398,7 +403,13 @@ class RAGService:
         """
         context = None
         sources = []
-        retrieval_result: Dict[str, Any] = {"recommended_resources": [], "evidence": [], "query_plan": {}, "trace": {}}
+        retrieval_result: Dict[str, Any] = {
+            "recommended_resources": [],
+            "evidence": [],
+            "evidence_quality": {},
+            "query_plan": {},
+            "trace": {},
+        }
         
         if use_context:
             try:
@@ -423,6 +434,7 @@ class RAGService:
             "context": context,
             "sources": sources,
             "evidence": retrieval_result.get("evidence", []),
+            "evidence_quality": retrieval_result.get("evidence_quality", {}),
             "query_plan": retrieval_result.get("query_plan", {}),
             "trace": retrieval_result.get("trace", {}),
             "recommended_resources": retrieval_result.get("recommended_resources", [])

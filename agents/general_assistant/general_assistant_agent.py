@@ -100,6 +100,7 @@ class GeneralAssistantAgent(BaseAgent):
         sources = []
         recommended_resources = []
         evidence = []
+        evidence_quality = {}
         query_plan = {}
         rag_trace = {}
         
@@ -118,6 +119,7 @@ class GeneralAssistantAgent(BaseAgent):
                 rag_context = retrieval_result.get("context", "")
                 sources = retrieval_result.get("sources", [])
                 evidence = retrieval_result.get("evidence", [])
+                evidence_quality = retrieval_result.get("evidence_quality", {})
                 query_plan = retrieval_result.get("query_plan", {})
                 rag_trace = retrieval_result.get("trace", {})
                 recommended_resources = retrieval_result.get("recommended_resources", [])
@@ -167,6 +169,7 @@ class GeneralAssistantAgent(BaseAgent):
                     "agent_type": "general_assistant",
                     "sources": sources,
                     "evidence": evidence,
+                    "evidence_quality": evidence_quality,
                     "query_plan": query_plan,
                     "trace": rag_trace,
                     "citation_warnings": citation_warnings,
@@ -183,6 +186,7 @@ class GeneralAssistantAgent(BaseAgent):
                 "agent_type": "general_assistant",
                 "sources": sources,
                 "evidence": evidence,
+                "evidence_quality": evidence_quality,
                 "query_plan": query_plan,
                 "trace": rag_trace,
                 "recommended_resources": recommended_resources

@@ -121,6 +121,11 @@ Assistant messages can include `citation_quality` with citation coverage,
 valid/invalid citation ids, duplicate citations, unused evidence ids, and the
 highest-scored evidence that was not referenced. The UI displays this as a
 compact citation audit line next to any non-blocking `citation_warnings`.
+Assistant messages can also include `evidence_quality`, a runtime diagnostic for
+retrieved structured evidence. It reports artifact coverage, structured artifact
+coverage, table structure/source gaps, OCR source gaps, low-confidence OCR image
+refs, and compact recommendations for re-parsing or reindexing when evidence is
+not source-complete.
 
 ## EvidenceItem
 
@@ -139,9 +144,14 @@ Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
 `unreferenced_top_evidence_ids`.
+The same evidence list is checked before generation to build
+`evidence_quality.status`, `risk_level`, `artifact_coverage`,
+`structured_artifact_coverage`, table/OCR completeness counters, warnings, and
+recommendations. This lets the chat UI expose when an answer used table or OCR
+evidence whose source preview is incomplete.
 
 ## Compatibility
 
 `POST /api/retrieval` still returns `context`, `sources`, `retrieval_count`, and
 `recommended_resources`. New clients should prefer the `evidence`, `query_plan`,
-and `trace` fields.
+`evidence_quality`, and `trace` fields.

@@ -48,6 +48,7 @@ class DocumentRetrievalAgent(BaseAgent):
             context_text = retrieval_result.get("context", "")
             sources = retrieval_result.get("sources", [])
             evidence = retrieval_result.get("evidence", [])
+            evidence_quality = retrieval_result.get("evidence_quality", {})
             recommended_resources = retrieval_result.get("recommended_resources", [])
             
             # 使用LLM总结检索结果
@@ -70,6 +71,7 @@ class DocumentRetrievalAgent(BaseAgent):
                 "agent_type": "document_retrieval",
                 "sources": sources,
                 "evidence": evidence,
+                "evidence_quality": evidence_quality,
                 "evidence_ids": [item.get("id") for item in evidence if item.get("id")],
                 "citation_warnings": citation_quality.get("warnings", []),
                 "citation_quality": citation_quality,

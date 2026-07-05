@@ -4,7 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationQuality, EvidenceArtifact, EvidenceItem, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationQuality, EvidenceArtifact, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -66,6 +66,32 @@ function formatCitationQuality(quality?: CitationQuality | null) {
   }
   if (quality.unreferenced_top_evidence_ids?.length) {
     bits.push(`未引用高分证据 ${quality.unreferenced_top_evidence_ids.join(", ")}`);
+  }
+  return bits.join(" · ");
+}
+
+function formatEvidenceQuality(quality?: EvidenceQuality | null) {
+  if (!quality || typeof quality.evidence_count !== "number" || quality.evidence_count <= 0) return "";
+  const bits = [];
+  if (typeof quality.structured_artifact_coverage === "number") {
+    bits.push(`结构化证据 ${Math.round(quality.structured_artifact_coverage * 100)}%`);
+  } else if (typeof quality.artifact_coverage === "number") {
+    bits.push(`artifact ${Math.round(quality.artifact_coverage * 100)}%`);
+  }
+  if (quality.table_missing_structure_count > 0) {
+    bits.push(`表格结构缺失 ${quality.table_missing_structure_count}`);
+  }
+  if (quality.table_missing_source_count > 0) {
+    bits.push(`表格来源缺失 ${quality.table_missing_source_count}`);
+  }
+  if (quality.ocr_missing_source_count > 0) {
+    bits.push(`OCR来源缺失 ${quality.ocr_missing_source_count}`);
+  }
+  if (quality.ocr_low_confidence_source_count > 0) {
+    bits.push(`低置信OCR ${quality.ocr_low_confidence_source_count}`);
+  }
+  if (!bits.length && quality.status === "pass") {
+    bits.push("结构化证据完整");
   }
   return bits.join(" · ");
 }
@@ -535,6 +561,18 @@ function ChatMessageImpl({
         {!isUser && formatCitationQuality(message.citation_quality) && (
           <div className="mt-1 w-full text-xs text-gray-500 dark:text-gray-400">
             {formatCitationQuality(message.citation_quality)}
+          </div>
+        )}
+
+        {!isUser && formatEvidenceQuality(message.evidence_quality) && (
+          <div
+            className={`mt-1 w-full text-xs ${
+              message.evidence_quality?.status === "warn"
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            {formatEvidenceQuality(message.evidence_quality)}
           </div>
         )}
 

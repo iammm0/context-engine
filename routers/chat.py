@@ -25,6 +25,7 @@ class ChatMessage(BaseModel):
     timestamp: Optional[datetime] = None
     sources: Optional[List[dict]] = None  # 检索到的文档来源
     evidence: Optional[List[dict]] = None  # chunk级证据
+    evidence_quality: Optional[Dict[str, Any]] = None
     citation_warnings: Optional[List[str]] = None
     citation_quality: Optional[Dict[str, Any]] = None
     recommended_resources: Optional[List[dict]] = None  # 推荐的相关资源
@@ -58,6 +59,7 @@ class MessageAdd(BaseModel):
     content: str
     sources: Optional[List[dict]] = None
     evidence: Optional[List[dict]] = None
+    evidence_quality: Optional[Dict[str, Any]] = None
     citation_warnings: Optional[List[str]] = None
     citation_quality: Optional[Dict[str, Any]] = None
     recommended_resources: Optional[List[dict]] = None
@@ -338,6 +340,7 @@ async def get_conversation(
                 "timestamp": msg.get("timestamp").isoformat() if msg.get("timestamp") else None,
                 "sources": msg.get("sources", []),
                 "evidence": msg.get("evidence", []),
+                "evidence_quality": msg.get("evidence_quality"),
                 "citation_warnings": msg.get("citation_warnings", []),
                 "citation_quality": msg.get("citation_quality"),
                 "recommended_resources": msg.get("recommended_resources", [])
@@ -390,6 +393,7 @@ async def add_message(
             "timestamp": beijing_now(),
             "sources": message.sources or [],
             "evidence": message.evidence or [],
+            "evidence_quality": message.evidence_quality,
             "citation_warnings": message.citation_warnings or [],
             "citation_quality": message.citation_quality,
             "recommended_resources": message.recommended_resources or []
@@ -798,6 +802,7 @@ async def chat(
                 full_response = ""
                 sources = []
                 evidence = []
+                evidence_quality = {}
                 citation_warnings = []
                 citation_quality = {}
                 query_plan = {}
@@ -831,6 +836,7 @@ async def chat(
                         elif result.get("type") == "complete":
                             sources = result.get("sources", [])
                             evidence = result.get("evidence", [])
+                            evidence_quality = result.get("evidence_quality", {})
                             citation_warnings = result.get("citation_warnings", [])
                             citation_quality = result.get("citation_quality", {})
                             query_plan = result.get("query_plan", {})
@@ -840,6 +846,7 @@ async def chat(
                                 "done": True,
                                 "sources": sources,
                                 "evidence": evidence,
+                                "evidence_quality": evidence_quality,
                                 "citation_warnings": citation_warnings,
                                 "citation_quality": citation_quality,
                                 "query_plan": query_plan,

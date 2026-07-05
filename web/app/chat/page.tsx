@@ -16,6 +16,7 @@ import {
   SourceInfo,
   type CitationQuality,
   type EvidenceItem,
+  type EvidenceQuality,
   type RAGEvaluationMetrics,
 } from "../../types/chat";
 import { addConversation } from "@/lib/conversation";
@@ -761,6 +762,7 @@ export default function ChatPage() {
     let context = "";
     let sources: SourceInfo[] = [];
     let evidence: EvidenceItem[] = [];
+    let evidenceQuality: EvidenceQuality | undefined;
     let citationWarnings: string[] = [];
     let citationQuality: CitationQuality | undefined;
     let recommendedResources: any[] = [];
@@ -1293,6 +1295,7 @@ export default function ChatPage() {
           timestamp: new Date().toISOString(),
           sources: sources.length > 0 ? sources : undefined,
           evidence: evidence.length > 0 ? evidence : undefined,
+          evidence_quality: evidenceQuality,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
           citation_quality: citationQuality,
@@ -1364,6 +1367,7 @@ export default function ChatPage() {
                               content: contentToUpdate,
                               sources: lastMessage.sources,
                               evidence: lastMessage.evidence,
+                              evidence_quality: lastMessage.evidence_quality,
                               citation_warnings: lastMessage.citation_warnings,
                               citation_quality: lastMessage.citation_quality,
                               recommended_resources:
@@ -1387,6 +1391,8 @@ export default function ChatPage() {
                   } else if (parsed.done) {
                     if (parsed.sources) sources = parsed.sources;
                     if (parsed.evidence) evidence = parsed.evidence;
+                    if (parsed.evidence_quality)
+                      evidenceQuality = parsed.evidence_quality;
                     if (parsed.citation_warnings)
                       citationWarnings = parsed.citation_warnings;
                     if (parsed.citation_quality)
@@ -1442,6 +1448,7 @@ export default function ChatPage() {
                 content: fullResponse,
                 sources: sources.length > 0 ? sources : undefined,
                 evidence: evidence.length > 0 ? evidence : undefined,
+                evidence_quality: evidenceQuality,
                 citation_warnings:
                   citationWarnings.length > 0 ? citationWarnings : undefined,
                 citation_quality: citationQuality,
@@ -1469,6 +1476,7 @@ export default function ChatPage() {
             sources.length > 0 ? sources : undefined,
             recommendedResources.length > 0 ? recommendedResources : undefined,
             evidence.length > 0 ? evidence : undefined,
+            evidenceQuality,
             citationWarnings.length > 0 ? citationWarnings : undefined,
             citationQuality,
           );
@@ -1566,6 +1574,7 @@ export default function ChatPage() {
           timestamp: msg.timestamp || new Date().toISOString(),
           sources: msg.sources || [],
           evidence: msg.evidence || [],
+          evidence_quality: msg.evidence_quality || undefined,
           citation_warnings: msg.citation_warnings || [],
           citation_quality: msg.citation_quality || undefined,
           recommended_resources: msg.recommended_resources || [],
@@ -1874,6 +1883,7 @@ export default function ChatPage() {
           timestamp: msg.timestamp || new Date().toISOString(),
           sources: msg.sources || [],
           evidence: msg.evidence || [],
+          evidence_quality: msg.evidence_quality || undefined,
           citation_warnings: msg.citation_warnings || [],
           citation_quality: msg.citation_quality || undefined,
           recommended_resources: msg.recommended_resources || [],
@@ -1886,6 +1896,7 @@ export default function ChatPage() {
       let context = "";
       let sources: SourceInfo[] = [];
       let evidence: EvidenceItem[] = [];
+      let evidenceQuality: EvidenceQuality | undefined;
       let citationWarnings: string[] = [];
       let citationQuality: CitationQuality | undefined;
       let recommendedResources: any[] = [];
@@ -2005,6 +2016,7 @@ export default function ChatPage() {
           timestamp: new Date().toISOString(),
           sources: sources.length > 0 ? sources : undefined,
           evidence: evidence.length > 0 ? evidence : undefined,
+          evidence_quality: evidenceQuality,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
           citation_quality: citationQuality,
@@ -2066,6 +2078,7 @@ export default function ChatPage() {
                                 content: contentToUpdate,
                                 sources: lastMessage.sources,
                                 evidence: lastMessage.evidence,
+                                evidence_quality: lastMessage.evidence_quality,
                                 citation_warnings:
                                   lastMessage.citation_warnings,
                                 citation_quality: lastMessage.citation_quality,
@@ -2084,6 +2097,8 @@ export default function ChatPage() {
                     } else if (parsed.done) {
                       if (parsed.sources) sources = parsed.sources;
                       if (parsed.evidence) evidence = parsed.evidence;
+                      if (parsed.evidence_quality)
+                        evidenceQuality = parsed.evidence_quality;
                       if (parsed.citation_warnings)
                         citationWarnings = parsed.citation_warnings;
                       if (parsed.citation_quality)
@@ -2131,6 +2146,7 @@ export default function ChatPage() {
                   content: fullResponse,
                   sources: sources.length > 0 ? sources : undefined,
                   evidence: evidence.length > 0 ? evidence : undefined,
+                  evidence_quality: evidenceQuality,
                   citation_warnings:
                     citationWarnings.length > 0 ? citationWarnings : undefined,
                   citation_quality: citationQuality,
@@ -2181,6 +2197,8 @@ export default function ChatPage() {
                       } else if (parsed.done) {
                         if (parsed.sources) sources = parsed.sources;
                         if (parsed.evidence) evidence = parsed.evidence;
+                        if (parsed.evidence_quality)
+                          evidenceQuality = parsed.evidence_quality;
                         if (parsed.citation_warnings)
                           citationWarnings = parsed.citation_warnings;
                         if (parsed.citation_quality)
@@ -2213,6 +2231,7 @@ export default function ChatPage() {
                 content: fullResponse,
                 sources: sources.length > 0 ? sources : undefined,
                 evidence: evidence.length > 0 ? evidence : undefined,
+                evidence_quality: evidenceQuality,
                 citation_warnings:
                   citationWarnings.length > 0 ? citationWarnings : undefined,
                 citation_quality: citationQuality,
@@ -2259,6 +2278,8 @@ export default function ChatPage() {
                   } else if (parsed.done) {
                     if (parsed.sources) sources = parsed.sources;
                     if (parsed.evidence) evidence = parsed.evidence;
+                    if (parsed.evidence_quality)
+                      evidenceQuality = parsed.evidence_quality;
                     if (parsed.citation_warnings)
                       citationWarnings = parsed.citation_warnings;
                     if (parsed.citation_quality)
@@ -2286,6 +2307,7 @@ export default function ChatPage() {
           timestamp: new Date().toISOString(),
           sources: sources.length > 0 ? sources : undefined,
           evidence: evidence.length > 0 ? evidence : undefined,
+          evidence_quality: evidenceQuality,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
           citation_quality: citationQuality,
@@ -2306,6 +2328,7 @@ export default function ChatPage() {
           sources.length > 0 ? sources : undefined,
           recommendedResources.length > 0 ? recommendedResources : undefined,
           evidence.length > 0 ? evidence : undefined,
+          evidenceQuality,
           citationWarnings.length > 0 ? citationWarnings : undefined,
           citationQuality,
         );
