@@ -14,6 +14,7 @@ import { apiClient, Document, Model } from "@/lib/api";
 import {
   ChatMessage as MessageType,
   SourceInfo,
+  type CitationQuality,
   type EvidenceItem,
   type RAGEvaluationMetrics,
 } from "../../types/chat";
@@ -761,6 +762,7 @@ export default function ChatPage() {
     let sources: SourceInfo[] = [];
     let evidence: EvidenceItem[] = [];
     let citationWarnings: string[] = [];
+    let citationQuality: CitationQuality | undefined;
     let recommendedResources: any[] = [];
     /** RAG 评测计时（仅常规模式） */
     let retrievalStartMs = 0;
@@ -1293,6 +1295,7 @@ export default function ChatPage() {
           evidence: evidence.length > 0 ? evidence : undefined,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
+          citation_quality: citationQuality,
           recommended_resources:
             recommendedResources.length > 0 ? recommendedResources : undefined,
         };
@@ -1362,6 +1365,7 @@ export default function ChatPage() {
                               sources: lastMessage.sources,
                               evidence: lastMessage.evidence,
                               citation_warnings: lastMessage.citation_warnings,
+                              citation_quality: lastMessage.citation_quality,
                               recommended_resources:
                                 lastMessage.recommended_resources,
                             };
@@ -1385,6 +1389,8 @@ export default function ChatPage() {
                     if (parsed.evidence) evidence = parsed.evidence;
                     if (parsed.citation_warnings)
                       citationWarnings = parsed.citation_warnings;
+                    if (parsed.citation_quality)
+                      citationQuality = parsed.citation_quality;
                     if (parsed.recommended_resources)
                       recommendedResources = parsed.recommended_resources;
                     responseTimeMs = Date.now() - responseStartMs;
@@ -1438,6 +1444,7 @@ export default function ChatPage() {
                 evidence: evidence.length > 0 ? evidence : undefined,
                 citation_warnings:
                   citationWarnings.length > 0 ? citationWarnings : undefined,
+                citation_quality: citationQuality,
                 recommended_resources:
                   recommendedResources.length > 0
                     ? recommendedResources
@@ -1463,6 +1470,7 @@ export default function ChatPage() {
             recommendedResources.length > 0 ? recommendedResources : undefined,
             evidence.length > 0 ? evidence : undefined,
             citationWarnings.length > 0 ? citationWarnings : undefined,
+            citationQuality,
           );
         }
         scrollToBottom(true);
@@ -1559,6 +1567,7 @@ export default function ChatPage() {
           sources: msg.sources || [],
           evidence: msg.evidence || [],
           citation_warnings: msg.citation_warnings || [],
+          citation_quality: msg.citation_quality || undefined,
           recommended_resources: msg.recommended_resources || [],
         }));
 
@@ -1866,6 +1875,7 @@ export default function ChatPage() {
           sources: msg.sources || [],
           evidence: msg.evidence || [],
           citation_warnings: msg.citation_warnings || [],
+          citation_quality: msg.citation_quality || undefined,
           recommended_resources: msg.recommended_resources || [],
         }));
         setMessages(loadedMessages);
@@ -1877,6 +1887,7 @@ export default function ChatPage() {
       let sources: SourceInfo[] = [];
       let evidence: EvidenceItem[] = [];
       let citationWarnings: string[] = [];
+      let citationQuality: CitationQuality | undefined;
       let recommendedResources: any[] = [];
 
       // RAG检索知识空间（如果启用了RAG增强模式，总是检索）
@@ -1996,6 +2007,7 @@ export default function ChatPage() {
           evidence: evidence.length > 0 ? evidence : undefined,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
+          citation_quality: citationQuality,
           recommended_resources:
             recommendedResources.length > 0 ? recommendedResources : undefined,
         };
@@ -2056,6 +2068,7 @@ export default function ChatPage() {
                                 evidence: lastMessage.evidence,
                                 citation_warnings:
                                   lastMessage.citation_warnings,
+                                citation_quality: lastMessage.citation_quality,
                                 recommended_resources:
                                   lastMessage.recommended_resources,
                               };
@@ -2073,6 +2086,8 @@ export default function ChatPage() {
                       if (parsed.evidence) evidence = parsed.evidence;
                       if (parsed.citation_warnings)
                         citationWarnings = parsed.citation_warnings;
+                      if (parsed.citation_quality)
+                        citationQuality = parsed.citation_quality;
                       if (parsed.recommended_resources)
                         recommendedResources = parsed.recommended_resources;
                       break;
@@ -2118,6 +2133,7 @@ export default function ChatPage() {
                   evidence: evidence.length > 0 ? evidence : undefined,
                   citation_warnings:
                     citationWarnings.length > 0 ? citationWarnings : undefined,
+                  citation_quality: citationQuality,
                   recommended_resources:
                     recommendedResources.length > 0
                       ? recommendedResources
@@ -2164,6 +2180,11 @@ export default function ChatPage() {
                         fullResponse += parsed.content;
                       } else if (parsed.done) {
                         if (parsed.sources) sources = parsed.sources;
+                        if (parsed.evidence) evidence = parsed.evidence;
+                        if (parsed.citation_warnings)
+                          citationWarnings = parsed.citation_warnings;
+                        if (parsed.citation_quality)
+                          citationQuality = parsed.citation_quality;
                         if (parsed.recommended_resources)
                           recommendedResources = parsed.recommended_resources;
                       }
@@ -2194,6 +2215,7 @@ export default function ChatPage() {
                 evidence: evidence.length > 0 ? evidence : undefined,
                 citation_warnings:
                   citationWarnings.length > 0 ? citationWarnings : undefined,
+                citation_quality: citationQuality,
                 recommended_resources:
                   recommendedResources.length > 0
                     ? recommendedResources
@@ -2239,6 +2261,8 @@ export default function ChatPage() {
                     if (parsed.evidence) evidence = parsed.evidence;
                     if (parsed.citation_warnings)
                       citationWarnings = parsed.citation_warnings;
+                    if (parsed.citation_quality)
+                      citationQuality = parsed.citation_quality;
                     if (parsed.recommended_resources)
                       recommendedResources = parsed.recommended_resources;
                   }
@@ -2264,6 +2288,7 @@ export default function ChatPage() {
           evidence: evidence.length > 0 ? evidence : undefined,
           citation_warnings:
             citationWarnings.length > 0 ? citationWarnings : undefined,
+          citation_quality: citationQuality,
           recommended_resources:
             recommendedResources.length > 0 ? recommendedResources : undefined,
         };
@@ -2282,6 +2307,7 @@ export default function ChatPage() {
           recommendedResources.length > 0 ? recommendedResources : undefined,
           evidence.length > 0 ? evidence : undefined,
           citationWarnings.length > 0 ? citationWarnings : undefined,
+          citationQuality,
         );
       }
     } catch (error) {

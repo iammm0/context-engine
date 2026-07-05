@@ -7,7 +7,7 @@ if ROOT_DIR not in sys.path:
 
 from models.rag import EvidenceItem
 from services.query_planner import query_planner
-from utils.citation import extract_citation_ids, format_evidence_context, validate_citations
+from utils.citation import build_citation_diagnostics, extract_citation_ids, format_evidence_context, validate_citations
 
 
 def test_evidence_format_and_citation_validation():
@@ -82,6 +82,17 @@ def test_evidence_format_and_citation_validation():
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
     assert validate_citations("Answer [S3]", evidence)
+    diagnostics = build_citation_diagnostics("Answer [S1] and repeat [S1]", evidence)
+    assert diagnostics["status"] == "partial"
+    assert diagnostics["evidence_count"] == 2
+    assert diagnostics["used_citation_ids"] == ["S1"]
+    assert diagnostics["valid_citation_ids"] == ["S1"]
+    assert diagnostics["invalid_citation_ids"] == []
+    assert diagnostics["duplicate_citation_ids"] == ["S1"]
+    assert diagnostics["unused_evidence_ids"] == ["S2"]
+    assert diagnostics["unreferenced_top_evidence_ids"] == ["S2"]
+    assert diagnostics["coverage"] == 0.5
+    assert any("重复引用" in warning for warning in diagnostics["warnings"])
 
 
 def test_query_planner_rewrites_only_complex_queries():

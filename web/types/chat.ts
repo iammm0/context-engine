@@ -26,6 +26,7 @@ export interface ChatMessage {
   sources?: SourceInfo[]; // 文档来源（普通模式）
   evidence?: EvidenceItem[]; // chunk级证据（普通模式）
   citation_warnings?: string[]; // 引用校验提醒
+  citation_quality?: CitationQuality; // 引用覆盖和有效性诊断
   recommended_resources?: RecommendedResource[]; // 推荐的相关资源（普通模式）
   recommended_users?: RecommendedUser[]; // 推荐用户（网络模式）
   user_relationships?: UserRelationship[]; // 用户关系（网络模式）
@@ -157,6 +158,19 @@ export interface EvidenceItem {
   };
 }
 
+export interface CitationQuality {
+  status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string;
+  evidence_count: number;
+  used_citation_ids: string[];
+  valid_citation_ids: string[];
+  invalid_citation_ids: string[];
+  duplicate_citation_ids: string[];
+  unused_evidence_ids: string[];
+  unreferenced_top_evidence_ids: string[];
+  coverage?: number | null;
+  warnings?: string[];
+}
+
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
@@ -169,4 +183,5 @@ export interface ChatResponse {
   sources?: SourceInfo[];
   evidence?: EvidenceItem[];
   citation_warnings?: string[];
+  citation_quality?: CitationQuality;
 }

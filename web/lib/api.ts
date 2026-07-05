@@ -2,7 +2,7 @@
  * 浏览器端 API 客户端：请求经 Next rewrites 转发到 FastAPI（/api/* → 后端）。
  */
 
-import type { EvidenceItem, SourceInfo } from "@/types/chat";
+import type { CitationQuality, EvidenceItem, SourceInfo } from "@/types/chat";
 
 export type ApiResult<T> = { data?: T; error?: string };
 
@@ -207,6 +207,9 @@ export type ConversationMessage = {
   content: string;
   timestamp?: string | null;
   sources?: unknown[];
+  evidence?: unknown[];
+  citation_warnings?: string[];
+  citation_quality?: CitationQuality | null;
   recommended_resources?: unknown[];
 };
 
@@ -438,12 +441,14 @@ const apiClientImpl = {
     recommended_resources?: unknown[],
     evidence?: unknown[],
     citation_warnings?: string[],
+    citation_quality?: CitationQuality,
   ): Promise<ApiResult<{ success?: boolean; timestamp?: string }>> {
     const body: Record<string, unknown> = { role, content };
     if (sources !== undefined) body.sources = sources;
     if (recommended_resources !== undefined) body.recommended_resources = recommended_resources;
     if (evidence !== undefined) body.evidence = evidence;
     if (citation_warnings !== undefined) body.citation_warnings = citation_warnings;
+    if (citation_quality !== undefined) body.citation_quality = citation_quality;
     return requestJson<{ success?: boolean; timestamp?: string }>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {

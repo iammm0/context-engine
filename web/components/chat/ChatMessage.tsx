@@ -4,7 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, EvidenceArtifact, EvidenceItem, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationQuality, EvidenceArtifact, EvidenceItem, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -47,6 +47,27 @@ function formatEvidenceLocation(item: EvidenceItem) {
 
 function getEvidenceType(item: EvidenceItem) {
   return item.metadata?.content_type || "text";
+}
+
+function formatCitationQuality(quality?: CitationQuality | null) {
+  if (!quality || typeof quality.evidence_count !== "number" || quality.evidence_count <= 0) return "";
+  const bits = [];
+  if (typeof quality.coverage === "number") {
+    bits.push(`引用覆盖 ${Math.round(quality.coverage * 100)}%`);
+  }
+  if (quality.valid_citation_ids?.length) {
+    bits.push(`已引用 ${quality.valid_citation_ids.join(", ")}`);
+  }
+  if (quality.invalid_citation_ids?.length) {
+    bits.push(`无效 ${quality.invalid_citation_ids.join(", ")}`);
+  }
+  if (quality.duplicate_citation_ids?.length) {
+    bits.push(`重复 ${quality.duplicate_citation_ids.join(", ")}`);
+  }
+  if (quality.unreferenced_top_evidence_ids?.length) {
+    bits.push(`未引用高分证据 ${quality.unreferenced_top_evidence_ids.join(", ")}`);
+  }
+  return bits.join(" · ");
 }
 
 function buildSourceChunkHref(source: SourceInfo) {
@@ -504,6 +525,12 @@ function ChatMessageImpl({
               {message.citation_warnings.join("；")}
             </div>
           )}
+
+        {!isUser && formatCitationQuality(message.citation_quality) && (
+          <div className="mt-1 w-full text-xs text-gray-500 dark:text-gray-400">
+            {formatCitationQuality(message.citation_quality)}
+          </div>
+        )}
 
         {/* RAG 评测指标（折叠，仅助手消息且存在检索/指标时展示） */}
         {!isUser &&

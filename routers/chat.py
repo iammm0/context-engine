@@ -26,6 +26,7 @@ class ChatMessage(BaseModel):
     sources: Optional[List[dict]] = None  # 检索到的文档来源
     evidence: Optional[List[dict]] = None  # chunk级证据
     citation_warnings: Optional[List[str]] = None
+    citation_quality: Optional[Dict[str, Any]] = None
     recommended_resources: Optional[List[dict]] = None  # 推荐的相关资源
 
 
@@ -58,6 +59,7 @@ class MessageAdd(BaseModel):
     sources: Optional[List[dict]] = None
     evidence: Optional[List[dict]] = None
     citation_warnings: Optional[List[str]] = None
+    citation_quality: Optional[Dict[str, Any]] = None
     recommended_resources: Optional[List[dict]] = None
 
 
@@ -337,6 +339,7 @@ async def get_conversation(
                 "sources": msg.get("sources", []),
                 "evidence": msg.get("evidence", []),
                 "citation_warnings": msg.get("citation_warnings", []),
+                "citation_quality": msg.get("citation_quality"),
                 "recommended_resources": msg.get("recommended_resources", [])
             })
         
@@ -388,6 +391,7 @@ async def add_message(
             "sources": message.sources or [],
             "evidence": message.evidence or [],
             "citation_warnings": message.citation_warnings or [],
+            "citation_quality": message.citation_quality,
             "recommended_resources": message.recommended_resources or []
         }
         
@@ -795,6 +799,7 @@ async def chat(
                 sources = []
                 evidence = []
                 citation_warnings = []
+                citation_quality = {}
                 query_plan = {}
                 rag_trace = {}
                 recommended_resources = []
@@ -827,6 +832,7 @@ async def chat(
                             sources = result.get("sources", [])
                             evidence = result.get("evidence", [])
                             citation_warnings = result.get("citation_warnings", [])
+                            citation_quality = result.get("citation_quality", {})
                             query_plan = result.get("query_plan", {})
                             rag_trace = result.get("trace", {})
                             recommended_resources = result.get("recommended_resources", [])
@@ -835,6 +841,7 @@ async def chat(
                                 "sources": sources,
                                 "evidence": evidence,
                                 "citation_warnings": citation_warnings,
+                                "citation_quality": citation_quality,
                                 "query_plan": query_plan,
                                 "trace": rag_trace,
                                 "recommended_resources": recommended_resources

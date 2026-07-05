@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
 from utils.logger import logger
-from utils.citation import validate_citations
+from utils.citation import build_citation_diagnostics
 
 
 class DocumentRetrievalAgent(BaseAgent):
@@ -63,6 +63,7 @@ class DocumentRetrievalAgent(BaseAgent):
             async for chunk in self._call_llm(prompt=self.merge_system_into_task_prompt(summary_prompt), stream=False):
                 summary += chunk
             
+            citation_quality = build_citation_diagnostics(summary, evidence)
             yield {
                 "type": "complete",
                 "content": summary,
@@ -70,7 +71,8 @@ class DocumentRetrievalAgent(BaseAgent):
                 "sources": sources,
                 "evidence": evidence,
                 "evidence_ids": [item.get("id") for item in evidence if item.get("id")],
-                "citation_warnings": validate_citations(summary, evidence) if evidence else [],
+                "citation_warnings": citation_quality.get("warnings", []),
+                "citation_quality": citation_quality,
                 "recommended_resources": recommended_resources,
                 "confidence": 0.85,
                 "raw_context": context_text

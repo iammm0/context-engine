@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any, Dict, Iterable, List
 
 from models.rag import EvidenceItem
@@ -133,21 +134,67 @@ def extract_citation_ids(text: str) -> List[str]:
     return ids
 
 
+def _evidence_items(evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> List[EvidenceItem]:
+    items: List[EvidenceItem] = []
+    for item in evidence:
+        if not item:
+            continue
+        items.append(item if isinstance(item, EvidenceItem) else EvidenceItem.model_validate(item))
+    return items
+
+
+def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> Dict[str, Any]:
+    """Build structured citation coverage diagnostics for generated answers."""
+    items = _evidence_items(evidence)
+    evidence_ids = [item.id for item in items if item.id]
+    evidence_id_set = set(evidence_ids)
+    mentions = _CITATION_RE.findall(answer or "")
+    mention_counts = Counter(mentions)
+    used_ids = extract_citation_ids(answer)
+    valid_ids = [cid for cid in used_ids if cid in evidence_id_set]
+    invalid_ids = [cid for cid in used_ids if cid not in evidence_id_set]
+    duplicate_ids = [cid for cid, count in mention_counts.items() if count > 1]
+    unused_ids = [eid for eid in evidence_ids if eid not in set(valid_ids)]
+    top_evidence = sorted(items, key=lambda item: item.score, reverse=True)[:3]
+    unreferenced_top_ids = [item.id for item in top_evidence if item.id and item.id not in set(valid_ids)]
+    coverage = (len(valid_ids) / len(evidence_ids)) if evidence_ids else None
+
+    warnings: List[str] = []
+    if invalid_ids:
+        warnings.append(f"回答引用了不存在的证据编号: {', '.join(invalid_ids)}")
+    if evidence_ids and not used_ids:
+        warnings.append("回答未引用任何证据编号，建议使用 [S1] 这类引用标注关键信息来源。")
+    if duplicate_ids:
+        warnings.append(f"回答重复引用了证据编号: {', '.join(duplicate_ids)}")
+
+    if not evidence_ids:
+        status = "no_evidence"
+    elif invalid_ids:
+        status = "invalid"
+    elif not valid_ids:
+        status = "missing"
+    elif coverage == 1:
+        status = "complete"
+    else:
+        status = "partial"
+
+    return {
+        "status": status,
+        "evidence_count": len(evidence_ids),
+        "used_citation_ids": used_ids,
+        "valid_citation_ids": valid_ids,
+        "invalid_citation_ids": invalid_ids,
+        "duplicate_citation_ids": duplicate_ids,
+        "unused_evidence_ids": unused_ids,
+        "unreferenced_top_evidence_ids": unreferenced_top_ids,
+        "coverage": round(coverage, 4) if coverage is not None else None,
+        "warnings": warnings,
+    }
+
+
 def validate_citations(answer: str, evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> List[str]:
     """Return non-blocking warnings for missing or invalid citations."""
-    evidence_ids = {
-        item.id if isinstance(item, EvidenceItem) else str(item.get("id", ""))
-        for item in evidence
-        if item
-    }
-    used = extract_citation_ids(answer)
-    warnings: List[str] = []
-    invalid = [cid for cid in used if cid not in evidence_ids]
-    if invalid:
-        warnings.append(f"回答引用了不存在的证据编号: {', '.join(invalid)}")
-    if evidence_ids and not used:
-        warnings.append("回答未引用任何证据编号，建议使用 [S1] 这类引用标注关键信息来源。")
-    return warnings
+    return build_citation_diagnostics(answer, evidence).get("warnings", [])
 
 
 def format_evidence_context(evidence: Iterable[EvidenceItem | Dict[str, Any]]) -> str:

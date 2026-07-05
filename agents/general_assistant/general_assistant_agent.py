@@ -4,7 +4,7 @@ from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
 from services.model_selector import model_selector
 from utils.logger import logger
-from utils.citation import validate_citations
+from utils.citation import build_citation_diagnostics
 
 
 class GeneralAssistantAgent(BaseAgent):
@@ -159,7 +159,8 @@ class GeneralAssistantAgent(BaseAgent):
                     }
             
             if not stream or full_response:
-                citation_warnings = validate_citations(full_response, evidence) if evidence else []
+                citation_quality = build_citation_diagnostics(full_response, evidence)
+                citation_warnings = citation_quality.get("warnings", [])
                 yield {
                     "type": "complete",
                     "content": full_response,
@@ -169,6 +170,7 @@ class GeneralAssistantAgent(BaseAgent):
                     "query_plan": query_plan,
                     "trace": rag_trace,
                     "citation_warnings": citation_warnings,
+                    "citation_quality": citation_quality,
                     "recommended_resources": recommended_resources,
                     "confidence": 0.9 # 高阶RAG通常置信度较高
                 }

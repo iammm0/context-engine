@@ -13,7 +13,8 @@ retrieval pipeline is now centered on chunk-level evidence.
 5. Fuse candidates with Reciprocal Rank Fusion by default.
 6. Convert final chunks into `EvidenceItem[]`.
 7. Format evidence as `[S1] ...` context for generation.
-8. Validate generated citations as warnings, without blocking the response.
+8. Validate generated citations as warnings and structured citation quality
+   diagnostics, without blocking the response.
 
 ## RAGFlow-style Ingestion Metadata
 
@@ -112,6 +113,10 @@ are rendered as citation chips when matching evidence is available; selecting a
 chip opens the evidence list and highlights the corresponding source chunk.
 Evidence and source cards also link to `/documents` with the document and chunk
 locator, opening the chunk inspector around the cited chunk for source review.
+Assistant messages can include `citation_quality` with citation coverage,
+valid/invalid citation ids, duplicate citations, unused evidence ids, and the
+highest-scored evidence that was not referenced. The UI displays this as a
+compact citation audit line next to any non-blocking `citation_warnings`.
 
 ## EvidenceItem
 
@@ -126,6 +131,10 @@ short artifact summary before the raw chunk text: table evidence exposes column
 names, sample rows, and table source refs; OCR evidence exposes image source
 refs and confidence; and formula/code evidence exposes a compact content
 preview.
+Generated answers are checked against the available `EvidenceItem` ids to build
+`citation_quality.status`, `coverage`, `valid_citation_ids`,
+`invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
+`unreferenced_top_evidence_ids`.
 
 ## Compatibility
 
