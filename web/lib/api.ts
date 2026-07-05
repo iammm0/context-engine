@@ -185,6 +185,13 @@ export type ParseQualitySummary = {
   chunk_token_avg?: number;
   chunk_short_count?: number;
   chunk_large_count?: number;
+  artifact_expected_count?: number;
+  artifact_present_count?: number;
+  artifact_missing_count?: number;
+  artifact_preview_coverage?: number | null;
+  table_artifact_missing_structure_count?: number;
+  ocr_artifact_missing_source_count?: number;
+  ocr_artifact_low_confidence_source_count?: number;
   content_type_counts?: Record<string, number>;
   page_coverage?: number | null;
   quality_score?: number;

@@ -367,6 +367,105 @@ def test_build_parse_quality_summary_warns_when_structured_artifacts_are_not_chu
     assert any("解析到公式" in warning for warning in summary["warnings"])
 
 
+def test_build_parse_quality_summary_tracks_structured_artifact_coverage():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "pdf",
+            "extraction_method": "text_extraction",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {"image_count": 0, "ocr_text_length": 0},
+            "tables": [],
+            "formulas": [],
+        },
+        "Structured artifact diagnostics need enough body text for a clean baseline. " * 5,
+        [
+            {
+                "text": "metrics",
+                "metadata": {
+                    "content_type": "table",
+                    "token_count": 80,
+                    "char_start": 0,
+                    "char_end": 40,
+                    "artifact": {
+                        "type": "table",
+                        "headers": ["metric", "value"],
+                        "rows": [["recall", "0.9"]],
+                    },
+                },
+            },
+            {
+                "text": "ocr text",
+                "metadata": {
+                    "content_type": "image_ocr",
+                    "token_count": 80,
+                    "char_start": 40,
+                    "char_end": 80,
+                    "artifact": {
+                        "type": "image_ocr",
+                        "text": "ocr text",
+                        "images": [{"image_index": 1, "text_preview": "ocr text", "low_confidence": True}],
+                    },
+                },
+            },
+        ],
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["artifact_expected_count"] == 2
+    assert summary["artifact_present_count"] == 2
+    assert summary["artifact_missing_count"] == 0
+    assert summary["artifact_preview_coverage"] == 1
+    assert summary["ocr_artifact_low_confidence_source_count"] == 1
+    assert checks["chunk_artifacts"]["status"] == "pass"
+
+
+def test_build_parse_quality_summary_warns_on_incomplete_structured_artifacts():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "pdf",
+            "extraction_method": "text_extraction",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {"image_count": 0, "ocr_text_length": 0},
+            "tables": [],
+            "formulas": [],
+        },
+        "Incomplete artifact diagnostics need enough body text for a clean baseline. " * 5,
+        [
+            {
+                "text": "metrics",
+                "metadata": {
+                    "content_type": "table",
+                    "token_count": 80,
+                    "char_start": 0,
+                    "char_end": 40,
+                    "artifact": {"type": "table"},
+                },
+            },
+            {
+                "text": "ocr text",
+                "metadata": {
+                    "content_type": "image_ocr",
+                    "token_count": 80,
+                    "char_start": 40,
+                    "char_end": 80,
+                    "artifact": {"type": "image_ocr", "text": "ocr text", "images": []},
+                },
+            },
+        ],
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["artifact_expected_count"] == 2
+    assert summary["artifact_present_count"] == 2
+    assert summary["table_artifact_missing_structure_count"] == 1
+    assert summary["ocr_artifact_missing_source_count"] == 1
+    assert checks["chunk_artifacts"]["status"] == "warn"
+    assert "表格 artifact 缺少表头" in checks["chunk_artifacts"]["message"]
+    assert any("结构化 artifact 信息不完整" in warning for warning in summary["warnings"])
+
+
 def test_build_parse_quality_summary_scores_ocr_coverage_and_confidence():
     summary = build_parse_quality_summary(
         {

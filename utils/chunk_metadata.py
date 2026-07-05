@@ -166,6 +166,52 @@ def _summarize_chunk_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     return summary
 
 
+def _summarize_artifact_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    expected_types = {"table", "image_ocr", "ocr", "formula", "code"}
+    expected_count = 0
+    present_count = 0
+    missing_count = 0
+    table_missing_structure_count = 0
+    ocr_missing_source_count = 0
+    low_confidence_ocr_source_count = 0
+
+    for chunk in chunks:
+        metadata = chunk.get("metadata") or {}
+        content_type = str(metadata.get("content_type") or "text").lower()
+        if content_type not in expected_types:
+            continue
+        expected_count += 1
+        artifact = metadata.get("artifact")
+        if not isinstance(artifact, dict):
+            missing_count += 1
+            continue
+        present_count += 1
+        artifact_type = str(artifact.get("type") or "").lower()
+        if content_type == "table" or artifact_type == "table":
+            headers = artifact.get("headers") if isinstance(artifact.get("headers"), list) else []
+            rows = artifact.get("rows") if isinstance(artifact.get("rows"), list) else []
+            markdown = str(artifact.get("markdown") or "").strip()
+            if not headers and not rows and not markdown:
+                table_missing_structure_count += 1
+        if content_type in {"image_ocr", "ocr"} or artifact_type in {"image_ocr", "ocr"}:
+            images = artifact.get("images") if isinstance(artifact.get("images"), list) else []
+            if not images:
+                ocr_missing_source_count += 1
+            low_confidence_ocr_source_count += sum(
+                1 for image in images if isinstance(image, dict) and image.get("low_confidence") is True
+            )
+
+    return {
+        "artifact_expected_count": expected_count,
+        "artifact_present_count": present_count,
+        "artifact_missing_count": missing_count,
+        "artifact_preview_coverage": (present_count / expected_count) if expected_count else None,
+        "table_artifact_missing_structure_count": table_missing_structure_count,
+        "ocr_artifact_missing_source_count": ocr_missing_source_count,
+        "ocr_artifact_low_confidence_source_count": low_confidence_ocr_source_count,
+    }
+
+
 def summarize_parse_metadata(metadata: Dict[str, Any], document_text: str = "") -> Dict[str, Any]:
     """Build a compact document-level parse summary safe to repeat on chunks."""
     image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
@@ -202,6 +248,7 @@ def build_parse_quality_summary(
         content_type = str(chunk_meta.get("content_type") or "text")
         content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
     chunk_quality = _summarize_chunk_quality(chunks)
+    artifact_quality = _summarize_artifact_quality(chunks)
 
     page_count = summary.get("page_count") or 0
     extracted_pages = summary.get("extracted_pages")
@@ -398,6 +445,48 @@ def build_parse_quality_summary(
                     f"平均 {chunk_quality.get('chunk_token_avg')} tokens，范围 {chunk_quality.get('chunk_token_min')}-{chunk_quality.get('chunk_token_max')}",
                 )
 
+        artifact_expected_count = int(artifact_quality.get("artifact_expected_count") or 0)
+        artifact_missing_count = int(artifact_quality.get("artifact_missing_count") or 0)
+        table_artifact_missing_structure_count = int(artifact_quality.get("table_artifact_missing_structure_count") or 0)
+        ocr_artifact_missing_source_count = int(artifact_quality.get("ocr_artifact_missing_source_count") or 0)
+        artifact_preview_coverage = artifact_quality.get("artifact_preview_coverage")
+        if artifact_expected_count:
+            if artifact_missing_count:
+                score -= min(8, max(4, artifact_missing_count * 2))
+                add_check(
+                    "chunk_artifacts",
+                    "结构化预览",
+                    "warn",
+                    "warning",
+                    f"{artifact_missing_count} 个结构化 chunk 缺少可视化 artifact，覆盖率 {artifact_preview_coverage:.0%}",
+                    "检查切块 enrichment 是否保留 table/OCR/formula/code artifact，避免证据卡退化为纯文本。",
+                )
+                warnings.append("结构化 chunk 缺少可视化 artifact")
+            elif table_artifact_missing_structure_count or ocr_artifact_missing_source_count:
+                score -= min(6, max(3, table_artifact_missing_structure_count + ocr_artifact_missing_source_count))
+                issues = []
+                if table_artifact_missing_structure_count:
+                    issues.append(f"{table_artifact_missing_structure_count} 个表格 artifact 缺少表头/行或 Markdown")
+                if ocr_artifact_missing_source_count:
+                    issues.append(f"{ocr_artifact_missing_source_count} 个 OCR artifact 缺少图片来源")
+                add_check(
+                    "chunk_artifacts",
+                    "结构化预览",
+                    "warn",
+                    "warning",
+                    "；".join(issues),
+                    "复核结构化 artifact 是否携带表格结构、图片来源和 OCR 文本预览。",
+                )
+                warnings.append("结构化 artifact 信息不完整")
+            else:
+                add_check(
+                    "chunk_artifacts",
+                    "结构化预览",
+                    "pass",
+                    "info",
+                    f"结构化 artifact 覆盖率 {artifact_preview_coverage:.0%}",
+                )
+
     table_count = int(summary.get("table_count") or 0)
     formula_count = int(summary.get("formula_count") or 0)
     if table_count > 0 and int(content_type_counts.get("table") or 0) == 0:
@@ -444,6 +533,7 @@ def build_parse_quality_summary(
     return {
         **summary,
         **chunk_quality,
+        **artifact_quality,
         "chunk_count": len(chunks),
         "content_type_counts": content_type_counts,
         "page_coverage": page_coverage,
