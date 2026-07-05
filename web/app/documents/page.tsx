@@ -188,6 +188,7 @@ export default function DocumentsPage() {
   const [chunkPreviewQuery, setChunkPreviewQuery] = useState("");
   const [chunkPreviewAppliedQuery, setChunkPreviewAppliedQuery] = useState("");
   const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
+  const [chunkPreviewLoadingMore, setChunkPreviewLoadingMore] = useState(false);
   const [chunkPreviewError, setChunkPreviewError] = useState("");
   const [chunkPanelQuality, setChunkPanelQuality] = useState<ParseQualitySummary | null>(null);
 
@@ -233,6 +234,7 @@ export default function DocumentsPage() {
     () => getChunkFilterOptions(chunkPanelQuality),
     [chunkPanelQuality],
   );
+  const chunkPreviewHasMore = chunkPreview.length < chunkPreviewTotal;
 
   useEffect(() => {
     let mounted = true;
@@ -302,23 +304,36 @@ export default function DocumentsPage() {
     await loadDocuments(selectedKnowledgeSpaceId, page);
   };
 
-  const loadChunkPreview = async (doc: Document, filter: string, query: string) => {
+  const loadChunkPreview = async (
+    doc: Document,
+    filter: string,
+    query: string,
+    options?: { skip?: number; append?: boolean },
+  ) => {
+    const append = options?.append ?? false;
+    const skip = options?.skip ?? 0;
     setChunkPanelDoc(doc);
-    setChunkPreview([]);
-    setChunkPreviewTotal(0);
-    setChunkPreviewAllTotal(0);
     setChunkPreviewError("");
-    setChunkPanelQuality(doc.parse_quality || null);
-    setChunkPreviewLoading(true);
+    if (append) {
+      setChunkPreviewLoadingMore(true);
+    } else {
+      setChunkPreview([]);
+      setChunkPreviewTotal(0);
+      setChunkPreviewAllTotal(0);
+      setChunkPanelQuality(doc.parse_quality || null);
+      setChunkPreviewLoading(true);
+    }
     try {
       const result = await apiClient.getDocumentChunks(doc.id, {
+        skip,
         limit: 80,
         includeText: false,
         contentType: filter,
         query,
       });
       if (result.error) throw new Error(result.error);
-      setChunkPreview(result.data?.chunks || []);
+      const nextChunks = result.data?.chunks || [];
+      setChunkPreview((prev) => (append ? [...prev, ...nextChunks] : nextChunks));
       setChunkPreviewTotal(result.data?.total_chunks || 0);
       setChunkPreviewAllTotal(result.data?.total_all_chunks ?? result.data?.total_chunks ?? 0);
       setChunkPanelQuality(
@@ -329,7 +344,11 @@ export default function DocumentsPage() {
     } catch (e) {
       setChunkPreviewError((e as Error).message || "加载切块失败");
     } finally {
-      setChunkPreviewLoading(false);
+      if (append) {
+        setChunkPreviewLoadingMore(false);
+      } else {
+        setChunkPreviewLoading(false);
+      }
     }
   };
 
@@ -358,6 +377,14 @@ export default function DocumentsPage() {
     setChunkPreviewQuery("");
     setChunkPreviewAppliedQuery("");
     await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, "");
+  };
+
+  const handleLoadMoreChunks = async () => {
+    if (!chunkPanelDoc || chunkPreviewLoading || chunkPreviewLoadingMore || !chunkPreviewHasMore) return;
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, chunkPreviewAppliedQuery, {
+      skip: chunkPreview.length,
+      append: true,
+    });
   };
 
   const handleCreateSpace = async () => {
@@ -630,6 +657,7 @@ export default function DocumentsPage() {
                   setChunkPreviewFilter("all");
                   setChunkPreviewQuery("");
                   setChunkPreviewAppliedQuery("");
+                  setChunkPreviewLoadingMore(false);
                   setChunkPreviewError("");
                   setChunkPanelQuality(null);
                 }}
@@ -811,6 +839,24 @@ export default function DocumentsPage() {
                   );
                 })}
               </div>
+
+              {!chunkPreviewLoading && !chunkPreviewError && chunkPreview.length > 0 && (
+                <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 pt-4 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    已显示 {chunkPreview.length} / {chunkPreviewTotal} 个匹配 chunk
+                  </span>
+                  {chunkPreviewHasMore && (
+                    <button
+                      type="button"
+                      disabled={chunkPreviewLoadingMore}
+                      onClick={() => handleLoadMoreChunks().catch(() => {})}
+                      className="rounded bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-60 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {chunkPreviewLoadingMore ? "加载中..." : "加载更多"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

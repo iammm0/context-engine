@@ -63,6 +63,8 @@ The response includes `total_chunks` for the current filtered result and
 
 The Next.js document page uses this endpoint to show chunk type, page/section
 location, feature flags, token count, parse quality, and preview text. The
+chunk inspector keeps the active `content_type`/`q` filters while using
+`skip`/`limit` to load more matching chunks for long documents. The
 document list also shows a compact parse quality line for completed documents
 when `metadata.parse_quality` is available.
 
