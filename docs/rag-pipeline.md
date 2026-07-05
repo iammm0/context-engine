@@ -35,7 +35,15 @@ enriched with compact metadata for preview, citation, and debugging:
   formula count, OCR image count, and OCR text length.
 - `parse_quality`: the document-level quality summary stored on
   `documents.metadata`, including `quality_score`, `page_coverage`, warning
-  messages, and chunk `content_type_counts`.
+  messages, chunk `content_type_counts`, `risk_level`, structured
+  `quality_checks`, and recommended follow-up actions.
+
+`parse_quality.quality_checks` keeps each parser diagnostic as a stable item
+with `id`, `label`, `status`, `severity`, `message`, and optional `action`.
+The current checks cover text extraction, page coverage, image OCR, chunk type
+recognition, table chunk retention, and formula chunk retention. The legacy
+`warnings` array is still returned for compatibility, while `risk_level` gives
+clients a compact `low` / `medium` / `high` signal.
 
 Heavy parser fields such as `pages`, `tables`, `formulas`, and `code_blocks`
 remain on the document metadata when available, but are removed from repeated

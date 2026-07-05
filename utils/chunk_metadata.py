@@ -98,38 +98,151 @@ def build_parse_quality_summary(
         page_coverage = max(0.0, min(1.0, float(extracted_pages) / max(float(page_count), 1.0)))
 
     warnings: List[str] = []
+    checks: List[Dict[str, Any]] = []
     score = 100
+
+    def add_check(
+        check_id: str,
+        label: str,
+        status: str,
+        severity: str,
+        message: str,
+        action: str = "",
+    ) -> None:
+        item = {
+            "id": check_id,
+            "label": label,
+            "status": status,
+            "severity": severity,
+            "message": message,
+        }
+        if action:
+            item["action"] = action
+        checks.append(item)
 
     text_length = int(summary.get("text_length") or 0)
     if text_length == 0:
         score -= 60
+        add_check(
+            "text_extraction",
+            "正文文本",
+            "fail",
+            "critical",
+            "未提取到正文文本",
+            "检查解析器选择、扫描件 OCR 开关和原始文件是否损坏。",
+        )
         warnings.append("未提取到正文文本")
     elif text_length < 200:
         score -= 15
+        add_check(
+            "text_extraction",
+            "正文文本",
+            "warn",
+            "warning",
+            "正文文本较短，可能存在解析不完整",
+            "抽查文档预览，必要时切换解析器或启用 OCR。",
+        )
         warnings.append("正文文本较短，可能存在解析不完整")
+    else:
+        add_check("text_extraction", "正文文本", "pass", "info", f"已提取 {text_length} 字正文")
 
     if page_coverage is not None and page_coverage < 0.9:
         penalty = int((1.0 - page_coverage) * 35)
         score -= max(5, penalty)
+        add_check(
+            "page_coverage",
+            "页面覆盖",
+            "warn",
+            "warning",
+            f"页面文本覆盖率偏低：{page_coverage:.0%}",
+            "检查缺页是否为扫描页、图片页或受保护内容。",
+        )
         warnings.append(f"页面文本覆盖率偏低：{page_coverage:.0%}")
+    elif page_coverage is not None:
+        add_check("page_coverage", "页面覆盖", "pass", "info", f"页面文本覆盖率 {page_coverage:.0%}")
 
     image_count = int(summary.get("image_count") or 0)
     ocr_text_length = int(summary.get("ocr_text_length") or 0)
     if image_count > 0 and ocr_text_length == 0:
         score -= 10
+        add_check(
+            "image_ocr",
+            "图片 OCR",
+            "warn",
+            "warning",
+            "检测到图片但未产生 OCR 文本",
+            "确认 OCR 模块可用，并抽查图片是否包含可识别文字。",
+        )
         warnings.append("检测到图片但未产生 OCR 文本")
+    elif image_count > 0:
+        add_check("image_ocr", "图片 OCR", "pass", "info", f"检测到 {image_count} 张图片，OCR 文本 {ocr_text_length} 字")
 
     if chunks and not content_type_counts:
         score -= 10
+        add_check(
+            "chunk_types",
+            "切块类型",
+            "fail",
+            "critical",
+            "未识别到有效切块类型",
+            "检查切块器是否返回 metadata.content_type。",
+        )
         warnings.append("未识别到有效切块类型")
+    elif chunks:
+        add_check("chunk_types", "切块类型", "pass", "info", f"识别到 {len(content_type_counts)} 类切块")
+
+    table_count = int(summary.get("table_count") or 0)
+    formula_count = int(summary.get("formula_count") or 0)
+    if table_count > 0 and int(content_type_counts.get("table") or 0) == 0:
+        score -= 8
+        add_check(
+            "table_chunks",
+            "表格切块",
+            "warn",
+            "warning",
+            "解析到表格，但切块中未标记表格块",
+            "检查表格解析结果是否被合并到正文，或调整切块策略保留表格边界。",
+        )
+        warnings.append("解析到表格，但切块中未标记表格块")
+    elif table_count > 0:
+        add_check("table_chunks", "表格切块", "pass", "info", f"表格解析 {table_count} 个，表格切块 {content_type_counts.get('table', 0)} 个")
+
+    if formula_count > 0 and int(content_type_counts.get("formula") or 0) == 0:
+        score -= 5
+        add_check(
+            "formula_chunks",
+            "公式切块",
+            "warn",
+            "warning",
+            "解析到公式，但切块中未标记公式块",
+            "检查公式分析器输出和切块器的公式类型识别。",
+        )
+        warnings.append("解析到公式，但切块中未标记公式块")
+    elif formula_count > 0:
+        add_check("formula_chunks", "公式切块", "pass", "info", f"公式解析 {formula_count} 个")
 
     score = max(0, min(100, score))
+    recommendations = [
+        str(item["action"])
+        for item in checks
+        if item.get("action") and item.get("status") in {"warn", "fail"}
+    ]
+    has_critical = any(item.get("status") == "fail" or item.get("severity") == "critical" for item in checks)
+    if score < 60 or has_critical:
+        risk_level = "high"
+    elif score < 85 or warnings:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
     return {
         **summary,
         "chunk_count": len(chunks),
         "content_type_counts": content_type_counts,
         "page_coverage": page_coverage,
         "quality_score": score,
+        "risk_level": risk_level,
+        "quality_checks": checks,
+        "recommendations": recommendations,
         "warnings": warnings,
     }
 

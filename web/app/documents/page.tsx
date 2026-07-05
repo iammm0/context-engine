@@ -76,6 +76,33 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
   return bits.join(" · ");
 }
 
+function parseRiskLabel(level?: string) {
+  if (level === "high") return "高风险";
+  if (level === "medium") return "需关注";
+  if (level === "low") return "良好";
+  return level || "未知";
+}
+
+function parseRiskClass(level?: string) {
+  if (level === "high") return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200";
+  if (level === "medium") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
+  if (level === "low") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200";
+  return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200";
+}
+
+function parseCheckClass(status?: string) {
+  if (status === "fail") return "border-red-400 text-red-800 dark:border-red-500 dark:text-red-100";
+  if (status === "warn") return "border-amber-400 text-amber-800 dark:border-amber-500 dark:text-amber-100";
+  return "border-green-400 text-green-800 dark:border-green-500 dark:text-green-100";
+}
+
+function parseCheckStatusLabel(status?: string) {
+  if (status === "fail") return "异常";
+  if (status === "warn") return "关注";
+  if (status === "pass") return "正常";
+  return status || "未知";
+}
+
 function formatOcrConfidence(value?: number | null) {
   if (typeof value !== "number") return "";
   const percent = value <= 1 ? value * 100 : value;
@@ -675,6 +702,11 @@ export default function DocumentsPage() {
                       <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {typeof chunkPanelQuality.quality_score === "number" ? `${chunkPanelQuality.quality_score}` : "-"}
                       </div>
+                      {chunkPanelQuality.risk_level && (
+                        <div className={`mt-1 inline-flex rounded px-2 py-0.5 text-[11px] font-medium ${parseRiskClass(chunkPanelQuality.risk_level)}`}>
+                          {parseRiskLabel(chunkPanelQuality.risk_level)}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div className="text-gray-500 dark:text-gray-400">页面覆盖</div>
@@ -715,6 +747,32 @@ export default function DocumentsPage() {
                   {chunkPanelQuality.warnings && chunkPanelQuality.warnings.length > 0 && (
                     <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
                       {chunkPanelQuality.warnings.join("；")}
+                    </div>
+                  )}
+                  {chunkPanelQuality.quality_checks && chunkPanelQuality.quality_checks.length > 0 && (
+                    <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                      {chunkPanelQuality.quality_checks.map((check) => (
+                        <div key={check.id} className={`border-l-2 py-1.5 pl-2 text-xs ${parseCheckClass(check.status)}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{check.label}</span>
+                            <span>{parseCheckStatusLabel(check.status)}</span>
+                          </div>
+                          <div className="mt-1 leading-5">{check.message}</div>
+                          {check.action && check.status !== "pass" && (
+                            <div className="mt-1 opacity-80">{check.action}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {chunkPanelQuality.recommendations && chunkPanelQuality.recommendations.length > 0 && (
+                    <div className="mt-3 border-t border-amber-200 pt-2 text-xs text-amber-800 dark:border-amber-900/60 dark:text-amber-100">
+                      <div className="font-medium">建议动作</div>
+                      <ul className="mt-1 list-disc space-y-1 pl-4">
+                        {chunkPanelQuality.recommendations.slice(0, 4).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>

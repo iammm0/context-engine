@@ -196,3 +196,36 @@ def test_build_parse_quality_summary_scores_and_warns_on_low_coverage_ocr_gap():
     assert summary["content_type_counts"] == {"text": 1, "table": 1}
     assert any("页面文本覆盖率偏低" in warning for warning in summary["warnings"])
     assert any("未产生 OCR 文本" in warning for warning in summary["warnings"])
+    assert summary["risk_level"] == "high"
+    assert summary["recommendations"]
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert checks["page_coverage"]["status"] == "warn"
+    assert checks["image_ocr"]["status"] == "warn"
+    assert checks["text_extraction"]["status"] == "warn"
+
+
+def test_build_parse_quality_summary_warns_when_structured_artifacts_are_not_chunked():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "mineru",
+            "extraction_method": "ocr",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {"image_count": 0, "ocr_text_length": 0},
+            "tables": [{"markdown": "| Metric | Value |\n| --- | --- |\n| recall | 0.9 |"}],
+            "formulas": [{"latex": "E=mc^2"}],
+        },
+        "Structured parsing found a table and formula. " * 8,
+        [{"text": "Metric Value recall 0.9 E equals m c squared", "metadata": {"content_type": "text"}}],
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["risk_level"] == "medium"
+    assert summary["quality_score"] == 87
+    assert checks["table_chunks"]["status"] == "warn"
+    assert checks["formula_chunks"]["status"] == "warn"
+    assert any("表格" in item for item in summary["recommendations"])
+    assert any("公式" in item for item in summary["recommendations"])
+    assert any("解析到表格" in warning for warning in summary["warnings"])
+    assert any("解析到公式" in warning for warning in summary["warnings"])

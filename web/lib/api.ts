@@ -152,7 +152,19 @@ export type ParseQualitySummary = {
   content_type_counts?: Record<string, number>;
   page_coverage?: number | null;
   quality_score?: number;
+  risk_level?: "low" | "medium" | "high" | string;
+  quality_checks?: ParseQualityCheck[];
+  recommendations?: string[];
   warnings?: string[];
+};
+
+export type ParseQualityCheck = {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail" | string;
+  severity: "info" | "warning" | "critical" | string;
+  message: string;
+  action?: string;
 };
 
 export type ConversationMessage = {
