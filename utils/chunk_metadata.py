@@ -34,6 +34,27 @@ def _safe_int(value: Any) -> Optional[int]:
         return None
 
 
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        parsed = float(value)
+        if parsed != parsed:
+            return None
+        return parsed
+    except Exception:
+        return None
+
+
+def _normalize_confidence(value: Any) -> Optional[float]:
+    parsed = _safe_float(value)
+    if parsed is None:
+        return None
+    if parsed > 1:
+        parsed = parsed / 100.0
+    return max(0.0, min(1.0, parsed))
+
+
 def _first_int(*values: Any) -> Optional[int]:
     for value in values:
         parsed = _safe_int(value)
@@ -53,6 +74,52 @@ def _list_count(value: Any) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
+def _summarize_ocr_quality(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
+    images = image_ocr.get("images") if isinstance(image_ocr.get("images"), list) else []
+    image_count = _safe_int(image_ocr.get("image_count")) or len(images)
+    recognized_images = 0
+    empty_images = 0
+    low_confidence_images = 0
+    confidences: List[float] = []
+    observed_images = 0
+
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        observed_images += 1
+        text_length = _safe_int(image.get("text_length"))
+        if text_length is None and isinstance(image.get("text"), str):
+            text_length = len(image.get("text") or "")
+        line_count = _safe_int(image.get("line_count")) or 0
+        has_text = (text_length or 0) > 0 or line_count > 0
+        confidence = _normalize_confidence(image.get("confidence"))
+
+        if has_text:
+            recognized_images += 1
+            if confidence is not None:
+                confidences.append(confidence)
+                if confidence < 0.65:
+                    low_confidence_images += 1
+        else:
+            empty_images += 1
+
+    if image_count > observed_images:
+        empty_images += image_count - observed_images
+
+    ocr_image_coverage = None
+    if image_count:
+        ocr_image_coverage = max(0.0, min(1.0, recognized_images / max(float(image_count), 1.0)))
+
+    return {
+        "ocr_recognized_images": recognized_images,
+        "ocr_empty_images": empty_images,
+        "ocr_low_confidence_images": low_confidence_images,
+        "ocr_avg_confidence": (sum(confidences) / len(confidences)) if confidences else None,
+        "ocr_image_coverage": ocr_image_coverage,
+    }
+
+
 def summarize_parse_metadata(metadata: Dict[str, Any], document_text: str = "") -> Dict[str, Any]:
     """Build a compact document-level parse summary safe to repeat on chunks."""
     image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
@@ -61,6 +128,7 @@ def summarize_parse_metadata(metadata: Dict[str, Any], document_text: str = "") 
         page_count = len(metadata["pages"])
 
     return {
+        **_summarize_ocr_quality(metadata),
         "parser_type": metadata.get("parser_type"),
         "extraction_method": metadata.get("extraction_method"),
         "page_count": page_count,
@@ -163,6 +231,11 @@ def build_parse_quality_summary(
 
     image_count = int(summary.get("image_count") or 0)
     ocr_text_length = int(summary.get("ocr_text_length") or 0)
+    ocr_recognized_images = int(summary.get("ocr_recognized_images") or 0)
+    ocr_empty_images = int(summary.get("ocr_empty_images") or 0)
+    ocr_low_confidence_images = int(summary.get("ocr_low_confidence_images") or 0)
+    ocr_avg_confidence = summary.get("ocr_avg_confidence")
+    ocr_image_coverage = summary.get("ocr_image_coverage")
     if image_count > 0 and ocr_text_length == 0:
         score -= 10
         add_check(
@@ -175,7 +248,48 @@ def build_parse_quality_summary(
         )
         warnings.append("检测到图片但未产生 OCR 文本")
     elif image_count > 0:
-        add_check("image_ocr", "图片 OCR", "pass", "info", f"检测到 {image_count} 张图片，OCR 文本 {ocr_text_length} 字")
+        if isinstance(ocr_image_coverage, float) and ocr_image_coverage < 0.8:
+            score -= 8
+            add_check(
+                "image_ocr",
+                "图片 OCR",
+                "warn",
+                "warning",
+                f"图片 OCR 覆盖率偏低：{ocr_image_coverage:.0%}，{ocr_empty_images} 张图片未识别到文字",
+                "抽查未识别图片，必要时提升图片清晰度、开启高精度 OCR 或重新解析。",
+            )
+            warnings.append(f"图片 OCR 覆盖率偏低：{ocr_image_coverage:.0%}")
+        else:
+            message = f"检测到 {image_count} 张图片，OCR 文本 {ocr_text_length} 字"
+            if isinstance(ocr_image_coverage, float):
+                message = f"检测到 {image_count} 张图片，识别 {ocr_recognized_images} 张，OCR 文本 {ocr_text_length} 字"
+            add_check("image_ocr", "图片 OCR", "pass", "info", message)
+
+        if isinstance(ocr_avg_confidence, float):
+            if ocr_avg_confidence < 0.6:
+                score -= 8
+                add_check(
+                    "ocr_confidence",
+                    "OCR 置信度",
+                    "warn",
+                    "warning",
+                    f"OCR 平均置信度偏低：{ocr_avg_confidence:.0%}",
+                    "复核 OCR 文本，必要时更换 OCR 引擎或提高扫描分辨率。",
+                )
+                warnings.append(f"OCR 平均置信度偏低：{ocr_avg_confidence:.0%}")
+            elif ocr_low_confidence_images > 0:
+                score -= min(6, max(2, ocr_low_confidence_images * 2))
+                add_check(
+                    "ocr_confidence",
+                    "OCR 置信度",
+                    "warn",
+                    "warning",
+                    f"{ocr_low_confidence_images} 张图片 OCR 置信度偏低，平均置信度 {ocr_avg_confidence:.0%}",
+                    "优先复核低置信度图片对应的证据引用。",
+                )
+                warnings.append(f"{ocr_low_confidence_images} 张图片 OCR 置信度偏低")
+            else:
+                add_check("ocr_confidence", "OCR 置信度", "pass", "info", f"平均置信度 {ocr_avg_confidence:.0%}")
 
     if chunks and not content_type_counts:
         score -= 10

@@ -119,6 +119,7 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
   if (typeof quality.ocr_text_length === "number" && quality.ocr_text_length > 0) {
     bits.push(`OCR ${quality.ocr_text_length}字`);
   }
+  if (typeof quality.ocr_avg_confidence === "number") bits.push(`OCR置信度 ${formatPercent(quality.ocr_avg_confidence)}`);
   return bits.join(" · ");
 }
 
@@ -855,6 +856,19 @@ export default function DocumentsPage() {
                       <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {chunkPanelQuality.image_count ?? 0} / {chunkPanelQuality.ocr_text_length ?? 0}
                       </div>
+                      {(typeof chunkPanelQuality.ocr_image_coverage === "number" || typeof chunkPanelQuality.ocr_avg_confidence === "number") && (
+                        <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                          {typeof chunkPanelQuality.ocr_image_coverage === "number" && (
+                            <span>覆盖 {formatPercent(chunkPanelQuality.ocr_image_coverage)}</span>
+                          )}
+                          {typeof chunkPanelQuality.ocr_image_coverage === "number" && typeof chunkPanelQuality.ocr_avg_confidence === "number" && (
+                            <span> · </span>
+                          )}
+                          {typeof chunkPanelQuality.ocr_avg_confidence === "number" && (
+                            <span>置信度 {formatPercent(chunkPanelQuality.ocr_avg_confidence)}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">

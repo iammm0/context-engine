@@ -152,6 +152,11 @@ export type ParseQualitySummary = {
   formula_count?: number;
   image_count?: number;
   ocr_text_length?: number;
+  ocr_recognized_images?: number;
+  ocr_empty_images?: number;
+  ocr_low_confidence_images?: number;
+  ocr_avg_confidence?: number | null;
+  ocr_image_coverage?: number | null;
   text_length?: number;
   chunk_count?: number;
   content_type_counts?: Record<string, number>;

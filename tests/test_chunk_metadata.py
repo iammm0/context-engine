@@ -229,3 +229,39 @@ def test_build_parse_quality_summary_warns_when_structured_artifacts_are_not_chu
     assert any("公式" in item for item in summary["recommendations"])
     assert any("解析到表格" in warning for warning in summary["warnings"])
     assert any("解析到公式" in warning for warning in summary["warnings"])
+
+
+def test_build_parse_quality_summary_scores_ocr_coverage_and_confidence():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "pdf",
+            "extraction_method": "text_extraction",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {
+                "image_count": 3,
+                "ocr_text_length": 80,
+                "images": [
+                    {"text_length": 40, "line_count": 3, "confidence": 0.92},
+                    {"text_length": 0, "line_count": 0, "confidence": 0.0},
+                    {"text_length": 40, "line_count": 2, "confidence": 0.42},
+                ],
+            },
+            "tables": [],
+            "formulas": [],
+        },
+        "OCR quality diagnostics need enough body text for a clean baseline. " * 5,
+        [{"metadata": {"content_type": "image_ocr"}}],
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["ocr_recognized_images"] == 2
+    assert summary["ocr_empty_images"] == 1
+    assert summary["ocr_low_confidence_images"] == 1
+    assert round(summary["ocr_image_coverage"], 2) == 0.67
+    assert round(summary["ocr_avg_confidence"], 2) == 0.67
+    assert summary["risk_level"] == "medium"
+    assert checks["image_ocr"]["status"] == "warn"
+    assert checks["ocr_confidence"]["status"] == "warn"
+    assert any("OCR 覆盖率" in warning for warning in summary["warnings"])
+    assert any("OCR 置信度" in warning for warning in summary["warnings"])
