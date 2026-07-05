@@ -105,6 +105,35 @@ export interface DocumentProgress {
   status: string
 }
 
+export interface DocumentChunkPreview {
+  id: string
+  document_id?: string
+  chunk_index?: number
+  text?: string
+  preview: string
+  content_type: string
+  section_path: string[]
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  char_start?: number | null
+  char_end?: number | null
+  token_count?: number | null
+  features?: Record<string, boolean>
+  chunker_type?: string | null
+  parse_summary?: Record<string, unknown>
+}
+
+export interface DocumentChunksResponse {
+  document_id: string
+  title: string
+  status: string
+  chunks: DocumentChunkPreview[]
+  total_chunks: number
+  skip: number
+  limit: number
+}
+
 export interface RuntimeConfigResponse {
   mode: string
   modules: Record<string, boolean>

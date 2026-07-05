@@ -64,7 +64,7 @@ export interface UserRelationship {
   to_user_id: string;
   to_username?: string;
   relationship_type: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
 }
 
 export interface RecommendedResource {
@@ -85,6 +85,9 @@ export interface SourceInfo {
   document_title?: string; // 文档标题
   file_type?: string; // 文件类型
   status?: string; // 文档状态
+  page?: number | null;
+  content_type?: string;
+  section_path?: string[];
 }
 
 export interface EvidenceItem {
@@ -100,7 +103,7 @@ export interface EvidenceItem {
   page?: number;
   score: number;
   retrieval_type: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatRequest {

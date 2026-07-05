@@ -1,14 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Layout from "@/components/ui/Layout";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DocumentUpload from "@/components/document/DocumentUpload";
+import Layout from "@/components/ui/Layout";
 import LoadingProgress from "@/components/ui/LoadingProgress";
-import Toast, { ToastType } from "@/components/ui/Toast";
-import { apiClient, Document } from "@/lib/api";
+import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
+import { apiClient, type Document, type DocumentChunkPreview } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
+
+const contentTypeLabel: Record<string, string> = {
+  text: "文本",
+  table: "表格",
+  image_ocr: "图片OCR",
+  ocr: "OCR",
+  formula: "公式",
+  code: "代码",
+};
+
+function formatChunkLocation(chunk: DocumentChunkPreview) {
+  const pages =
+    chunk.page_start && chunk.page_end && chunk.page_start !== chunk.page_end
+      ? `第 ${chunk.page_start}-${chunk.page_end} 页`
+      : chunk.page || chunk.page_start
+        ? `第 ${chunk.page || chunk.page_start} 页`
+        : "";
+  const section = chunk.section_path?.length ? chunk.section_path.join(" / ") : "";
+  return [pages, section].filter(Boolean).join(" · ") || "未定位";
+}
 
 export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
@@ -25,6 +45,11 @@ export default function DocumentsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [pageSize] = useState(20);
+  const [chunkPanelDoc, setChunkPanelDoc] = useState<Document | null>(null);
+  const [chunkPreview, setChunkPreview] = useState<DocumentChunkPreview[]>([]);
+  const [chunkPreviewTotal, setChunkPreviewTotal] = useState(0);
+  const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
+  const [chunkPreviewError, setChunkPreviewError] = useState("");
 
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -132,6 +157,27 @@ export default function DocumentsPage() {
     await loadDocuments(selectedKnowledgeSpaceId, page);
   };
 
+  const handleViewChunks = async (doc: Document) => {
+    setChunkPanelDoc(doc);
+    setChunkPreview([]);
+    setChunkPreviewTotal(0);
+    setChunkPreviewError("");
+    setChunkPreviewLoading(true);
+    try {
+      const result = await apiClient.getDocumentChunks(doc.id, {
+        limit: 80,
+        includeText: false,
+      });
+      if (result.error) throw new Error(result.error);
+      setChunkPreview(result.data?.chunks || []);
+      setChunkPreviewTotal(result.data?.total_chunks || 0);
+    } catch (e) {
+      setChunkPreviewError((e as Error).message || "加载切块失败");
+    } finally {
+      setChunkPreviewLoading(false);
+    }
+  };
+
   const handleCreateSpace = async () => {
     const name = newSpaceName.trim();
     if (!name) {
@@ -177,6 +223,7 @@ export default function DocumentsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleRefresh}
+              type="button"
               className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
             >
               刷新
@@ -237,6 +284,7 @@ export default function DocumentsPage() {
           <button
             onClick={handleCreateSpace}
             disabled={creatingSpace}
+            type="button"
             className="px-3 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
           >
             新增知识空间
@@ -262,6 +310,7 @@ export default function DocumentsPage() {
               <button
                 onClick={handleCreateSpace}
                 disabled={creatingSpace}
+                type="button"
                 className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-60 sm:col-span-2 w-full sm:w-auto sm:justify-self-start"
               >
                 {creatingSpace ? "创建中..." : "创建"}
@@ -320,7 +369,15 @@ export default function DocumentsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => handleViewChunks(d)}
+                      type="button"
+                      className="px-3 py-2 rounded-lg text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                    >
+                      切块
+                    </button>
+                    <button
                       onClick={() => handleDelete(d.id)}
+                      type="button"
                       className="px-3 py-2 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
                     >
                       删除
@@ -338,6 +395,7 @@ export default function DocumentsPage() {
             <div className="flex gap-2">
               <button
                 disabled={page === 0}
+                type="button"
                 onClick={() => {
                   const p = Math.max(0, page - 1);
                   setPage(p);
@@ -349,6 +407,7 @@ export default function DocumentsPage() {
               </button>
               <button
                 disabled={(page + 1) * pageSize >= total}
+                type="button"
                 onClick={() => {
                   const p = page + 1;
                   setPage(p);
@@ -362,6 +421,90 @@ export default function DocumentsPage() {
           </div>
         </div>
       </div>
+
+      {chunkPanelDoc && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="dialog" aria-modal="true">
+          <div className="h-full w-full max-w-3xl overflow-hidden bg-white shadow-2xl dark:bg-gray-950">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+              <div className="min-w-0">
+                <div className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{chunkPanelDoc.title}</div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {chunkPanelDoc.file_type} · {chunkPreviewTotal} 个 chunk
+                </div>
+              </div>
+              <button
+                className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                type="button"
+                onClick={() => {
+                  setChunkPanelDoc(null);
+                  setChunkPreview([]);
+                  setChunkPreviewError("");
+                }}
+              >
+                关闭
+              </button>
+            </div>
+
+            <div className="h-[calc(100%-73px)] overflow-y-auto p-5">
+              {chunkPreviewLoading && (
+                <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  加载中...
+                </div>
+              )}
+
+              {chunkPreviewError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  {chunkPreviewError}
+                </div>
+              )}
+
+              {!chunkPreviewLoading && !chunkPreviewError && chunkPreview.length === 0 && (
+                <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  暂无切块数据
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {chunkPreview.map((chunk) => {
+                  const typeLabel = contentTypeLabel[chunk.content_type] || chunk.content_type || "文本";
+                  const featureFlags = Object.entries(chunk.features || {})
+                    .filter(([, enabled]) => enabled)
+                    .map(([key]) => key.replace(/^has_/, ""));
+                  return (
+                    <div
+                      key={chunk.id || `${chunk.chunk_index}`}
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded bg-gray-900 px-2 py-1 font-medium text-white dark:bg-gray-100 dark:text-gray-900">
+                          #{typeof chunk.chunk_index === "number" ? chunk.chunk_index + 1 : "-"}
+                        </span>
+                        <span className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                          {typeLabel}
+                        </span>
+                        {typeof chunk.token_count === "number" && (
+                          <span className="rounded bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {chunk.token_count} tokens
+                          </span>
+                        )}
+                        {featureFlags.map((flag) => (
+                          <span key={flag} className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{formatChunkLocation(chunk)}</div>
+                      <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
+                        {chunk.preview}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast
         isOpen={toast.isOpen}
