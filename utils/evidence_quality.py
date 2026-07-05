@@ -56,6 +56,92 @@ def _ocr_confidences(images: Iterable[Any]) -> List[float]:
     return values
 
 
+def build_evidence_item_artifact_diagnostics(item: EvidenceItem | Dict[str, Any]) -> Dict[str, Any]:
+    """Diagnose artifact completeness for one retrieved evidence item."""
+    artifact = _artifact(item)
+    content_type = _content_type(item, artifact)
+    artifact_type = _artifact_type(artifact, content_type)
+    is_structured = content_type in STRUCTURED_EVIDENCE_TYPES or artifact_type in STRUCTURED_EVIDENCE_TYPES
+
+    warnings: List[str] = []
+    recommendations: List[str] = []
+    table_missing_structure = False
+    table_missing_source = False
+    ocr_missing_source = False
+    ocr_low_confidence_source_count = 0
+    ocr_avg_confidence = None
+
+    if is_structured and not artifact:
+        warnings.append("结构化证据缺少 artifact 预览")
+        recommendations.append("重新解析或重建索引，确保结构化证据保留 artifact")
+
+    if content_type == "table" or artifact_type == "table":
+        table_missing_structure = not artifact or not _has_table_structure(artifact)
+        sources = artifact.get("sources") if artifact else None
+        table_missing_source = not isinstance(sources, list) or not sources
+        if table_missing_structure:
+            warnings.append("表格证据缺少表头、样例行或 Markdown 预览")
+            recommendations.append("检查表格 artifact 是否写入 headers、rows 或 markdown")
+        if table_missing_source:
+            warnings.append("表格证据缺少页码或表格来源")
+            recommendations.append("补齐表格 artifact.sources，便于定位原文表格")
+
+    if content_type in {"image_ocr", "ocr"} or artifact_type in {"image_ocr", "ocr"}:
+        images = artifact.get("images") if artifact else None
+        images = images if isinstance(images, list) else []
+        ocr_missing_source = not images
+        if ocr_missing_source:
+            warnings.append("OCR 证据缺少图片来源")
+            recommendations.append("补齐 OCR artifact.images，保留页码、图片序号和置信度")
+        ocr_low_confidence_source_count = sum(
+            1 for image in images if isinstance(image, dict) and image.get("low_confidence") is True
+        )
+        confidence_values = _ocr_confidences(images)
+        if confidence_values:
+            ocr_avg_confidence = round(sum(confidence_values) / len(confidence_values), 4)
+        if ocr_low_confidence_source_count:
+            warnings.append(f"{ocr_low_confidence_source_count} 个 OCR 图片来源置信度偏低")
+            recommendations.append("低置信 OCR 证据需要人工复核或提高图片解析质量")
+
+    if not is_structured:
+        status = "not_structured"
+        risk_level = "low"
+    elif warnings:
+        status = "warn"
+        risk_level = "high" if table_missing_structure or ocr_missing_source else "medium"
+    else:
+        status = "pass"
+        risk_level = "low"
+
+    return {
+        "status": status,
+        "risk_level": risk_level,
+        "structured": is_structured,
+        "content_type": content_type,
+        "artifact_type": artifact_type,
+        "has_artifact": bool(artifact),
+        "table_missing_structure": table_missing_structure,
+        "table_missing_source": table_missing_source,
+        "ocr_missing_source": ocr_missing_source,
+        "ocr_low_confidence_source_count": ocr_low_confidence_source_count,
+        "ocr_avg_confidence": ocr_avg_confidence,
+        "warnings": warnings,
+        "recommendations": recommendations,
+    }
+
+
+def annotate_evidence_artifact_quality(evidence: Iterable[EvidenceItem]) -> None:
+    """Attach per-item artifact diagnostics to structured evidence metadata."""
+    for item in evidence:
+        if not item:
+            continue
+        diagnostics = build_evidence_item_artifact_diagnostics(item)
+        if not diagnostics.get("structured"):
+            continue
+        item.metadata = dict(item.metadata or {})
+        item.metadata["artifact_quality"] = diagnostics
+
+
 def build_evidence_quality_diagnostics(
     evidence: Iterable[EvidenceItem | Dict[str, Any]],
 ) -> Dict[str, Any]:

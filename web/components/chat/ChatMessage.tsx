@@ -96,6 +96,12 @@ function formatEvidenceQuality(quality?: EvidenceQuality | null) {
   return bits.join(" · ");
 }
 
+function formatArtifactQualityWarnings(item: EvidenceItem) {
+  const quality = item.metadata?.artifact_quality;
+  if (!quality || quality.status !== "warn" || !quality.warnings?.length) return "";
+  return quality.warnings.join(" · ");
+}
+
 function buildSourceChunkHref(source: SourceInfo) {
   if (!source.document_id) return "";
   const params = new URLSearchParams({ document_id: source.document_id });
@@ -542,6 +548,11 @@ function ChatMessageImpl({
                     <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                       {item.metadata?.preview || item.text}
                     </div>
+                    {formatArtifactQualityWarnings(item) && (
+                      <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+                        {formatArtifactQualityWarnings(item)}
+                      </div>
+                    )}
                     <EvidenceArtifactPreview artifact={item.metadata?.artifact} />
                   </li>
                 );

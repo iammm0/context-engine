@@ -149,6 +149,11 @@ The same evidence list is checked before generation to build
 `structured_artifact_coverage`, table/OCR completeness counters, warnings, and
 recommendations. This lets the chat UI expose when an answer used table or OCR
 evidence whose source preview is incomplete.
+Each structured evidence item can also carry `metadata.artifact_quality` with
+per-item warnings such as missing table structure, missing table source refs,
+missing OCR image refs, or low-confidence OCR refs. Evidence cards render these
+warnings next to the affected source, so reviewers can jump from a global
+quality warning to the exact problematic chunk.
 
 ## Compatibility
 

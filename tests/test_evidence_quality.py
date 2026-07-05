@@ -7,7 +7,11 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from models.rag import EvidenceItem
-from utils.evidence_quality import build_evidence_quality_diagnostics
+from utils.evidence_quality import (
+    annotate_evidence_artifact_quality,
+    build_evidence_item_artifact_diagnostics,
+    build_evidence_quality_diagnostics,
+)
 
 
 def test_evidence_quality_passes_complete_structured_artifacts():
@@ -119,6 +123,60 @@ def test_evidence_quality_warns_on_incomplete_table_and_ocr_artifacts():
     assert any("结构化证据缺少 artifact" in warning for warning in diagnostics["warnings"])
     assert any("表格证据缺少表头" in warning for warning in diagnostics["warnings"])
     assert any("置信度偏低" in warning for warning in diagnostics["warnings"])
+
+
+def test_evidence_item_artifact_diagnostics_marks_specific_table_gap():
+    item = {
+        "id": "S1",
+        "text": "表格证据",
+        "metadata": {
+            "content_type": "table",
+            "artifact": {"type": "table", "sources": []},
+        },
+    }
+
+    diagnostics = build_evidence_item_artifact_diagnostics(item)
+
+    assert diagnostics["status"] == "warn"
+    assert diagnostics["risk_level"] == "high"
+    assert diagnostics["structured"] is True
+    assert diagnostics["table_missing_structure"] is True
+    assert diagnostics["table_missing_source"] is True
+    assert diagnostics["ocr_missing_source"] is False
+    assert "表格证据缺少表头、样例行或 Markdown 预览" in diagnostics["warnings"]
+    assert "表格证据缺少页码或表格来源" in diagnostics["warnings"]
+
+
+def test_annotate_evidence_artifact_quality_only_adds_structured_metadata():
+    text_item = EvidenceItem(
+        id="S1",
+        text="普通文本证据",
+        document_id="doc1",
+        score=0.9,
+        metadata={"content_type": "text"},
+    )
+    table_item = EvidenceItem(
+        id="S2",
+        text="表格证据",
+        document_id="doc1",
+        score=0.8,
+        metadata={
+            "content_type": "table",
+            "artifact": {
+                "type": "table",
+                "headers": ["指标", "数值"],
+                "rows": [["recall", "0.9"]],
+                "sources": [{"page": 2, "table_index": 1}],
+            },
+        },
+    )
+
+    annotate_evidence_artifact_quality([text_item, table_item])
+
+    assert "artifact_quality" not in text_item.metadata
+    assert table_item.metadata["artifact_quality"]["status"] == "pass"
+    assert table_item.metadata["artifact_quality"]["structured"] is True
+    assert table_item.metadata["artifact_quality"]["warnings"] == []
 
 
 def test_evidence_quality_marks_empty_evidence_as_high_risk():

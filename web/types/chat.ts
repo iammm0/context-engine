@@ -157,8 +157,25 @@ export interface EvidenceItem {
     page_end?: number | null;
     preview?: string;
     artifact?: EvidenceArtifact | null;
+    artifact_quality?: EvidenceArtifactQuality | null;
     [key: string]: unknown;
   };
+}
+
+export interface EvidenceArtifactQuality {
+  status: "not_structured" | "pass" | "warn" | string;
+  risk_level: "low" | "medium" | "high" | string;
+  structured: boolean;
+  content_type: string;
+  artifact_type: string;
+  has_artifact: boolean;
+  table_missing_structure: boolean;
+  table_missing_source: boolean;
+  ocr_missing_source: boolean;
+  ocr_low_confidence_source_count: number;
+  ocr_avg_confidence?: number | null;
+  warnings?: string[];
+  recommendations?: string[];
 }
 
 export interface EvidenceQuality {
