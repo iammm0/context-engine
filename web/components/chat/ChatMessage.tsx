@@ -5,7 +5,7 @@ import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
 import type { ChatMessage as MessageType, EvidenceItem, SourceInfo } from "@/types/chat";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const evidenceTypeLabel: Record<string, string> = {
   text: "文本",
@@ -69,7 +69,21 @@ function ChatMessageImpl({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
+  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
   const messageRef = useRef<HTMLDivElement>(null);
+  const evidenceRefs = useRef<Record<string, HTMLLIElement | null>>({});
+
+  const citationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of message.evidence || []) {
+      if (item.id) ids.add(item.id);
+    }
+    for (const source of message.sources || []) {
+      if (source.evidence_id) ids.add(source.evidence_id);
+    }
+    return [...ids];
+  }, [message.evidence, message.sources]);
 
   useEffect(() => {
     if (!isEditing) setEditContent(message.content);
@@ -102,6 +116,17 @@ function ChatMessageImpl({
     if (!message.message_id || !onRegenerate || !conversationId) return;
     await onRegenerate(message.message_id);
   };
+
+  const handleCitationClick = useCallback((citationId: string) => {
+    setActiveCitationId(citationId);
+    setIsEvidenceOpen(true);
+    window.setTimeout(() => {
+      evidenceRefs.current[citationId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 0);
+  }, []);
 
   return (
     <div
@@ -164,7 +189,12 @@ function ChatMessageImpl({
             </div>
           ) : (
             <>
-              <FormattedMessage content={message.content} />
+              <FormattedMessage
+                content={message.content}
+                citationIds={isUser ? [] : citationIds}
+                activeCitationId={activeCitationId}
+                onCitationClick={isUser ? undefined : handleCitationClick}
+              />
               {isGenerating &&
                 !isUser &&
                 message.content.trim().length === 0 && (
@@ -215,7 +245,11 @@ function ChatMessageImpl({
               {message.sources.slice(0, 10).map((source) => (
                 <li
                   key={`${source.chunk_id || source.document_id || source.file_id || source.evidence_id || source.document_title || source.score}`}
-                  className="rounded border border-gray-200 px-2 py-1 dark:border-gray-700"
+                  className={`rounded border px-2 py-1 transition-colors ${
+                    source.evidence_id && source.evidence_id === activeCitationId
+                      ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     {source.evidence_id && (
@@ -247,13 +281,24 @@ function ChatMessageImpl({
         )}
 
         {!isUser && message.evidence && message.evidence.length > 0 && (
-          <details className="mt-2 w-full text-xs text-gray-600 dark:text-gray-300">
+          <details
+            className="mt-2 w-full text-xs text-gray-600 dark:text-gray-300"
+            open={isEvidenceOpen}
+            onToggle={(event) => setIsEvidenceOpen(event.currentTarget.open)}
+          >
             <summary className="cursor-pointer font-semibold">检索证据</summary>
             <ul className="mt-1 space-y-1">
               {message.evidence.slice(0, 8).map((item) => (
                 <li
                   key={item.id}
-                  className="rounded border border-gray-200 px-2 py-1 dark:border-gray-700"
+                  ref={(node) => {
+                    evidenceRefs.current[item.id] = node;
+                  }}
+                  className={`rounded border px-2 py-1 transition-colors ${
+                    item.id === activeCitationId
+                      ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/30"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className="shrink-0 rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-gray-100 dark:text-gray-900">

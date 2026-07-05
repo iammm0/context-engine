@@ -1,11 +1,13 @@
 "use client";
 
-import React from "react";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 interface FormattedMessageProps {
   content: string;
   className?: string;
+  citationIds?: string[];
+  activeCitationId?: string | null;
+  onCitationClick?: (citationId: string) => void;
 }
 
 /**
@@ -43,7 +45,7 @@ function htmlToMarkdown(html: string): string {
       .replace(/<body[\s\S]*?>/gi, "")
       .replace(/<\/body>/gi, "")
       .replace(/<h([1-6])>([\s\S]*?)<\/h\1>/gi, (_, level, text) => {
-        return `${"#".repeat(parseInt(level))} ${text.trim()}\n\n`;
+        return `${"#".repeat(parseInt(level, 10))} ${text.trim()}\n\n`;
       })
       .replace(/<p>([\s\S]*?)<\/p>/gi, "$1\n\n")
       .replace(/<div[\s\S]*?>/gi, "\n")
@@ -67,7 +69,9 @@ function htmlToMarkdown(html: string): string {
     
     // 移除script和style标签
     const scripts = doc.querySelectorAll("script, style");
-    scripts.forEach((el) => el.remove());
+    scripts.forEach((el) => {
+      el.remove();
+    });
     
     // 提取body内容
     const body = doc.body || doc.documentElement;
@@ -79,7 +83,7 @@ function htmlToMarkdown(html: string): string {
     // 尝试保留一些结构
     const headings = body.querySelectorAll("h1, h2, h3, h4, h5, h6");
     headings.forEach((heading) => {
-      const level = parseInt(heading.tagName.charAt(1));
+      const level = parseInt(heading.tagName.charAt(1), 10);
       const text = heading.textContent || "";
       markdown = markdown.replace(text, `${"#".repeat(level)} ${text}\n\n`);
     });
@@ -105,6 +109,9 @@ function htmlToMarkdown(html: string): string {
 export default function FormattedMessage({
   content,
   className = "",
+  citationIds = [],
+  activeCitationId,
+  onCitationClick,
 }: FormattedMessageProps) {
   // 处理空内容
   if (!content || typeof content !== "string") {
@@ -248,7 +255,12 @@ export default function FormattedMessage({
           }
         }
       `}</style>
-      <MarkdownRenderer content={finalContent} />
+      <MarkdownRenderer
+        content={finalContent}
+        citationIds={citationIds}
+        activeCitationId={activeCitationId}
+        onCitationClick={onCitationClick}
+      />
     </div>
   );
 }

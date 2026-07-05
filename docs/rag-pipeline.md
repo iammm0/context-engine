@@ -67,7 +67,9 @@ For table and OCR chunks, preview responses include a compact `artifact`:
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to
-trace back to source chunks.
+trace back to source chunks. In the chat UI, inline citations such as `[S1]`
+are rendered as citation chips when matching evidence is available; selecting a
+chip opens the evidence list and highlights the corresponding source chunk.
 
 ## EvidenceItem
 

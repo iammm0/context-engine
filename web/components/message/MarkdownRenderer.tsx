@@ -11,6 +11,9 @@ import CodeBlockRenderer from "./CodeBlockRenderer";
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  citationIds?: string[];
+  activeCitationId?: string | null;
+  onCitationClick?: (citationId: string) => void;
 }
 
 /**
@@ -18,7 +21,70 @@ interface MarkdownRendererProps {
  * 职责：处理纯文本 Markdown 渲染
  * 使用 react-markdown 进行基础渲染，公式和代码块委托给专门组件
  */
-export default function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
+export default function MarkdownRenderer({
+  content,
+  className = "",
+  citationIds = [],
+  activeCitationId,
+  onCitationClick,
+}: MarkdownRendererProps) {
+  const knownCitationIds = React.useMemo(() => new Set(citationIds), [citationIds]);
+  const citationEnabled = citationIds.length > 0;
+
+  const renderTextWithCitations = React.useCallback(
+    (children: React.ReactNode): React.ReactNode => {
+      if (!citationEnabled) return children;
+      return React.Children.map(children, (child) => {
+        if (typeof child === "string") {
+          const parts: React.ReactNode[] = [];
+          const pattern = /\[(S\d+)\]/g;
+          let lastIndex = 0;
+          let match = pattern.exec(child);
+          while (match !== null) {
+            const citationId = match[1];
+            const start = match.index;
+            if (start > lastIndex) parts.push(child.slice(lastIndex, start));
+
+            const isKnown = knownCitationIds.has(citationId);
+            const isActive = activeCitationId === citationId;
+            parts.push(
+              <button
+                key={`${citationId}-${start}`}
+                type="button"
+                disabled={!isKnown || !onCitationClick}
+                onClick={() => onCitationClick?.(citationId)}
+                className={`mx-0.5 inline-flex align-baseline rounded px-1.5 py-0.5 text-[11px] font-semibold no-underline transition-colors ${
+                  isActive
+                    ? "bg-amber-200 text-amber-950 ring-1 ring-amber-500 dark:bg-amber-300 dark:text-amber-950"
+                    : isKnown
+                      ? "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
+                      : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                }`}
+                aria-label={isKnown ? `查看证据 ${citationId}` : `未匹配证据 ${citationId}`}
+              >
+                [{citationId}]
+              </button>,
+            );
+            lastIndex = start + match[0].length;
+            match = pattern.exec(child);
+          }
+
+          if (lastIndex < child.length) parts.push(child.slice(lastIndex));
+          return parts.length > 0 ? parts : child;
+        }
+
+        if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.props.children !== undefined) {
+          return React.cloneElement(child, {
+            children: renderTextWithCitations(child.props.children),
+          });
+        }
+
+        return child;
+      });
+    },
+    [activeCitationId, citationEnabled, knownCitationIds, onCitationClick],
+  );
+
   // 辅助函数：检查内容是否包含数学公式
   const containsMathFormula = (content: any): boolean => {
     if (typeof content === 'string') {
@@ -140,7 +206,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
 
       return (
         <p className="mb-3 leading-relaxed text-gray-900 dark:text-gray-100">
-          {children}
+          {renderTextWithCitations(children)}
         </p>
       );
     },
@@ -149,22 +215,22 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
     h1({ children }: any) {
       return (
         <h1 className="text-xl sm:text-2xl font-bold mt-4 sm:mt-6 mb-3 sm:mb-4 pb-2 border-b-2 border-blue-400 dark:border-blue-500 text-gray-800 dark:text-gray-200">
-          {children}
+          {renderTextWithCitations(children)}
         </h1>
       );
     },
     h2({ children }: any) {
       return (
         <h2 className="text-lg sm:text-xl font-bold mt-4 sm:mt-5 mb-2 sm:mb-3 pb-2 border-b border-blue-300 dark:border-blue-600 text-gray-800 dark:text-gray-200">
-          {children}
+          {renderTextWithCitations(children)}
         </h2>
       );
     },
     h3({ children }: any) {
-      return <h3 className="text-base sm:text-lg font-semibold mt-3 sm:mt-4 mb-2 text-gray-800 dark:text-gray-200">{children}</h3>;
+      return <h3 className="text-base sm:text-lg font-semibold mt-3 sm:mt-4 mb-2 text-gray-800 dark:text-gray-200">{renderTextWithCitations(children)}</h3>;
     },
     h4({ children }: any) {
-      return <h4 className="text-sm sm:text-base font-semibold mt-2 sm:mt-3 mb-1.5 sm:mb-2 text-gray-700 dark:text-gray-300">{children}</h4>;
+      return <h4 className="text-sm sm:text-base font-semibold mt-2 sm:mt-3 mb-1.5 sm:mb-2 text-gray-700 dark:text-gray-300">{renderTextWithCitations(children)}</h4>;
     },
 
     // 列表样式
@@ -194,7 +260,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
       }
       return (
         <li className="ml-2 leading-relaxed text-gray-900 dark:text-gray-100">
-          {children}
+          {renderTextWithCitations(children)}
         </li>
       );
     },
@@ -212,7 +278,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
       }
       return (
         <blockquote className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 my-2 italic text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 py-2 rounded-r">
-          {children}
+          {renderTextWithCitations(children)}
         </blockquote>
       );
     },
@@ -242,7 +308,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
       }
       return (
         <th className="border border-gray-300 dark:border-gray-600 px-2 sm:px-4 py-1.5 sm:py-2 text-left font-semibold bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-200 text-xs sm:text-sm">
-          {children}
+          {renderTextWithCitations(children)}
         </th>
       );
     },
@@ -258,7 +324,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
       }
       return (
         <td className="border border-gray-300 dark:border-gray-600 px-2 sm:px-4 py-1.5 sm:py-2 text-gray-900 dark:text-gray-200 text-xs sm:text-sm">
-          {children}
+          {renderTextWithCitations(children)}
         </td>
       );
     },
@@ -284,10 +350,10 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
 
     // 强调样式
     strong({ children }: any) {
-      return <strong className="font-semibold text-gray-900 dark:text-gray-100">{children}</strong>;
+      return <strong className="font-semibold text-gray-900 dark:text-gray-100">{renderTextWithCitations(children)}</strong>;
     },
     em({ children }: any) {
-      return <em className="italic text-gray-700 dark:text-gray-300">{children}</em>;
+      return <em className="italic text-gray-700 dark:text-gray-300">{renderTextWithCitations(children)}</em>;
     },
   };
 
