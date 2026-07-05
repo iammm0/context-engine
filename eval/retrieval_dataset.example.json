@@ -4,7 +4,8 @@
     "query": "报告中对行业景气度的主要结论是什么？",
     "gold": {
       "document_id": "demo_doc_001",
-      "chunk_indices": [12, 13, 14]
+      "chunk_indices": [12, 13, 14],
+      "required_artifact_types": ["table"]
     }
   },
   {
@@ -12,7 +13,8 @@
     "query": "报告对风险提示有哪些条款？请列举要点。",
     "gold": {
       "document_id": "demo_doc_001",
-      "chunk_indices": [80, 81]
+      "chunk_indices": [80, 81],
+      "required_artifact_types": ["image_ocr"]
     }
   }
 ]
