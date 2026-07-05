@@ -83,6 +83,7 @@ class ImageOCR:
             text_parts = []
             boxes = []
             confidences = []
+            lines = []
             
             for line in result[0]:
                 if len(line) >= 2:
@@ -96,6 +97,11 @@ class ImageOCR:
                         text_parts.append(text_content)
                         boxes.append(box_info)
                         confidences.append(confidence)
+                        lines.append({
+                            "text": text_content,
+                            "confidence": confidence,
+                            "box": box_info,
+                        })
             
             # 合并文本
             full_text = "\n".join(text_parts)
@@ -109,7 +115,8 @@ class ImageOCR:
                 "text": full_text,
                 "confidence": avg_confidence,
                 "boxes": boxes,
-                "line_count": len(text_parts)
+                "line_count": len(text_parts),
+                "lines": lines,
             }
         
         except Exception as e:
@@ -187,9 +194,15 @@ class ImageOCR:
                         if ocr_result.get("text"):
                             all_images.append({
                                 "page": page_num + 1,
-                                "image_index": img_index,
+                                "image_index": img_index + 1,
+                                "xref": xref,
+                                "extension": image_ext,
+                                "width": base_image.get("width"),
+                                "height": base_image.get("height"),
                                 "text": ocr_result.get("text", ""),
-                                "confidence": ocr_result.get("confidence", 0.0)
+                                "confidence": ocr_result.get("confidence", 0.0),
+                                "line_count": ocr_result.get("line_count", 0),
+                                "lines": ocr_result.get("lines", []),
                             })
                             all_text.append(ocr_result.get("text", ""))
                     

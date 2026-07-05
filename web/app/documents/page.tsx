@@ -7,7 +7,7 @@ import Layout from "@/components/ui/Layout";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, type Document, type DocumentChunkPreview, type ParseQualitySummary } from "@/lib/api";
+import { apiClient, type Document, type DocumentChunkPreview, type OcrImageRef, type ParseQualitySummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -45,6 +45,26 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
     bits.push(`OCR ${quality.ocr_text_length}字`);
   }
   return bits.join(" · ");
+}
+
+function formatOcrConfidence(value?: number | null) {
+  if (typeof value !== "number") return "";
+  const percent = value <= 1 ? value * 100 : value;
+  return `置信度 ${Math.round(percent)}%`;
+}
+
+function formatOcrImageRef(image: OcrImageRef, index: number) {
+  const bits = [];
+  if (typeof image.page === "number") bits.push(`第 ${image.page} 页`);
+  if (typeof image.image_index === "number") bits.push(`图片 ${image.image_index}`);
+  const confidence = formatOcrConfidence(image.confidence);
+  if (confidence) bits.push(confidence);
+  if (typeof image.line_count === "number") bits.push(`${image.line_count} 行`);
+  if (typeof image.width === "number" && typeof image.height === "number") {
+    bits.push(`${image.width}x${image.height}`);
+  }
+  if (typeof image.text_length === "number") bits.push(`${image.text_length} 字`);
+  return bits.join(" · ") || `图片 ${index + 1}`;
 }
 
 function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
@@ -93,9 +113,22 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
   }
 
   if (artifact.type === "image_ocr" || artifact.type === "ocr") {
+    const images = artifact.images || [];
     return (
       <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-        {artifact.text || chunk.preview}
+        <div className="whitespace-pre-wrap break-words">{artifact.text || chunk.preview}</div>
+        {images.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {images.map((image, index) => (
+              <span
+                key={`${image.page ?? "page"}-${image.image_index ?? "image"}-${index}`}
+                className="rounded border border-amber-200 bg-white/70 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/50 dark:text-amber-100"
+              >
+                {formatOcrImageRef(image, index)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

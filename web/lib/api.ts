@@ -108,6 +108,17 @@ export type ChunkPreviewArtifact = {
   column_count?: number | null;
   text?: string;
   image_count?: number | null;
+  images?: OcrImageRef[];
+};
+
+export type OcrImageRef = {
+  page?: number | null;
+  image_index?: number | null;
+  confidence?: number | null;
+  line_count?: number | null;
+  text_length?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 export type DocumentChunksResponse = {

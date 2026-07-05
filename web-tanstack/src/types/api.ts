@@ -135,6 +135,17 @@ export interface ChunkPreviewArtifact {
   column_count?: number | null
   text?: string
   image_count?: number | null
+  images?: OcrImageRef[]
+}
+
+export interface OcrImageRef {
+  page?: number | null
+  image_index?: number | null
+  confidence?: number | null
+  line_count?: number | null
+  text_length?: number | null
+  width?: number | null
+  height?: number | null
 }
 
 export interface DocumentChunksResponse {

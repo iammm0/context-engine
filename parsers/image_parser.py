@@ -49,6 +49,18 @@ class ImageParser(BaseParser):
             "extraction_method": "image_ocr",
             "confidence": ocr_result.get("confidence", 0.0),
             "line_count": ocr_result.get("line_count", 0),
+            "image_ocr": {
+                "image_count": 1 if text else 0,
+                "ocr_text_length": len(text),
+                "images": [
+                    {
+                        "image_index": 1,
+                        "confidence": ocr_result.get("confidence", 0.0),
+                        "line_count": ocr_result.get("line_count", 0),
+                        "text_length": len(text),
+                    }
+                ] if text else [],
+            },
         }
         if ocr_result.get("error"):
             metadata["error"] = ocr_result["error"]

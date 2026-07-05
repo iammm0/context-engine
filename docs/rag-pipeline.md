@@ -61,8 +61,9 @@ For table and OCR chunks, preview responses include a compact `artifact`:
 
 - Table artifacts expose `headers`, `rows`, `row_count`, `column_count`, and a
   Markdown fallback.
-- OCR artifacts expose the normalized OCR text preview and image count when it
-  is known.
+- OCR artifacts expose the normalized OCR text preview, image count, and image
+  source refs when known. Each source ref can include `page`, `image_index`,
+  `confidence`, `line_count`, `text_length`, `width`, and `height`.
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to

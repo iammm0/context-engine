@@ -76,6 +76,46 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert "text" not in preview
 
 
+def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
+    chunk_text = "[图片文字]\n[图片文字 page=3 image=2]\n图中包含召回率 0.92"
+    image_ocr = {
+        "image_count": 1,
+        "ocr_text_length": len(chunk_text),
+        "images": [
+            {
+                "page": 3,
+                "image_index": 2,
+                "confidence": 0.88,
+                "line_count": 4,
+                "text_length": 13,
+                "width": 640,
+                "height": 320,
+            }
+        ],
+    }
+    chunks = [{"text": chunk_text, "metadata": {"image_ocr": image_ocr}}]
+
+    enriched = enrich_chunks_for_visualization(chunks, chunk_text, {"image_ocr": image_ocr})
+
+    meta = enriched[0]["metadata"]
+    artifact = meta["artifact"]
+    assert meta["content_type"] == "image_ocr"
+    assert meta["page"] == 3
+    assert meta["page_start"] == 3
+    assert meta["page_end"] == 3
+    assert artifact["type"] == "image_ocr"
+    assert artifact["text"] == "图中包含召回率 0.92"
+    assert "[图片文字" not in artifact["text"]
+    assert artifact["image_count"] == 1
+    assert len(artifact["images"]) == 1
+    assert artifact["images"][0]["page"] == 3
+    assert artifact["images"][0]["image_index"] == 2
+    assert artifact["images"][0]["confidence"] == 0.88
+    assert artifact["images"][0]["line_count"] == 4
+    assert artifact["images"][0]["width"] == 640
+    assert artifact["images"][0]["height"] == 320
+
+
 def test_build_parse_quality_summary_scores_and_warns_on_low_coverage_ocr_gap():
     summary = build_parse_quality_summary(
         {

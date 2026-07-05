@@ -140,11 +140,33 @@ class PDFParser(BaseParser):
                     try:
                         from utils.image_ocr import image_ocr
                         ocr_result = image_ocr.extract_text_from_pdf_images(file_path)
-                        if ocr_result.get("total_text"):
-                            image_ocr_text = ocr_result["total_text"]
+                        ocr_images = ocr_result.get("images") or []
+                        if ocr_images:
+                            image_ocr_parts = []
+                            for image in ocr_images:
+                                page_no = image.get("page")
+                                image_index = image.get("image_index")
+                                image_text = image.get("text", "")
+                                if image_text:
+                                    image_ocr_parts.append(
+                                        f"[图片文字 page={page_no} image={image_index}]\n{image_text}"
+                                    )
+                            image_ocr_text = "\n\n".join(image_ocr_parts)
                             metadata["image_ocr"] = {
                                 "image_count": ocr_result.get("image_count", 0),
-                                "ocr_text_length": len(image_ocr_text)
+                                "ocr_text_length": len(image_ocr_text),
+                                "images": [
+                                    {
+                                        "page": image.get("page"),
+                                        "image_index": image.get("image_index"),
+                                        "confidence": image.get("confidence", 0.0),
+                                        "line_count": image.get("line_count", 0),
+                                        "text_length": len(image.get("text", "") or ""),
+                                        "width": image.get("width"),
+                                        "height": image.get("height"),
+                                    }
+                                    for image in ocr_images
+                                ],
                             }
                     except Exception as e:
                         logger.warning(f"PDF图片OCR失败: {e}")

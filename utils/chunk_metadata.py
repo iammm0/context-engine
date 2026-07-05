@@ -22,6 +22,7 @@ _HEADING_PATTERNS = [
 _HEAVY_METADATA_KEYS = {"pages", "tables", "formulas", "code_blocks"}
 _MARKDOWN_TABLE_LINE_RE = re.compile(r"^\s*\|(.+)\|\s*$")
 _MARKDOWN_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+_OCR_MARKER_RE = re.compile(r"\[图片文字(?:\s+page=(?P<page>\d+))?(?:\s+image=(?P<image>\d+))?\]")
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -211,7 +212,12 @@ def _infer_features(text: str, metadata: Dict[str, Any]) -> Dict[str, bool]:
     has_table = content_type == "table" or "[表格]" in text or bool(_TABLE_RE.search(text))
     has_formula = content_type == "formula" or bool(_FORMULA_RE.search(text))
     has_code = content_type == "code" or bool(_CODE_RE.search(text))
-    has_image_ocr = content_type in {"image_ocr", "ocr"} or "[图片文字]" in text
+    has_image_ocr = (
+        content_type in {"image_ocr", "ocr"}
+        or "[图片文字" in text
+        or metadata.get("extraction_method") == "image_ocr"
+        or bool(metadata.get("image_ocr"))
+    )
     return {
         "has_table": has_table,
         "has_formula": has_formula,
@@ -240,6 +246,65 @@ def _infer_content_type(text: str, metadata: Dict[str, Any]) -> str:
 def _compact_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Remove repeated heavy document-level payloads from per-chunk metadata."""
     return {key: value for key, value in metadata.items() if key not in _HEAVY_METADATA_KEYS}
+
+
+def _strip_ocr_markers(text: str) -> str:
+    return _OCR_MARKER_RE.sub("", text or "").strip()
+
+
+def _ocr_image_lookup(metadata: Dict[str, Any]) -> Dict[Tuple[Optional[int], Optional[int]], Dict[str, Any]]:
+    image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
+    images = image_ocr.get("images") if isinstance(image_ocr.get("images"), list) else []
+    lookup: Dict[Tuple[Optional[int], Optional[int]], Dict[str, Any]] = {}
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        page = _safe_int(image.get("page"))
+        image_index = _safe_int(image.get("image_index"))
+        lookup[(page, image_index)] = image
+    return lookup
+
+
+def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+    lookup = _ocr_image_lookup(metadata)
+    refs: List[Dict[str, Any]] = []
+    for match in _OCR_MARKER_RE.finditer(text or ""):
+        page = _safe_int(match.group("page"))
+        image_index = _safe_int(match.group("image"))
+        image_meta = lookup.get((page, image_index), {})
+        if page is None and image_index is None and not image_meta:
+            continue
+        refs.append(
+            {
+                "page": page,
+                "image_index": image_index,
+                "confidence": image_meta.get("confidence"),
+                "line_count": image_meta.get("line_count"),
+                "text_length": image_meta.get("text_length"),
+                "width": image_meta.get("width"),
+                "height": image_meta.get("height"),
+            }
+        )
+
+    if refs:
+        return refs
+
+    image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
+    images = image_ocr.get("images") if isinstance(image_ocr.get("images"), list) else []
+    for image in images[:3]:
+        if isinstance(image, dict):
+            refs.append(
+                {
+                    "page": _safe_int(image.get("page")),
+                    "image_index": _safe_int(image.get("image_index")),
+                    "confidence": image.get("confidence"),
+                    "line_count": image.get("line_count"),
+                    "text_length": image.get("text_length"),
+                    "width": image.get("width"),
+                    "height": image.get("height"),
+                }
+            )
+    return refs
 
 
 def _extract_markdown_table(text: str, max_rows: int = 12, max_cols: int = 8) -> Optional[Dict[str, Any]]:
@@ -288,10 +353,14 @@ def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]
         }
 
     if normalized_type in {"image_ocr", "ocr"}:
+        image_refs = _extract_ocr_refs(text, metadata)
+        image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
+        image_count = (metadata.get("parse_summary") or {}).get("image_count") or image_ocr.get("image_count")
         return {
             "type": "image_ocr",
-            "text": _clean_preview(text, max_chars=800),
-            "image_count": (metadata.get("parse_summary") or {}).get("image_count"),
+            "text": _clean_preview(_strip_ocr_markers(text), max_chars=800),
+            "image_count": image_count,
+            "images": image_refs,
         }
 
     if normalized_type == "formula":
@@ -334,7 +403,16 @@ def enrich_chunks_for_visualization(
         features = _infer_features(text, {**meta, "content_type": content_type})
         preview = _clean_preview(text)
 
-        artifact = _build_chunk_artifact(text, content_type, meta)
+        artifact = _build_chunk_artifact(text, content_type, original_meta)
+        if (page_start is None or page_end is None) and artifact and artifact.get("type") == "image_ocr":
+            ocr_pages = [
+                _safe_int(image.get("page"))
+                for image in artifact.get("images", [])
+                if isinstance(image, dict) and _safe_int(image.get("page")) is not None
+            ]
+            if ocr_pages:
+                page_start = min(ocr_pages)
+                page_end = max(ocr_pages)
         visual = {
             "preview": preview,
             "char_start": start,
