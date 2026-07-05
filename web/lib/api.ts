@@ -2,7 +2,7 @@
  * 浏览器端 API 客户端：请求经 Next rewrites 转发到 FastAPI（/api/* → 后端）。
  */
 
-import type { CitationQuality, EvidenceItem, EvidenceQuality, SourceInfo } from "@/types/chat";
+import type { CitationQuality, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, SourceInfo } from "@/types/chat";
 
 export type ApiResult<T> = { data?: T; error?: string };
 
@@ -96,6 +96,7 @@ export type DocumentChunkPreview = {
   token_count?: number | null;
   features?: Record<string, boolean>;
   artifact?: ChunkPreviewArtifact | null;
+  artifact_quality?: EvidenceArtifactQuality | null;
   chunker_type?: string | null;
   parse_summary?: ParseQualitySummary | Record<string, unknown>;
 };

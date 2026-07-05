@@ -110,6 +110,11 @@ For table and OCR chunks, preview responses include a compact `artifact`:
   `low_confidence`, `width`, `height`, and parser source `target` for embedded
   Word images.
 
+Structured chunk previews also include `artifact_quality` when the chunk is a
+table, OCR, formula, or code chunk. The document chunk inspector renders these
+per-chunk warnings beside the affected preview, such as missing table structure,
+missing table source refs, missing OCR image refs, or low-confidence OCR refs.
+
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to
 trace back to source chunks. In the chat UI, inline citations such as `[S1]`

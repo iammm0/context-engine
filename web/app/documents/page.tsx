@@ -194,6 +194,12 @@ function formatTableSourceRef(source: TableSourceRef, index: number) {
   return bits.join(" · ") || `表格来源 ${index + 1}`;
 }
 
+function formatChunkArtifactQualityWarnings(chunk: DocumentChunkPreview) {
+  const quality = chunk.artifact_quality;
+  if (!quality || quality.status !== "warn" || !quality.warnings?.length) return "";
+  return quality.warnings.join(" · ");
+}
+
 function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
   const artifact = chunk.artifact;
   if (!artifact) return null;
@@ -1114,6 +1120,11 @@ export default function DocumentsPage() {
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
                         {chunk.preview}
                       </div>
+                      {formatChunkArtifactQualityWarnings(chunk) && (
+                        <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+                          {formatChunkArtifactQualityWarnings(chunk)}
+                        </div>
+                      )}
                       <ChunkArtifactPreview chunk={chunk} />
                     </div>
                   );

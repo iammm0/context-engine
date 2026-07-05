@@ -122,6 +122,8 @@ def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
     assert artifact["sources"][0]["source"] == "sheet1"
     assert artifact["sources"][0]["row_count"] == 2
     assert artifact["sources"][0]["column_count"] == 2
+    assert enriched[0]["metadata"]["artifact_quality"]["status"] == "pass"
+    assert enriched[0]["metadata"]["visual"]["artifact_quality"]["status"] == "pass"
 
 
 def test_build_chunk_preview_uses_visual_metadata_without_full_text():
@@ -148,6 +150,8 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert preview["features"]["has_image_ocr"] is True
     assert preview["artifact"]["type"] == "image_ocr"
     assert preview["artifact"]["text"] == "A long chunk body"
+    assert preview["artifact_quality"]["status"] == "warn"
+    assert preview["artifact_quality"]["ocr_missing_source"] is True
     assert "text" not in preview
 
 

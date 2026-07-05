@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.evidence_quality import build_evidence_item_artifact_diagnostics
+
 
 _WS_RE = re.compile(r"\s+")
 _TABLE_RE = re.compile(r"^\s*\|.+\|\s*$", re.MULTILINE)
@@ -958,6 +960,13 @@ def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]
     return None
 
 
+def _build_chunk_artifact_quality(content_type: str, artifact: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    diagnostics = build_evidence_item_artifact_diagnostics(
+        {"metadata": {"content_type": content_type, "artifact": artifact}}
+    )
+    return diagnostics if diagnostics.get("structured") else None
+
+
 def enrich_chunks_for_visualization(
     chunks: List[Dict[str, Any]],
     document_text: str,
@@ -990,6 +999,7 @@ def enrich_chunks_for_visualization(
         preview = _clean_preview(text)
 
         artifact = _build_chunk_artifact(text, content_type, original_meta)
+        artifact_quality = _build_chunk_artifact_quality(content_type, artifact)
         if (page_start is None or page_end is None) and artifact and artifact.get("type") == "image_ocr":
             ocr_pages = [
                 _safe_int(image.get("page"))
@@ -1009,6 +1019,7 @@ def enrich_chunks_for_visualization(
             "section_path": section_path,
             "features": features,
             "artifact": artifact,
+            "artifact_quality": artifact_quality,
         }
 
         meta.update(
@@ -1024,6 +1035,7 @@ def enrich_chunks_for_visualization(
                 "preview": preview,
                 "features": features,
                 "artifact": artifact,
+                "artifact_quality": artifact_quality,
                 "visual": visual,
                 "parse_summary": parse_summary,
             }
@@ -1051,6 +1063,11 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         section_path = []
     content_type = metadata.get("content_type") or visual.get("content_type") or "text"
     artifact = metadata.get("artifact") or visual.get("artifact") or _build_chunk_artifact(text, str(content_type), metadata)
+    artifact_quality = (
+        metadata.get("artifact_quality")
+        or visual.get("artifact_quality")
+        or _build_chunk_artifact_quality(str(content_type), artifact)
+    )
 
     item = {
         "id": str(chunk.get("_id") or chunk.get("id") or ""),
@@ -1067,6 +1084,7 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         "token_count": metadata.get("token_count"),
         "features": metadata.get("features") or visual.get("features") or {},
         "artifact": artifact,
+        "artifact_quality": artifact_quality,
         "chunker_type": metadata.get("chunker_type"),
         "parse_summary": metadata.get("parse_summary") or {},
     }

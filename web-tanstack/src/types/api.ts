@@ -123,6 +123,7 @@ export interface DocumentChunkPreview {
   token_count?: number | null
   features?: Record<string, boolean>
   artifact?: ChunkPreviewArtifact | null
+  artifact_quality?: EvidenceArtifactQuality | null
   chunker_type?: string | null
   parse_summary?: ParseQualitySummary | Record<string, unknown>
 }
@@ -137,6 +138,22 @@ export interface ChunkPreviewArtifact {
   text?: string
   image_count?: number | null
   images?: OcrImageRef[]
+}
+
+export interface EvidenceArtifactQuality {
+  status: "not_structured" | "pass" | "warn" | string
+  risk_level: "low" | "medium" | "high" | string
+  structured: boolean
+  content_type: string
+  artifact_type: string
+  has_artifact: boolean
+  table_missing_structure: boolean
+  table_missing_source: boolean
+  ocr_missing_source: boolean
+  ocr_low_confidence_source_count: number
+  ocr_avg_confidence?: number | null
+  warnings?: string[]
+  recommendations?: string[]
 }
 
 export interface OcrImageRef {
