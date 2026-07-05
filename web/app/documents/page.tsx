@@ -185,6 +185,8 @@ export default function DocumentsPage() {
   const [chunkPreviewTotal, setChunkPreviewTotal] = useState(0);
   const [chunkPreviewAllTotal, setChunkPreviewAllTotal] = useState(0);
   const [chunkPreviewFilter, setChunkPreviewFilter] = useState("all");
+  const [chunkPreviewQuery, setChunkPreviewQuery] = useState("");
+  const [chunkPreviewAppliedQuery, setChunkPreviewAppliedQuery] = useState("");
   const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
   const [chunkPreviewError, setChunkPreviewError] = useState("");
   const [chunkPanelQuality, setChunkPanelQuality] = useState<ParseQualitySummary | null>(null);
@@ -300,7 +302,7 @@ export default function DocumentsPage() {
     await loadDocuments(selectedKnowledgeSpaceId, page);
   };
 
-  const loadChunkPreview = async (doc: Document, filter: string) => {
+  const loadChunkPreview = async (doc: Document, filter: string, query: string) => {
     setChunkPanelDoc(doc);
     setChunkPreview([]);
     setChunkPreviewTotal(0);
@@ -313,6 +315,7 @@ export default function DocumentsPage() {
         limit: 80,
         includeText: false,
         contentType: filter,
+        query,
       });
       if (result.error) throw new Error(result.error);
       setChunkPreview(result.data?.chunks || []);
@@ -332,13 +335,29 @@ export default function DocumentsPage() {
 
   const handleViewChunks = async (doc: Document) => {
     setChunkPreviewFilter("all");
-    await loadChunkPreview(doc, "all");
+    setChunkPreviewQuery("");
+    setChunkPreviewAppliedQuery("");
+    await loadChunkPreview(doc, "all", "");
   };
 
   const handleChunkFilterChange = async (filter: string) => {
     if (!chunkPanelDoc || filter === chunkPreviewFilter) return;
     setChunkPreviewFilter(filter);
-    await loadChunkPreview(chunkPanelDoc, filter);
+    await loadChunkPreview(chunkPanelDoc, filter, chunkPreviewAppliedQuery);
+  };
+
+  const handleChunkSearch = async () => {
+    if (!chunkPanelDoc) return;
+    const nextQuery = chunkPreviewQuery.trim();
+    setChunkPreviewAppliedQuery(nextQuery);
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, nextQuery);
+  };
+
+  const handleClearChunkSearch = async () => {
+    if (!chunkPanelDoc) return;
+    setChunkPreviewQuery("");
+    setChunkPreviewAppliedQuery("");
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, "");
   };
 
   const handleCreateSpace = async () => {
@@ -609,6 +628,8 @@ export default function DocumentsPage() {
                   setChunkPreviewTotal(0);
                   setChunkPreviewAllTotal(0);
                   setChunkPreviewFilter("all");
+                  setChunkPreviewQuery("");
+                  setChunkPreviewAppliedQuery("");
                   setChunkPreviewError("");
                   setChunkPanelQuality(null);
                 }}
@@ -668,6 +689,46 @@ export default function DocumentsPage() {
                       {chunkPanelQuality.warnings.join("；")}
                     </div>
                   )}
+                </div>
+              )}
+
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={chunkPreviewQuery}
+                  onChange={(event) => setChunkPreviewQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      handleChunkSearch().catch(() => {});
+                    }
+                  }}
+                  placeholder="搜索 chunk 内容、章节、表格或 OCR 文本"
+                  className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={chunkPreviewLoading}
+                    onClick={() => handleChunkSearch().catch(() => {})}
+                    className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    搜索
+                  </button>
+                  {chunkPreviewAppliedQuery && (
+                    <button
+                      type="button"
+                      disabled={chunkPreviewLoading}
+                      onClick={() => handleClearChunkSearch().catch(() => {})}
+                      className="rounded bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-60 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      清空
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {chunkPreviewAppliedQuery && (
+                <div className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                  关键词：{chunkPreviewAppliedQuery}
                 </div>
               )}
 

@@ -134,6 +134,7 @@ export type DocumentChunksResponse = {
   filters?: {
     content_type?: string | null;
     feature?: string | null;
+    q?: string | null;
   };
 };
 
@@ -331,7 +332,7 @@ const apiClientImpl = {
 
   async getDocumentChunks(
     docId: string,
-    options?: { skip?: number; limit?: number; includeText?: boolean; contentType?: string; feature?: string },
+    options?: { skip?: number; limit?: number; includeText?: boolean; contentType?: string; feature?: string; query?: string },
   ): Promise<ApiResult<DocumentChunksResponse>> {
     const q = new URLSearchParams();
     q.set("skip", String(options?.skip ?? 0));
@@ -339,6 +340,7 @@ const apiClientImpl = {
     q.set("include_text", String(options?.includeText ?? true));
     if (options?.contentType && options.contentType !== "all") q.set("content_type", options.contentType);
     if (options?.feature && options.feature !== "all") q.set("feature", options.feature);
+    if (options?.query?.trim()) q.set("q", options.query.trim());
     return requestJson<DocumentChunksResponse>(
       `/api/documents/${encodeURIComponent(docId)}/chunks?${q.toString()}`,
     );

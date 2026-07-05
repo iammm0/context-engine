@@ -1248,6 +1248,7 @@ async def get_document_chunks(
     include_text: bool = Query(True),
     content_type: Optional[str] = Query(None),
     feature: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
 ):
     """获取文档分块预览，用于切块可视化和证据定位。"""
     logger.info(f"获取文档分块预览请求 - 文档ID: {doc_id}, skip: {skip}, limit: {limit}")
@@ -1269,6 +1270,7 @@ async def get_document_chunks(
             chunks,
             content_type=content_type,
             feature=feature,
+            query=q,
         )
         total = len(filtered_chunks)
         page = filtered_chunks[skip: skip + limit]
@@ -1290,6 +1292,7 @@ async def get_document_chunks(
             filters={
                 "content_type": content_type,
                 "feature": feature,
+                "q": q,
             },
         )
     except HTTPException:

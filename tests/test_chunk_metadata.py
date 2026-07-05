@@ -153,14 +153,25 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
 
 def test_filter_chunks_for_preview_by_content_type_and_feature():
     chunks = [
-        {"metadata": {"content_type": "text", "features": {}}},
-        {"metadata": {"content_type": "table", "features": {"has_table": True}}},
+        {"text": "intro", "metadata": {"content_type": "text", "features": {}, "section_path": ["Overview"]}},
+        {
+            "text": "metrics",
+            "metadata": {
+                "content_type": "table",
+                "features": {"has_table": True},
+                "artifact": {"headers": ["指标"], "rows": [["recall"]]},
+            },
+        },
         {"metadata": {"content_type": "image_ocr", "features": {"has_image_ocr": True}}},
     ]
 
     assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1]]
     assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2]]
     assert filter_chunks_for_preview(chunks, content_type="table", feature="has_image_ocr") == []
+    assert filter_chunks_for_preview(chunks, query="overview") == [chunks[0]]
+    assert filter_chunks_for_preview(chunks, query="recall") == [chunks[1]]
+    assert filter_chunks_for_preview(chunks, content_type="table", query="recall") == [chunks[1]]
+    assert filter_chunks_for_preview(chunks, content_type="image_ocr", query="recall") == []
     assert filter_chunks_for_preview(chunks, content_type="all") == chunks
 
 

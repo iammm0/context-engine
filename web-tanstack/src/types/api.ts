@@ -161,6 +161,7 @@ export interface DocumentChunksResponse {
   filters?: {
     content_type?: string | null
     feature?: string | null
+    q?: string | null
   }
 }
 

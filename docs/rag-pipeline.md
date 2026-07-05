@@ -55,6 +55,8 @@ Query parameters:
   `image_ocr`, `formula`, or `code`.
 - `feature`: optional feature filter, for example `has_table` or
   `has_image_ocr`.
+- `q`: optional keyword search across chunk text, preview, section path, and
+  compact artifact data such as table cells or OCR text.
 
 The response includes `total_chunks` for the current filtered result and
 `total_all_chunks` for the full document chunk count.

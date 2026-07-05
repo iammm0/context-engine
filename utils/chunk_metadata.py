@@ -521,12 +521,25 @@ def filter_chunks_for_preview(
     *,
     content_type: Optional[str] = None,
     feature: Optional[str] = None,
+    query: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Filter chunks before paginating the chunk preview API."""
     normalized_type = (content_type or "").strip().lower()
     normalized_feature = (feature or "").strip().lower()
+    normalized_query = (query or "").strip().lower()
     if normalized_feature and not normalized_feature.startswith("has_"):
         normalized_feature = f"has_{normalized_feature}"
+
+    def flatten(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (str, int, float, bool)):
+            return str(value)
+        if isinstance(value, list):
+            return " ".join(flatten(item) for item in value)
+        if isinstance(value, dict):
+            return " ".join(flatten(item) for item in value.values())
+        return str(value)
 
     def matches(chunk: Dict[str, Any]) -> bool:
         metadata = chunk.get("metadata") or {}
@@ -537,6 +550,17 @@ def filter_chunks_for_preview(
         if normalized_feature and normalized_feature != "all":
             features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
             if features.get(normalized_feature) is not True:
+                return False
+        if normalized_query:
+            search_text = " ".join(
+                [
+                    str(chunk.get("text") or ""),
+                    str(metadata.get("preview") or ""),
+                    flatten(metadata.get("section_path")),
+                    flatten(metadata.get("artifact")),
+                ]
+            ).lower()
+            if normalized_query not in search_text:
                 return False
         return True
 
