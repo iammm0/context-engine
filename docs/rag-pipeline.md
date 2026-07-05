@@ -33,6 +33,9 @@ enriched with compact metadata for preview, citation, and debugging:
 - `parse_summary`: compact document-level parse quality counters, including
   parser type, extraction method, page count, extracted page count, table count,
   formula count, OCR image count, and OCR text length.
+- `parse_quality`: the document-level quality summary stored on
+  `documents.metadata`, including `quality_score`, `page_coverage`, warning
+  messages, and chunk `content_type_counts`.
 
 Heavy parser fields such as `pages`, `tables`, `formulas`, and `code_blocks`
 remain on the document metadata when available, but are removed from repeated
@@ -50,7 +53,9 @@ Query parameters:
 - `include_text`: default `true`; set to `false` for a lightweight preview.
 
 The Next.js document page uses this endpoint to show chunk type, page/section
-location, feature flags, token count, and preview text.
+location, feature flags, token count, parse quality, and preview text. The
+document list also shows a compact parse quality line for completed documents
+when `metadata.parse_quality` is available.
 
 ## EvidenceItem
 

@@ -70,6 +70,67 @@ def summarize_parse_metadata(metadata: Dict[str, Any], document_text: str = "") 
     }
 
 
+def build_parse_quality_summary(
+    metadata: Dict[str, Any],
+    document_text: str = "",
+    chunks: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Build a document-level parse quality summary for UI and diagnostics."""
+    summary = summarize_parse_metadata(metadata, document_text)
+    chunks = chunks or []
+
+    content_type_counts: Dict[str, int] = {}
+    for chunk in chunks:
+        chunk_meta = chunk.get("metadata") or {}
+        content_type = str(chunk_meta.get("content_type") or "text")
+        content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
+
+    page_count = summary.get("page_count") or 0
+    extracted_pages = summary.get("extracted_pages")
+    if extracted_pages is None and page_count and len(document_text or "") > 0:
+        extracted_pages = page_count
+
+    page_coverage = None
+    if page_count and extracted_pages is not None:
+        page_coverage = max(0.0, min(1.0, float(extracted_pages) / max(float(page_count), 1.0)))
+
+    warnings: List[str] = []
+    score = 100
+
+    text_length = int(summary.get("text_length") or 0)
+    if text_length == 0:
+        score -= 60
+        warnings.append("未提取到正文文本")
+    elif text_length < 200:
+        score -= 15
+        warnings.append("正文文本较短，可能存在解析不完整")
+
+    if page_coverage is not None and page_coverage < 0.9:
+        penalty = int((1.0 - page_coverage) * 35)
+        score -= max(5, penalty)
+        warnings.append(f"页面文本覆盖率偏低：{page_coverage:.0%}")
+
+    image_count = int(summary.get("image_count") or 0)
+    ocr_text_length = int(summary.get("ocr_text_length") or 0)
+    if image_count > 0 and ocr_text_length == 0:
+        score -= 10
+        warnings.append("检测到图片但未产生 OCR 文本")
+
+    if chunks and not content_type_counts:
+        score -= 10
+        warnings.append("未识别到有效切块类型")
+
+    score = max(0, min(100, score))
+    return {
+        **summary,
+        "chunk_count": len(chunks),
+        "content_type_counts": content_type_counts,
+        "page_coverage": page_coverage,
+        "quality_score": score,
+        "warnings": warnings,
+    }
+
+
 def _build_page_spans(metadata: Dict[str, Any]) -> List[Tuple[int, int, int]]:
     pages = metadata.get("pages")
     if not isinstance(pages, list):
@@ -189,7 +250,7 @@ def enrich_chunks_for_visualization(
     """Attach compact, visualizable source metadata to chunker output."""
     parse_metadata = parse_metadata or {}
     page_spans = _build_page_spans(parse_metadata)
-    parse_summary = summarize_parse_metadata(parse_metadata, document_text)
+    parse_summary = build_parse_quality_summary(parse_metadata, document_text)
     enriched: List[Dict[str, Any]] = []
     cursor = 0
 

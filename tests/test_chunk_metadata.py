@@ -5,7 +5,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from utils.chunk_metadata import build_chunk_preview, enrich_chunks_for_visualization
+from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, enrich_chunks_for_visualization
 
 
 def test_enrich_chunks_adds_visual_metadata_and_compacts_heavy_fields():
@@ -69,3 +69,26 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert preview["page_end"] == 3
     assert preview["features"]["has_image_ocr"] is True
     assert "text" not in preview
+
+
+def test_build_parse_quality_summary_scores_and_warns_on_low_coverage_ocr_gap():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "legacy",
+            "extraction_method": "text_extraction",
+            "page_count": 10,
+            "extracted_pages": 5,
+            "image_ocr": {"image_count": 2, "ocr_text_length": 0},
+            "tables": [],
+            "formulas": [],
+        },
+        "short text",
+        [{"metadata": {"content_type": "text"}}, {"metadata": {"content_type": "table"}}],
+    )
+
+    assert summary["page_coverage"] == 0.5
+    assert summary["quality_score"] < 100
+    assert summary["chunk_count"] == 2
+    assert summary["content_type_counts"] == {"text": 1, "table": 1}
+    assert any("页面文本覆盖率偏低" in warning for warning in summary["warnings"])
+    assert any("未产生 OCR 文本" in warning for warning in summary["warnings"])

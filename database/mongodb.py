@@ -594,6 +594,34 @@ class DocumentRepository:
         except Exception as e:
             logger.error(f"更新文档标题异常 - 文档ID: {doc_id}, 标题: {title}, 错误: {e}", exc_info=True)
             raise
+
+    def update_document_metadata(self, doc_id: str, metadata_patch: Dict[str, Any]):
+        """合并更新文档元数据。"""
+        from bson import ObjectId
+        from utils.logger import logger
+        try:
+            if isinstance(doc_id, str):
+                doc_id = ObjectId(doc_id)
+
+            set_fields = {
+                f"metadata.{key}": value
+                for key, value in (metadata_patch or {}).items()
+            }
+            if not set_fields:
+                return
+            set_fields["updated_at"] = beijing_now()
+
+            result = self.collection.update_one(
+                {"_id": doc_id},
+                {"$set": set_fields},
+            )
+            if result.modified_count == 0:
+                logger.warning(f"更新文档元数据失败 - 文档ID: {doc_id}, 未找到文档或无需更新")
+            else:
+                logger.info(f"✓ 文档元数据已更新 - 文档ID: {doc_id}, 字段: {list(metadata_patch.keys())}")
+        except Exception as e:
+            logger.error(f"更新文档元数据异常 - 文档ID: {doc_id}, 错误: {e}", exc_info=True)
+            raise
     
     def delete_document(self, doc_id: str) -> bool:
         """

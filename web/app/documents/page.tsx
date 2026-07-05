@@ -7,7 +7,7 @@ import Layout from "@/components/ui/Layout";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, type Document, type DocumentChunkPreview } from "@/lib/api";
+import { apiClient, type Document, type DocumentChunkPreview, type ParseQualitySummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -30,6 +30,23 @@ function formatChunkLocation(chunk: DocumentChunkPreview) {
   return [pages, section].filter(Boolean).join(" · ") || "未定位";
 }
 
+function formatPercent(value?: number | null) {
+  if (typeof value !== "number") return "-";
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatParseQualityLine(quality?: ParseQualitySummary | null) {
+  if (!quality) return "";
+  const bits = [];
+  if (typeof quality.quality_score === "number") bits.push(`质量 ${quality.quality_score}/100`);
+  if (typeof quality.table_count === "number") bits.push(`表格 ${quality.table_count}`);
+  if (typeof quality.image_count === "number") bits.push(`图片 ${quality.image_count}`);
+  if (typeof quality.ocr_text_length === "number" && quality.ocr_text_length > 0) {
+    bits.push(`OCR ${quality.ocr_text_length}字`);
+  }
+  return bits.join(" · ");
+}
+
 export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -50,6 +67,7 @@ export default function DocumentsPage() {
   const [chunkPreviewTotal, setChunkPreviewTotal] = useState(0);
   const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
   const [chunkPreviewError, setChunkPreviewError] = useState("");
+  const [chunkPanelQuality, setChunkPanelQuality] = useState<ParseQualitySummary | null>(null);
 
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -162,6 +180,7 @@ export default function DocumentsPage() {
     setChunkPreview([]);
     setChunkPreviewTotal(0);
     setChunkPreviewError("");
+    setChunkPanelQuality(doc.parse_quality || null);
     setChunkPreviewLoading(true);
     try {
       const result = await apiClient.getDocumentChunks(doc.id, {
@@ -171,6 +190,11 @@ export default function DocumentsPage() {
       if (result.error) throw new Error(result.error);
       setChunkPreview(result.data?.chunks || []);
       setChunkPreviewTotal(result.data?.total_chunks || 0);
+      setChunkPanelQuality(
+        result.data?.parse_quality ||
+          doc.parse_quality ||
+          ((result.data?.chunks?.[0]?.parse_summary as ParseQualitySummary | undefined) ?? null),
+      );
     } catch (e) {
       setChunkPreviewError((e as Error).message || "加载切块失败");
     } finally {
@@ -366,6 +390,11 @@ export default function DocumentsPage() {
                       {typeof d.progress_percentage === "number" ? `（${d.progress_percentage}%）` : ""}
                       {d.current_stage ? ` · ${d.current_stage}` : ""}
                     </div>
+                    {d.parse_quality && (
+                      <div className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                        {formatParseQualityLine(d.parse_quality)}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -439,6 +468,7 @@ export default function DocumentsPage() {
                   setChunkPanelDoc(null);
                   setChunkPreview([]);
                   setChunkPreviewError("");
+                  setChunkPanelQuality(null);
                 }}
               >
                 关闭
@@ -446,6 +476,59 @@ export default function DocumentsPage() {
             </div>
 
             <div className="h-[calc(100%-73px)] overflow-y-auto p-5">
+              {chunkPanelQuality && (
+                <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+                  <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400">解析质量</div>
+                      <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {typeof chunkPanelQuality.quality_score === "number" ? `${chunkPanelQuality.quality_score}` : "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400">页面覆盖</div>
+                      <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {formatPercent(chunkPanelQuality.page_coverage)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400">表格 / 公式</div>
+                      <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {chunkPanelQuality.table_count ?? 0} / {chunkPanelQuality.formula_count ?? 0}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400">图片 / OCR</div>
+                      <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {chunkPanelQuality.image_count ?? 0} / {chunkPanelQuality.ocr_text_length ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    {chunkPanelQuality.parser_type && (
+                      <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        {chunkPanelQuality.parser_type}
+                      </span>
+                    )}
+                    {chunkPanelQuality.extraction_method && (
+                      <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        {chunkPanelQuality.extraction_method}
+                      </span>
+                    )}
+                    {Object.entries(chunkPanelQuality.content_type_counts || {}).map(([type, count]) => (
+                      <span key={type} className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        {contentTypeLabel[type] || type} {count}
+                      </span>
+                    ))}
+                  </div>
+                  {chunkPanelQuality.warnings && chunkPanelQuality.warnings.length > 0 && (
+                    <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                      {chunkPanelQuality.warnings.join("；")}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {chunkPreviewLoading && (
                 <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
                   加载中...

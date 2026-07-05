@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 from utils.logger import logger
-from utils.chunk_metadata import build_chunk_preview, enrich_chunks_for_visualization
+from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, enrich_chunks_for_visualization
 
 router = APIRouter()
 
@@ -414,6 +414,16 @@ def process_document_background(
             metadata,
             document_id=doc_id,
         )
+        parse_quality = build_parse_quality_summary(metadata, text, chunks)
+        for chunk in chunks:
+            chunk_meta = chunk.get("metadata") or {}
+            chunk_meta = chunk_meta.copy()
+            chunk_meta["parse_summary"] = parse_quality
+            chunk["metadata"] = chunk_meta
+        try:
+            doc_repo.update_document_metadata(doc_id, {"parse_quality": parse_quality})
+        except Exception as e:
+            logger.warning(f"更新文档解析质量摘要失败 - 文档ID: {doc_id}, 错误: {e}")
         
         logger.info(f"文档分块完成 - 文档ID: {doc_id}, 块数量: {len(chunks)}")
         
@@ -1004,6 +1014,7 @@ class DocumentInfo(BaseModel):
     progress_percentage: Optional[int] = None
     current_stage: Optional[str] = None
     stage_details: Optional[str] = None
+    parse_quality: Optional[Dict[str, Any]] = None
 
 
 class DocumentProgressResponse(BaseModel):
@@ -1057,7 +1068,8 @@ async def list_documents(
                     status=doc.get("status", "unknown"),
                     progress_percentage=doc.get("progress_percentage"),
                     current_stage=doc.get("current_stage"),
-                    stage_details=doc.get("stage_details")
+                    stage_details=doc.get("stage_details"),
+                    parse_quality=(doc.get("metadata") or {}).get("parse_quality")
                 )
                 document_list.append(document_info)
             except Exception as e:
@@ -1143,6 +1155,7 @@ class DocumentChunksResponse(BaseModel):
     total_chunks: int
     skip: int
     limit: int
+    parse_quality: Optional[Dict[str, Any]] = None
 
 
 @router.post("/{doc_id}/retry")
@@ -1270,6 +1283,9 @@ async def get_document_chunks(
         total = len(chunks)
         page = chunks[skip: skip + limit]
         previews = [build_chunk_preview(chunk, include_text=include_text) for chunk in page]
+        parse_quality = (doc.get("metadata") or {}).get("parse_quality")
+        if not parse_quality and chunks:
+            parse_quality = ((chunks[0].get("metadata") or {}).get("parse_summary") or None)
 
         return DocumentChunksResponse(
             document_id=doc["_id"],
@@ -1279,6 +1295,7 @@ async def get_document_chunks(
             total_chunks=total,
             skip=skip,
             limit=limit,
+            parse_quality=parse_quality,
         )
     except HTTPException:
         raise

@@ -47,6 +47,7 @@ export type Document = {
   progress_percentage?: number | null;
   current_stage?: string | null;
   stage_details?: string | null;
+  parse_quality?: ParseQualitySummary | null;
 };
 
 export type Model = {
@@ -94,7 +95,7 @@ export type DocumentChunkPreview = {
   token_count?: number | null;
   features?: Record<string, boolean>;
   chunker_type?: string | null;
-  parse_summary?: Record<string, unknown>;
+  parse_summary?: ParseQualitySummary | Record<string, unknown>;
 };
 
 export type DocumentChunksResponse = {
@@ -105,6 +106,24 @@ export type DocumentChunksResponse = {
   total_chunks: number;
   skip: number;
   limit: number;
+  parse_quality?: ParseQualitySummary | null;
+};
+
+export type ParseQualitySummary = {
+  parser_type?: string | null;
+  extraction_method?: string | null;
+  page_count?: number | null;
+  extracted_pages?: number | null;
+  table_count?: number;
+  formula_count?: number;
+  image_count?: number;
+  ocr_text_length?: number;
+  text_length?: number;
+  chunk_count?: number;
+  content_type_counts?: Record<string, number>;
+  page_coverage?: number | null;
+  quality_score?: number;
+  warnings?: string[];
 };
 
 export type ConversationMessage = {
