@@ -154,9 +154,14 @@ export interface DocumentChunksResponse {
   status: string
   chunks: DocumentChunkPreview[]
   total_chunks: number
+  total_all_chunks?: number | null
   skip: number
   limit: number
   parse_quality?: ParseQualitySummary | null
+  filters?: {
+    content_type?: string | null
+    feature?: string | null
+  }
 }
 
 export interface ParseQualitySummary {

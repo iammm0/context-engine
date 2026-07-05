@@ -514,3 +514,30 @@ def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]
         "parse_summary": meta.get("parse_summary") or {},
         "file_type": meta.get("file_type"),
     }
+
+
+def filter_chunks_for_preview(
+    chunks: List[Dict[str, Any]],
+    *,
+    content_type: Optional[str] = None,
+    feature: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Filter chunks before paginating the chunk preview API."""
+    normalized_type = (content_type or "").strip().lower()
+    normalized_feature = (feature or "").strip().lower()
+    if normalized_feature and not normalized_feature.startswith("has_"):
+        normalized_feature = f"has_{normalized_feature}"
+
+    def matches(chunk: Dict[str, Any]) -> bool:
+        metadata = chunk.get("metadata") or {}
+        if normalized_type and normalized_type != "all":
+            chunk_type = str(metadata.get("content_type") or "").strip().lower()
+            if chunk_type != normalized_type:
+                return False
+        if normalized_feature and normalized_feature != "all":
+            features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+            if features.get(normalized_feature) is not True:
+                return False
+        return True
+
+    return [chunk for chunk in chunks if matches(chunk)]

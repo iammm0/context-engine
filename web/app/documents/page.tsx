@@ -19,6 +19,35 @@ const contentTypeLabel: Record<string, string> = {
   code: "代码",
 };
 
+type ChunkFilterOption = {
+  value: string;
+  label: string;
+  count?: number;
+};
+
+function getChunkFilterOptions(quality?: ParseQualitySummary | null): ChunkFilterOption[] {
+  const counts = quality?.content_type_counts || {};
+  const orderedTypes = ["text", "table", "image_ocr", "ocr", "formula", "code"];
+  const options: ChunkFilterOption[] = [{ value: "all", label: "全部" }];
+  const seen = new Set<string>();
+
+  for (const type of orderedTypes) {
+    const count = counts[type];
+    if (typeof count === "number" && count > 0) {
+      options.push({ value: type, label: contentTypeLabel[type] || type, count });
+      seen.add(type);
+    }
+  }
+
+  for (const [type, count] of Object.entries(counts)) {
+    if (!seen.has(type) && typeof count === "number" && count > 0) {
+      options.push({ value: type, label: contentTypeLabel[type] || type, count });
+    }
+  }
+
+  return options;
+}
+
 function formatChunkLocation(chunk: DocumentChunkPreview) {
   const pages =
     chunk.page_start && chunk.page_end && chunk.page_start !== chunk.page_end
@@ -154,6 +183,8 @@ export default function DocumentsPage() {
   const [chunkPanelDoc, setChunkPanelDoc] = useState<Document | null>(null);
   const [chunkPreview, setChunkPreview] = useState<DocumentChunkPreview[]>([]);
   const [chunkPreviewTotal, setChunkPreviewTotal] = useState(0);
+  const [chunkPreviewAllTotal, setChunkPreviewAllTotal] = useState(0);
+  const [chunkPreviewFilter, setChunkPreviewFilter] = useState("all");
   const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
   const [chunkPreviewError, setChunkPreviewError] = useState("");
   const [chunkPanelQuality, setChunkPanelQuality] = useState<ParseQualitySummary | null>(null);
@@ -194,6 +225,11 @@ export default function DocumentsPage() {
   const hasProcessingDocs = useMemo(
     () => documents.some((d) => d.status && ["uploading", "processing", "parsing", "chunking", "embedding"].includes(d.status)),
     [documents]
+  );
+
+  const chunkFilterOptions = useMemo(
+    () => getChunkFilterOptions(chunkPanelQuality),
+    [chunkPanelQuality],
   );
 
   useEffect(() => {
@@ -264,10 +300,11 @@ export default function DocumentsPage() {
     await loadDocuments(selectedKnowledgeSpaceId, page);
   };
 
-  const handleViewChunks = async (doc: Document) => {
+  const loadChunkPreview = async (doc: Document, filter: string) => {
     setChunkPanelDoc(doc);
     setChunkPreview([]);
     setChunkPreviewTotal(0);
+    setChunkPreviewAllTotal(0);
     setChunkPreviewError("");
     setChunkPanelQuality(doc.parse_quality || null);
     setChunkPreviewLoading(true);
@@ -275,10 +312,12 @@ export default function DocumentsPage() {
       const result = await apiClient.getDocumentChunks(doc.id, {
         limit: 80,
         includeText: false,
+        contentType: filter,
       });
       if (result.error) throw new Error(result.error);
       setChunkPreview(result.data?.chunks || []);
       setChunkPreviewTotal(result.data?.total_chunks || 0);
+      setChunkPreviewAllTotal(result.data?.total_all_chunks ?? result.data?.total_chunks ?? 0);
       setChunkPanelQuality(
         result.data?.parse_quality ||
           doc.parse_quality ||
@@ -289,6 +328,17 @@ export default function DocumentsPage() {
     } finally {
       setChunkPreviewLoading(false);
     }
+  };
+
+  const handleViewChunks = async (doc: Document) => {
+    setChunkPreviewFilter("all");
+    await loadChunkPreview(doc, "all");
+  };
+
+  const handleChunkFilterChange = async (filter: string) => {
+    if (!chunkPanelDoc || filter === chunkPreviewFilter) return;
+    setChunkPreviewFilter(filter);
+    await loadChunkPreview(chunkPanelDoc, filter);
   };
 
   const handleCreateSpace = async () => {
@@ -547,7 +597,7 @@ export default function DocumentsPage() {
               <div className="min-w-0">
                 <div className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{chunkPanelDoc.title}</div>
                 <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {chunkPanelDoc.file_type} · {chunkPreviewTotal} 个 chunk
+                  {chunkPanelDoc.file_type} · {chunkPreviewTotal} / {chunkPreviewAllTotal || chunkPreviewTotal} 个 chunk
                 </div>
               </div>
               <button
@@ -556,6 +606,9 @@ export default function DocumentsPage() {
                 onClick={() => {
                   setChunkPanelDoc(null);
                   setChunkPreview([]);
+                  setChunkPreviewTotal(0);
+                  setChunkPreviewAllTotal(0);
+                  setChunkPreviewFilter("all");
                   setChunkPreviewError("");
                   setChunkPanelQuality(null);
                 }}
@@ -617,6 +670,29 @@ export default function DocumentsPage() {
                   )}
                 </div>
               )}
+
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                {chunkFilterOptions.map((option) => {
+                  const active = option.value === chunkPreviewFilter;
+                  const count = option.value === "all" ? chunkPreviewAllTotal || chunkPreviewTotal : option.count;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={chunkPreviewLoading}
+                      onClick={() => handleChunkFilterChange(option.value)}
+                      className={`rounded border px-2.5 py-1.5 transition-colors disabled:opacity-60 ${
+                        active
+                          ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900"
+                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      {option.label}
+                      {typeof count === "number" && count > 0 ? ` ${count}` : ""}
+                    </button>
+                  );
+                })}
+              </div>
 
               {chunkPreviewLoading && (
                 <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">

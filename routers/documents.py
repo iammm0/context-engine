@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 from utils.logger import logger
-from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization
+from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization, filter_chunks_for_preview
 
 router = APIRouter()
 
@@ -1133,9 +1133,11 @@ class DocumentChunksResponse(BaseModel):
     status: str
     chunks: List[Dict[str, Any]]
     total_chunks: int
+    total_all_chunks: Optional[int] = None
     skip: int
     limit: int
     parse_quality: Optional[Dict[str, Any]] = None
+    filters: Optional[Dict[str, Any]] = None
 
 
 @router.post("/{doc_id}/retry")
@@ -1244,6 +1246,8 @@ async def get_document_chunks(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     include_text: bool = Query(True),
+    content_type: Optional[str] = Query(None),
+    feature: Optional[str] = Query(None),
 ):
     """获取文档分块预览，用于切块可视化和证据定位。"""
     logger.info(f"获取文档分块预览请求 - 文档ID: {doc_id}, skip: {skip}, limit: {limit}")
@@ -1260,8 +1264,14 @@ async def get_document_chunks(
             )
 
         chunks = chunk_repo.get_chunks_by_document(doc_id)
-        total = len(chunks)
-        page = chunks[skip: skip + limit]
+        total_all = len(chunks)
+        filtered_chunks = filter_chunks_for_preview(
+            chunks,
+            content_type=content_type,
+            feature=feature,
+        )
+        total = len(filtered_chunks)
+        page = filtered_chunks[skip: skip + limit]
         previews = [build_chunk_preview(chunk, include_text=include_text) for chunk in page]
         parse_quality = (doc.get("metadata") or {}).get("parse_quality")
         if not parse_quality and chunks:
@@ -1273,9 +1283,14 @@ async def get_document_chunks(
             status=doc.get("status", "unknown"),
             chunks=previews,
             total_chunks=total,
+            total_all_chunks=total_all,
             skip=skip,
             limit=limit,
             parse_quality=parse_quality,
+            filters={
+                "content_type": content_type,
+                "feature": feature,
+            },
         )
     except HTTPException:
         raise

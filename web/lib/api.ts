@@ -127,9 +127,14 @@ export type DocumentChunksResponse = {
   status: string;
   chunks: DocumentChunkPreview[];
   total_chunks: number;
+  total_all_chunks?: number | null;
   skip: number;
   limit: number;
   parse_quality?: ParseQualitySummary | null;
+  filters?: {
+    content_type?: string | null;
+    feature?: string | null;
+  };
 };
 
 export type ParseQualitySummary = {
@@ -326,12 +331,14 @@ const apiClientImpl = {
 
   async getDocumentChunks(
     docId: string,
-    options?: { skip?: number; limit?: number; includeText?: boolean },
+    options?: { skip?: number; limit?: number; includeText?: boolean; contentType?: string; feature?: string },
   ): Promise<ApiResult<DocumentChunksResponse>> {
     const q = new URLSearchParams();
     q.set("skip", String(options?.skip ?? 0));
     q.set("limit", String(options?.limit ?? 100));
     q.set("include_text", String(options?.includeText ?? true));
+    if (options?.contentType && options.contentType !== "all") q.set("content_type", options.contentType);
+    if (options?.feature && options.feature !== "all") q.set("feature", options.feature);
     return requestJson<DocumentChunksResponse>(
       `/api/documents/${encodeURIComponent(docId)}/chunks?${q.toString()}`,
     );

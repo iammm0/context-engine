@@ -51,6 +51,13 @@ Query parameters:
 - `skip`: default `0`.
 - `limit`: default `100`, maximum `500`.
 - `include_text`: default `true`; set to `false` for a lightweight preview.
+- `content_type`: optional chunk type filter, for example `table`,
+  `image_ocr`, `formula`, or `code`.
+- `feature`: optional feature filter, for example `has_table` or
+  `has_image_ocr`.
+
+The response includes `total_chunks` for the current filtered result and
+`total_all_chunks` for the full document chunk count.
 
 The Next.js document page uses this endpoint to show chunk type, page/section
 location, feature flags, token count, parse quality, and preview text. The

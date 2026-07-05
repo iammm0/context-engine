@@ -10,6 +10,7 @@ from utils.chunk_metadata import (
     build_parse_quality_summary,
     build_retrieval_payload_metadata,
     enrich_chunks_for_visualization,
+    filter_chunks_for_preview,
 )
 
 
@@ -148,6 +149,19 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
     assert payload["artifact"]["rows"] == [["recall", "0.9"]]
     assert "pages" not in payload
     assert "tables" not in payload
+
+
+def test_filter_chunks_for_preview_by_content_type_and_feature():
+    chunks = [
+        {"metadata": {"content_type": "text", "features": {}}},
+        {"metadata": {"content_type": "table", "features": {"has_table": True}}},
+        {"metadata": {"content_type": "image_ocr", "features": {"has_image_ocr": True}}},
+    ]
+
+    assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1]]
+    assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2]]
+    assert filter_chunks_for_preview(chunks, content_type="table", feature="has_image_ocr") == []
+    assert filter_chunks_for_preview(chunks, content_type="all") == chunks
 
 
 def test_build_parse_quality_summary_scores_and_warns_on_low_coverage_ocr_gap():
