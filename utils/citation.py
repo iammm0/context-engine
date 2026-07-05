@@ -46,6 +46,31 @@ def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
     return ", ".join(bits)
 
 
+def _format_table_source_ref(source: Dict[str, Any]) -> str:
+    bits: List[str] = []
+    page = source.get("page")
+    page_end = source.get("page_end")
+    if page is not None and page_end is not None and page_end != page:
+        bits.append(f"pages {page}-{page_end}")
+    elif page is not None:
+        bits.append(f"page {page}")
+    if source.get("table_index") is not None:
+        bits.append(f"table {source.get('table_index')}")
+    if source.get("caption"):
+        bits.append(f"caption {_compact_text(source.get('caption'), 120)}")
+    elif source.get("title"):
+        bits.append(f"title {_compact_text(source.get('title'), 120)}")
+    if source.get("type"):
+        bits.append(f"type {source.get('type')}")
+    if source.get("source"):
+        bits.append(str(source.get("source")))
+    if source.get("target"):
+        bits.append(str(source.get("target")))
+    if source.get("bbox"):
+        bits.append(f"bbox {_compact_text(source.get('bbox'), 120)}")
+    return ", ".join(bits)
+
+
 def _format_artifact_context(artifact: Any) -> str:
     if not isinstance(artifact, dict):
         return ""
@@ -65,6 +90,11 @@ def _format_artifact_context(artifact: Any) -> str:
         for row in rows[:3]:
             if isinstance(row, list):
                 row_samples.append(" | ".join(_compact_text(cell, 80) for cell in row[:8]))
+        sources = artifact.get("sources") if isinstance(artifact.get("sources"), list) else []
+        source_refs = [_format_table_source_ref(source) for source in sources[:3] if isinstance(source, dict)]
+        source_refs = [item for item in source_refs if item]
+        if source_refs:
+            parts.append(f"table sources: {'; '.join(source_refs)}")
         if row_samples:
             parts.append(f"样例行: {'; '.join(row_samples)}")
         elif artifact.get("markdown"):

@@ -96,7 +96,10 @@ For table and OCR chunks, preview responses include a compact `artifact`:
   Markdown fallback. When the chunk text is not a Markdown table, the artifact
   builder falls back to parser metadata such as `metadata.tables[].markdown`,
   `metadata.tables[].data`, or semantic headers so the visual table structure is
-  still preserved.
+  still preserved. Table artifacts can also include compact `sources` refs with
+  `table_index`, `page`/`page_end`, `caption`, `type`, `source`/`target`,
+  `bbox`, and table dimensions so table evidence remains traceable to its
+  parser origin.
 - OCR artifacts expose the normalized OCR text preview, image count, and image
   source refs when known. Each source ref can include `page`, `image_index`,
   `confidence`, `line_count`, `text_length`, `width`, `height`, and parser
@@ -120,8 +123,9 @@ When available, compact table/OCR/formula/code `artifact` data is carried in
 `metadata.artifact` so chat evidence cards can render the same source-specific
 preview as the document chunk inspector. The generation context also includes a
 short artifact summary before the raw chunk text: table evidence exposes column
-names and sample rows, OCR evidence exposes image source refs and confidence,
-and formula/code evidence exposes a compact content preview.
+names, sample rows, and table source refs; OCR evidence exposes image source
+refs and confidence; and formula/code evidence exposes a compact content
+preview.
 
 ## Compatibility
 

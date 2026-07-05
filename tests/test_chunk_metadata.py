@@ -57,24 +57,40 @@ def test_enrich_chunks_adds_visual_metadata_and_compacts_heavy_fields():
 
 def test_table_artifact_uses_metadata_when_chunk_text_is_not_markdown_table():
     table_markdown = "| 指标 | 数值 |\n| --- | --- |\n| precision | 0.8 |\n| recall | 0.9 |"
+    table_meta = {
+        "markdown": table_markdown,
+        "page": 4,
+        "caption": "模型评估指标",
+        "type": "markdown",
+        "bbox": [10, 20, 300, 180],
+    }
     chunks = [
         {
             "text": "模型评估指标表",
             "metadata": {
                 "content_type": "table",
-                "tables": [{"markdown": table_markdown}],
+                "tables": [table_meta],
                 "token_count": 12,
             },
         }
     ]
 
-    enriched = enrich_chunks_for_visualization(chunks, "模型评估指标表", {"tables": [{"markdown": table_markdown}]})
+    enriched = enrich_chunks_for_visualization(chunks, "模型评估指标表", {"tables": [table_meta]})
 
     artifact = enriched[0]["metadata"]["artifact"]
     assert artifact["type"] == "table"
     assert artifact["headers"] == ["指标", "数值"]
     assert artifact["rows"] == [["precision", "0.8"], ["recall", "0.9"]]
     assert artifact["row_count"] == 2
+    assert artifact["sources"] == [
+        {
+            "table_index": 1,
+            "page": 4,
+            "type": "markdown",
+            "caption": "模型评估指标",
+            "bbox": [10, 20, 300, 180],
+        }
+    ]
 
 
 def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
@@ -83,7 +99,13 @@ def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
             "text": "Evaluation metrics",
             "metadata": {
                 "content_type": "table",
-                "tables": [{"data": [["metric", "value"], ["zero", 0], ["enabled", False]]}],
+                "tables": [
+                    {
+                        "data": [["metric", "value"], ["zero", 0], ["enabled", False]],
+                        "page_start": 2,
+                        "source": "sheet1",
+                    }
+                ],
             },
         }
     ]
@@ -96,6 +118,10 @@ def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
     assert artifact["rows"] == [["zero", "0"], ["enabled", "False"]]
     assert artifact["row_count"] == 2
     assert artifact["column_count"] == 2
+    assert artifact["sources"][0]["page"] == 2
+    assert artifact["sources"][0]["source"] == "sheet1"
+    assert artifact["sources"][0]["row_count"] == 2
+    assert artifact["sources"][0]["column_count"] == 2
 
 
 def test_build_chunk_preview_uses_visual_metadata_without_full_text():
@@ -208,6 +234,7 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
             "rows": [["recall", "0.9"]],
             "row_count": 1,
             "column_count": 2,
+            "sources": [{"table_index": 1, "page": 2, "caption": "指标表"}],
         },
         "pages": [{"page": 1, "text": "heavy"}],
         "tables": [{"markdown": "heavy"}],
@@ -220,6 +247,7 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
     assert payload["artifact"]["type"] == "table"
     assert payload["artifact"]["headers"] == ["指标", "数值"]
     assert payload["artifact"]["rows"] == [["recall", "0.9"]]
+    assert payload["artifact"]["sources"] == [{"table_index": 1, "page": 2, "caption": "指标表"}]
     assert "pages" not in payload
     assert "tables" not in payload
 

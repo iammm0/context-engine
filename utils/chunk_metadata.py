@@ -659,6 +659,110 @@ def _extract_markdown_table(text: str, max_rows: int = 12, max_cols: int = 8) ->
     }
 
 
+def _clean_source_value(value: Any, max_chars: int = 200) -> str:
+    return _clean_preview(str(value or ""), max_chars=max_chars)
+
+
+def _compact_bbox(value: Any) -> Optional[Any]:
+    if isinstance(value, dict):
+        compact = {
+            key: value.get(key)
+            for key in ("x0", "y0", "x1", "y1", "left", "top", "right", "bottom", "width", "height")
+            if value.get(key) is not None
+        }
+        return compact or None
+    if isinstance(value, (list, tuple)) and value:
+        return list(value[:8])
+    return None
+
+
+def _table_source_ref(table: Dict[str, Any], index: int) -> Dict[str, Any]:
+    semantic = table.get("semantic") if isinstance(table.get("semantic"), dict) else {}
+    semantic_row_count = _safe_int(semantic.get("row_count"))
+    table_index = _first_int(table.get("table_index"), table.get("index"), table.get("table_id"), table.get("id"))
+    ref: Dict[str, Any] = {
+        "table_index": table_index if table_index is not None else index + 1,
+    }
+    page = _first_int(table.get("page"), table.get("page_number"), table.get("page_no"), table.get("page_start"))
+    page_end = _first_int(table.get("page_end"))
+    if page is not None:
+        ref["page"] = page
+    if page_end is not None and page_end != page:
+        ref["page_end"] = page_end
+    table_type = _clean_source_value(table.get("type"), max_chars=80)
+    if table_type:
+        ref["type"] = table_type
+    for key in ("caption", "title", "name", "source", "target"):
+        value = _clean_source_value(table.get(key))
+        if value:
+            ref[key] = value
+    bbox = _compact_bbox(table.get("bbox") or table.get("bounding_box") or table.get("bounds"))
+    if bbox:
+        ref["bbox"] = bbox
+
+    row_count = _first_int(table.get("row_count"), semantic_row_count)
+    col_count = _first_int(table.get("column_count"), table.get("col_count"), semantic.get("col_count"))
+    data = table.get("data")
+    if row_count is None and isinstance(data, list) and data:
+        row_count = max(len(data) - 1, 0)
+    if col_count is None and isinstance(data, list) and data and isinstance(data[0], list):
+        col_count = len(data[0])
+    if row_count is not None:
+        ref["row_count"] = max(row_count - 1, 0) if semantic_row_count is not None and row_count == semantic_row_count else max(row_count, 0)
+    if col_count is not None:
+        ref["column_count"] = max(col_count, 0)
+    return ref
+
+
+def _normalize_table_match_text(value: Any) -> str:
+    return _WS_RE.sub(" ", str(value or "").strip()).lower()
+
+
+def _table_matches_text(table: Dict[str, Any], text: str) -> bool:
+    haystack = _normalize_table_match_text(text)
+    if not haystack:
+        return False
+    candidates = [table.get("markdown"), table.get("raw")]
+    data = table.get("data")
+    if isinstance(data, list):
+        flattened_rows = []
+        for row in data:
+            if isinstance(row, list):
+                flattened_rows.append(" | ".join(str("" if cell is None else cell) for cell in row))
+        if flattened_rows:
+            candidates.append(" ".join(flattened_rows))
+    for candidate in candidates:
+        normalized = _normalize_table_match_text(candidate)
+        if normalized and (normalized in haystack or haystack in normalized):
+            return True
+    return False
+
+
+def _table_sources_from_metadata(metadata: Dict[str, Any], *, text: str = "", max_sources: int = 3) -> List[Dict[str, Any]]:
+    tables = metadata.get("tables")
+    if not isinstance(tables, list):
+        return []
+    matches: List[Dict[str, Any]] = []
+    fallbacks: List[Dict[str, Any]] = []
+    for index, table in enumerate(tables):
+        if not isinstance(table, dict):
+            continue
+        ref = _table_source_ref(table, index)
+        fallbacks.append(ref)
+        if text and _table_matches_text(table, text):
+            matches.append(ref)
+    return (matches or fallbacks)[:max_sources]
+
+
+def _with_table_sources(artifact: Optional[Dict[str, Any]], sources: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not artifact:
+        return artifact
+    if sources:
+        artifact = dict(artifact)
+        artifact["sources"] = sources[:3]
+    return artifact
+
+
 def _table_data_to_artifact(data: Any, *, markdown: str = "", max_rows: int = 12, max_cols: int = 8) -> Optional[Dict[str, Any]]:
     if not isinstance(data, list) or not data:
         return None
@@ -685,31 +789,35 @@ def _table_from_metadata(metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     tables = metadata.get("tables")
     if not isinstance(tables, list):
         return None
-    for table in tables:
+    for index, table in enumerate(tables):
         if not isinstance(table, dict):
             continue
+        sources = [_table_source_ref(table, index)]
         markdown = str(table.get("markdown") or table.get("raw") or "").strip()
         if markdown:
             parsed = _extract_markdown_table(markdown)
             if parsed:
-                return parsed
+                return _with_table_sources(parsed, sources)
         parsed = _table_data_to_artifact(table.get("data"), markdown=markdown)
         if parsed:
-            return parsed
+            return _with_table_sources(parsed, sources)
         semantic = table.get("semantic")
         if isinstance(semantic, dict):
             headers = [str(item or "").strip() for item in semantic.get("headers") or []]
             if headers:
                 row_count = _safe_int(semantic.get("row_count")) or 0
                 col_count = _safe_int(semantic.get("col_count")) or len(headers)
-                return {
-                    "type": "table",
-                    "markdown": markdown,
-                    "headers": headers,
-                    "rows": [],
-                    "row_count": max(row_count - 1, 0),
-                    "column_count": col_count,
-                }
+                return _with_table_sources(
+                    {
+                        "type": "table",
+                        "markdown": markdown,
+                        "headers": headers,
+                        "rows": [],
+                        "row_count": max(row_count - 1, 0),
+                        "column_count": col_count,
+                    },
+                    sources,
+                )
     return None
 
 
@@ -719,11 +827,11 @@ def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]
     if normalized_type == "table" or bool(_TABLE_RE.search(text or "")):
         table = _extract_markdown_table(text)
         if table:
-            return table
+            return _with_table_sources(table, _table_sources_from_metadata(metadata, text=text))
         table = _table_from_metadata(metadata)
         if table:
             return table
-        return {
+        fallback = {
             "type": "table",
             "markdown": _clean_preview(text, max_chars=800),
             "headers": [],
@@ -731,6 +839,7 @@ def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]
             "row_count": None,
             "column_count": None,
         }
+        return _with_table_sources(fallback, _table_sources_from_metadata(metadata, text=text))
 
     if normalized_type in {"image_ocr", "ocr"}:
         image_refs = _extract_ocr_refs(text, metadata)

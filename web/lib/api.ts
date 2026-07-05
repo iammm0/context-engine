@@ -107,9 +107,24 @@ export type ChunkPreviewArtifact = {
   rows?: string[][];
   row_count?: number | null;
   column_count?: number | null;
+  sources?: TableSourceRef[];
   text?: string;
   image_count?: number | null;
   images?: OcrImageRef[];
+};
+
+export type TableSourceRef = {
+  table_index?: number | null;
+  page?: number | null;
+  page_end?: number | null;
+  type?: string | null;
+  caption?: string | null;
+  title?: string | null;
+  source?: string | null;
+  target?: string | null;
+  row_count?: number | null;
+  column_count?: number | null;
+  bbox?: unknown;
 };
 
 export type OcrImageRef = {

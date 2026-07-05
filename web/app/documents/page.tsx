@@ -7,7 +7,7 @@ import Layout from "@/components/ui/Layout";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary } from "@/lib/api";
+import { apiClient, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type TableSourceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -173,6 +173,25 @@ function formatOcrImageRef(image: OcrImageRef, index: number) {
   return bits.join(" · ") || `图片 ${index + 1}`;
 }
 
+function formatTableSourceRef(source: TableSourceRef, index: number) {
+  const bits = [];
+  if (typeof source.page === "number" && typeof source.page_end === "number" && source.page_end !== source.page) {
+    bits.push(`第 ${source.page}-${source.page_end} 页`);
+  } else if (typeof source.page === "number") {
+    bits.push(`第 ${source.page} 页`);
+  }
+  if (typeof source.table_index === "number") bits.push(`表格 ${source.table_index}`);
+  if (source.caption) bits.push(source.caption);
+  else if (source.title) bits.push(source.title);
+  if (source.type) bits.push(source.type);
+  if (typeof source.row_count === "number" && typeof source.column_count === "number") {
+    bits.push(`${source.row_count}x${source.column_count}`);
+  }
+  if (source.source) bits.push(source.source);
+  if (source.target) bits.push(source.target);
+  return bits.join(" · ") || `表格来源 ${index + 1}`;
+}
+
 function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
   const artifact = chunk.artifact;
   if (!artifact) return null;
@@ -180,42 +199,64 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
   if (artifact.type === "table") {
     const headers = artifact.headers || [];
     const rows = artifact.rows || [];
+    const sources = artifact.sources || [];
+    const sourceBadges =
+      sources.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {sources.map((source, index) => (
+            <span
+              key={`${source.page ?? "page"}-${source.table_index ?? "table"}-${index}`}
+              className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-800 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-100"
+            >
+              {formatTableSourceRef(source, index)}
+            </span>
+          ))}
+        </div>
+      ) : null;
     if (headers.length > 0 && rows.length > 0) {
       return (
-        <div className="mt-3 overflow-x-auto rounded border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-              <tr>
-                {headers.map((header) => (
-                  <th key={header || "empty-column"} className="whitespace-nowrap px-2 py-1.5 font-medium">
-                    {header || "未命名列"}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {rows.map((row) => (
-                <tr key={`${chunk.id}-row-${row.join("|")}`}>
-                  {headers.map((_, colIndex) => (
-                    <td key={`${chunk.id}-cell-${headers[colIndex] || row[colIndex] || "empty"}`} className="max-w-[220px] truncate px-2 py-1.5 text-gray-700 dark:text-gray-200">
-                      {row[colIndex] || ""}
-                    </td>
+        <div className="mt-3">
+          <div className="overflow-x-auto rounded border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                <tr>
+                  {headers.map((header) => (
+                    <th key={header || "empty-column"} className="whitespace-nowrap px-2 py-1.5 font-medium">
+                      {header || "未命名列"}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {rows.map((row) => (
+                  <tr key={`${chunk.id}-row-${row.join("|")}`}>
+                    {headers.map((_, colIndex) => (
+                      <td key={`${chunk.id}-cell-${headers[colIndex] || row[colIndex] || "empty"}`} className="max-w-[220px] truncate px-2 py-1.5 text-gray-700 dark:text-gray-200">
+                        {row[colIndex] || ""}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {sourceBadges}
         </div>
       );
     }
 
     if (artifact.markdown) {
       return (
-        <pre className="mt-3 overflow-x-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
-          {artifact.markdown}
-        </pre>
+        <div className="mt-3">
+          <pre className="overflow-x-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
+            {artifact.markdown}
+          </pre>
+          {sourceBadges}
+        </div>
       );
     }
+
+    return sourceBadges;
   }
 
   if (artifact.type === "image_ocr" || artifact.type === "ocr") {

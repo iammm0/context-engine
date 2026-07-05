@@ -31,6 +31,7 @@ def test_evidence_format_and_citation_validation():
                     "rows": [["recall", "0.9"]],
                     "row_count": 1,
                     "column_count": 2,
+                    "sources": [{"table_index": 2, "page": 1, "page_end": 2, "caption": "指标表", "type": "markdown"}],
                 },
             },
         ),
@@ -74,6 +75,7 @@ def test_evidence_format_and_citation_validation():
     assert "pages 1-2" in context
     assert "结构化证据: table" in context
     assert "列: 指标, 数值" in context
+    assert "table sources: pages 1-2, table 2, caption 指标表, type markdown" in context
     assert "样例行: recall | 0.9" in context
     assert "结构化证据: image_ocr" in context
     assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320, media/image2.png" in context
