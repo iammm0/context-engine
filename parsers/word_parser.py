@@ -17,6 +17,12 @@ except ImportError:
 
 def _build_word_image_ocr_metadata(images_info: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Build normalized OCR metadata for embedded Word images."""
+    def compact_ocr_text(value: Any, max_chars: int = 160) -> str:
+        text = re.sub(r"\s+", " ", str(value or "").strip())
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 1].rstrip() + "..."
+
     ocr_text_parts = [
         str(image.get("ocr_text") or "").strip()
         for image in images_info
@@ -32,6 +38,7 @@ def _build_word_image_ocr_metadata(images_info: List[Dict[str, Any]]) -> Dict[st
                 "confidence": image.get("confidence"),
                 "line_count": image.get("line_count"),
                 "text_length": len(str(image.get("ocr_text") or "")),
+                "text_preview": compact_ocr_text(image.get("ocr_text")),
                 "width": image.get("width"),
                 "height": image.get("height"),
             }

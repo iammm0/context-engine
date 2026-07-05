@@ -103,6 +103,8 @@ function formatOcrImageRef(image: OcrImageRef, index: number) {
     bits.push(`${image.width}x${image.height}`);
   }
   if (image.target) bits.push(image.target);
+  if (image.low_confidence) bits.push("低置信");
+  if (image.text_preview) bits.push(image.text_preview);
   return bits.join(" · ") || `图片 ${index + 1}`;
 }
 
@@ -202,7 +204,11 @@ function EvidenceArtifactPreview({ artifact }: { artifact?: EvidenceArtifact | n
             {images.map((image, index) => (
               <span
                 key={`${image.page ?? "page"}-${image.image_index ?? "image"}-${image.line_count ?? "lines"}-${image.text_length ?? "text"}`}
-                className="rounded border border-amber-200 bg-white/70 px-1.5 py-0.5 text-[10px] dark:border-amber-800/60 dark:bg-amber-950/50"
+                className={`inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[10px] sm:max-w-[260px] ${
+                  image.low_confidence
+                    ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100"
+                    : "border-amber-200 bg-white/70 dark:border-amber-800/60 dark:bg-amber-950/50"
+                }`}
               >
                 {formatOcrImageRef(image, index)}
               </span>

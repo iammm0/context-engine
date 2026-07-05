@@ -9,6 +9,13 @@ import re
 logger = logging.getLogger(__name__)
 
 
+def _compact_ocr_text(value: Any, max_chars: int = 160) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "..."
+
+
 class PDFParser(BaseParser):
     """PDF文档解析器（支持文本提取）"""
     
@@ -162,6 +169,7 @@ class PDFParser(BaseParser):
                                         "confidence": image.get("confidence", 0.0),
                                         "line_count": image.get("line_count", 0),
                                         "text_length": len(image.get("text", "") or ""),
+                                        "text_preview": _compact_ocr_text(image.get("text")),
                                         "width": image.get("width"),
                                         "height": image.get("height"),
                                     }

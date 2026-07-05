@@ -163,6 +163,7 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
                 "confidence": 0.88,
                 "line_count": 4,
                 "text_length": 13,
+                "text": "图中包含召回率 0.92\n更多说明",
                 "width": 640,
                 "height": 320,
             }
@@ -186,9 +187,38 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
     assert artifact["images"][0]["page"] == 3
     assert artifact["images"][0]["image_index"] == 2
     assert artifact["images"][0]["confidence"] == 0.88
+    assert artifact["images"][0]["low_confidence"] is False
     assert artifact["images"][0]["line_count"] == 4
+    assert artifact["images"][0]["text_preview"] == "图中包含召回率 0.92 更多说明"
     assert artifact["images"][0]["width"] == 640
     assert artifact["images"][0]["height"] == 320
+
+
+def test_ocr_artifact_marks_low_confidence_image_refs_without_markers():
+    chunk_text = "[图片文字]\n模糊图中可能包含召回率"
+    image_ocr = {
+        "image_count": 1,
+        "ocr_text_length": len("模糊图中可能包含召回率"),
+        "images": [
+            {
+                "image_index": 1,
+                "confidence": 0.42,
+                "line_count": 1,
+                "text_length": len("模糊图中可能包含召回率"),
+                "text_preview": "模糊图中可能包含召回率",
+            }
+        ],
+    }
+
+    enriched = enrich_chunks_for_visualization(
+        [{"text": chunk_text, "metadata": {"image_ocr": image_ocr}}],
+        chunk_text,
+        {"image_ocr": image_ocr},
+    )
+
+    image_ref = enriched[0]["metadata"]["artifact"]["images"][0]
+    assert image_ref["low_confidence"] is True
+    assert image_ref["text_preview"] == "模糊图中可能包含召回率"
 
 
 def test_ocr_artifact_tracks_word_embedded_image_targets():

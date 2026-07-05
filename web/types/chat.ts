@@ -130,6 +130,8 @@ export interface OcrImageRef {
   confidence?: number | null;
   line_count?: number | null;
   text_length?: number | null;
+  text_preview?: string | null;
+  low_confidence?: boolean | null;
   width?: number | null;
   height?: number | null;
   target?: string | null;

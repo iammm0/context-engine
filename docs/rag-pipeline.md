@@ -103,8 +103,9 @@ For table and OCR chunks, preview responses include a compact `artifact`:
   parser origin.
 - OCR artifacts expose the normalized OCR text preview, image count, and image
   source refs when known. Each source ref can include `page`, `image_index`,
-  `confidence`, `line_count`, `text_length`, `width`, `height`, and parser
-  source `target` for embedded Word images.
+  `confidence`, `line_count`, `text_length`, compact `text_preview`,
+  `low_confidence`, `width`, `height`, and parser source `target` for embedded
+  Word images.
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to
@@ -129,8 +130,8 @@ When available, compact table/OCR/formula/code `artifact` data is carried in
 preview as the document chunk inspector. The generation context also includes a
 short artifact summary before the raw chunk text: table evidence exposes column
 names, sample rows, and table source refs; OCR evidence exposes image source
-refs and confidence; and formula/code evidence exposes a compact content
-preview.
+refs, confidence, low-confidence flags, and per-image OCR text previews; and
+formula/code evidence exposes a compact content preview.
 Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and

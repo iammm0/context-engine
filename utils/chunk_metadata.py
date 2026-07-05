@@ -586,6 +586,35 @@ def _ocr_image_lookup(metadata: Dict[str, Any]) -> Dict[Tuple[Optional[int], Opt
     return lookup
 
 
+def _ocr_text_preview(image: Dict[str, Any]) -> str:
+    for key in ("text_preview", "ocr_text", "text"):
+        value = image.get(key)
+        if isinstance(value, str) and value.strip():
+            return _clean_preview(value, max_chars=160)
+    return ""
+
+
+def _build_ocr_ref(page: Optional[int], image_index: Optional[int], image_meta: Dict[str, Any]) -> Dict[str, Any]:
+    confidence = image_meta.get("confidence")
+    normalized_confidence = _normalize_confidence(confidence)
+    ref = {
+        "page": page,
+        "image_index": image_index,
+        "confidence": confidence,
+        "line_count": image_meta.get("line_count"),
+        "text_length": image_meta.get("text_length"),
+        "width": image_meta.get("width"),
+        "height": image_meta.get("height"),
+        "target": image_meta.get("target"),
+    }
+    text_preview = _ocr_text_preview(image_meta)
+    if text_preview:
+        ref["text_preview"] = text_preview
+    if normalized_confidence is not None:
+        ref["low_confidence"] = normalized_confidence < 0.65
+    return ref
+
+
 def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
     lookup = _ocr_image_lookup(metadata)
     refs: List[Dict[str, Any]] = []
@@ -595,18 +624,7 @@ def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any
         image_meta = lookup.get((page, image_index), {})
         if page is None and image_index is None and not image_meta:
             continue
-        refs.append(
-            {
-                "page": page,
-                "image_index": image_index,
-                "confidence": image_meta.get("confidence"),
-                "line_count": image_meta.get("line_count"),
-                "text_length": image_meta.get("text_length"),
-                "width": image_meta.get("width"),
-                "height": image_meta.get("height"),
-                "target": image_meta.get("target"),
-            }
-        )
+        refs.append(_build_ocr_ref(page, image_index, image_meta))
 
     if refs:
         return refs
@@ -615,18 +633,7 @@ def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any
     images = image_ocr.get("images") if isinstance(image_ocr.get("images"), list) else []
     for image in images[:3]:
         if isinstance(image, dict):
-            refs.append(
-                {
-                    "page": _safe_int(image.get("page")),
-                    "image_index": _safe_int(image.get("image_index")),
-                    "confidence": image.get("confidence"),
-                    "line_count": image.get("line_count"),
-                    "text_length": image.get("text_length"),
-                    "width": image.get("width"),
-                    "height": image.get("height"),
-                    "target": image.get("target"),
-                }
-            )
+            refs.append(_build_ocr_ref(_safe_int(image.get("page")), _safe_int(image.get("image_index")), image))
     return refs
 
 

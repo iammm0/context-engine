@@ -58,6 +58,8 @@ def test_evidence_format_and_citation_validation():
                             "image_index": 2,
                             "confidence": 0.88,
                             "line_count": 4,
+                            "text_preview": "图中包含召回率 0.92",
+                            "low_confidence": False,
                             "width": 640,
                             "height": 320,
                             "target": "media/image2.png",
@@ -78,7 +80,7 @@ def test_evidence_format_and_citation_validation():
     assert "table sources: pages 1-2, table 2, caption 指标表, type markdown" in context
     assert "样例行: recall | 0.9" in context
     assert "结构化证据: image_ocr" in context
-    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320, media/image2.png" in context
+    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320, media/image2.png, text 图中包含召回率 0.92" in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
     assert validate_citations("Answer [S3]", evidence)

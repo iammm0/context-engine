@@ -35,4 +35,6 @@ def test_build_word_image_ocr_metadata_tracks_embedded_image_sources():
     assert metadata["images"][0]["image_index"] == 1
     assert metadata["images"][0]["target"] == "media/image1.png"
     assert metadata["images"][0]["text_length"] == len("图中包含召回率")
+    assert metadata["images"][0]["text_preview"] == "图中包含召回率"
     assert metadata["images"][1]["text_length"] == 0
+    assert metadata["images"][1]["text_preview"] == ""

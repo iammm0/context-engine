@@ -44,6 +44,10 @@ def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
         bits.append(f"{image.get('width')}x{image.get('height')}")
     if image.get("target"):
         bits.append(str(image.get("target")))
+    if image.get("low_confidence") is True:
+        bits.append("low confidence")
+    if image.get("text_preview"):
+        bits.append(f"text {_compact_text(image.get('text_preview'), 120)}")
     return ", ".join(bits)
 
 
