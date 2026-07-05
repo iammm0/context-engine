@@ -659,11 +659,68 @@ def _extract_markdown_table(text: str, max_rows: int = 12, max_cols: int = 8) ->
     }
 
 
+def _table_data_to_artifact(data: Any, *, markdown: str = "", max_rows: int = 12, max_cols: int = 8) -> Optional[Dict[str, Any]]:
+    if not isinstance(data, list) or not data:
+        return None
+    rows = []
+    for row in data:
+        if isinstance(row, list):
+            cells = [str("" if cell is None else cell).strip() for cell in row[:max_cols]]
+            rows.append(cells)
+    if not rows:
+        return None
+    headers = rows[0]
+    body_rows = rows[1:max_rows]
+    return {
+        "type": "table",
+        "markdown": markdown,
+        "headers": headers,
+        "rows": body_rows,
+        "row_count": max(len(rows) - 1, 0),
+        "column_count": len(headers),
+    }
+
+
+def _table_from_metadata(metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    tables = metadata.get("tables")
+    if not isinstance(tables, list):
+        return None
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        markdown = str(table.get("markdown") or table.get("raw") or "").strip()
+        if markdown:
+            parsed = _extract_markdown_table(markdown)
+            if parsed:
+                return parsed
+        parsed = _table_data_to_artifact(table.get("data"), markdown=markdown)
+        if parsed:
+            return parsed
+        semantic = table.get("semantic")
+        if isinstance(semantic, dict):
+            headers = [str(item or "").strip() for item in semantic.get("headers") or []]
+            if headers:
+                row_count = _safe_int(semantic.get("row_count")) or 0
+                col_count = _safe_int(semantic.get("col_count")) or len(headers)
+                return {
+                    "type": "table",
+                    "markdown": markdown,
+                    "headers": headers,
+                    "rows": [],
+                    "row_count": max(row_count - 1, 0),
+                    "column_count": col_count,
+                }
+    return None
+
+
 def _build_chunk_artifact(text: str, content_type: str, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Build a compact preview artifact for non-plain-text chunks."""
     normalized_type = (content_type or "text").lower()
     if normalized_type == "table" or bool(_TABLE_RE.search(text or "")):
         table = _extract_markdown_table(text)
+        if table:
+            return table
+        table = _table_from_metadata(metadata)
         if table:
             return table
         return {

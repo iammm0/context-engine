@@ -93,7 +93,10 @@ when `metadata.parse_quality` is available.
 For table and OCR chunks, preview responses include a compact `artifact`:
 
 - Table artifacts expose `headers`, `rows`, `row_count`, `column_count`, and a
-  Markdown fallback.
+  Markdown fallback. When the chunk text is not a Markdown table, the artifact
+  builder falls back to parser metadata such as `metadata.tables[].markdown`,
+  `metadata.tables[].data`, or semantic headers so the visual table structure is
+  still preserved.
 - OCR artifacts expose the normalized OCR text preview, image count, and image
   source refs when known. Each source ref can include `page`, `image_index`,
   `confidence`, `line_count`, `text_length`, `width`, `height`, and parser

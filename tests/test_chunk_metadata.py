@@ -55,6 +55,49 @@ def test_enrich_chunks_adds_visual_metadata_and_compacts_heavy_fields():
     assert second_meta["artifact"]["rows"] == [["recall", "0.9"]]
 
 
+def test_table_artifact_uses_metadata_when_chunk_text_is_not_markdown_table():
+    table_markdown = "| 指标 | 数值 |\n| --- | --- |\n| precision | 0.8 |\n| recall | 0.9 |"
+    chunks = [
+        {
+            "text": "模型评估指标表",
+            "metadata": {
+                "content_type": "table",
+                "tables": [{"markdown": table_markdown}],
+                "token_count": 12,
+            },
+        }
+    ]
+
+    enriched = enrich_chunks_for_visualization(chunks, "模型评估指标表", {"tables": [{"markdown": table_markdown}]})
+
+    artifact = enriched[0]["metadata"]["artifact"]
+    assert artifact["type"] == "table"
+    assert artifact["headers"] == ["指标", "数值"]
+    assert artifact["rows"] == [["precision", "0.8"], ["recall", "0.9"]]
+    assert artifact["row_count"] == 2
+
+
+def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
+    chunks = [
+        {
+            "text": "Evaluation metrics",
+            "metadata": {
+                "content_type": "table",
+                "tables": [{"data": [["metric", "value"], ["zero", 0], ["enabled", False]]}],
+            },
+        }
+    ]
+
+    enriched = enrich_chunks_for_visualization(chunks, "Evaluation metrics", {})
+
+    artifact = enriched[0]["metadata"]["artifact"]
+    assert artifact["type"] == "table"
+    assert artifact["headers"] == ["metric", "value"]
+    assert artifact["rows"] == [["zero", "0"], ["enabled", "False"]]
+    assert artifact["row_count"] == 2
+    assert artifact["column_count"] == 2
+
+
 def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     chunk = {
         "_id": "chunk1",
