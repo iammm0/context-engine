@@ -21,12 +21,15 @@ def test_evidence_format_and_citation_validation():
             document_title="Demo",
             score=0.9,
             retrieval_type="vector",
+            metadata={"content_type": "table", "page_start": 1, "page_end": 2},
         )
     ]
 
     context = format_evidence_context(evidence)
     assert "[S1]" in context
     assert "Demo" in context
+    assert "证据类型: table" in context
+    assert "pages 1-2" in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
     assert validate_citations("Answer [S2]", evidence)

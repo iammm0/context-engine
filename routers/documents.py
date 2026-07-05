@@ -1,5 +1,5 @@
 """文档管理路由（知识库功能）"""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, FileResponse
 import os
 import shutil
@@ -16,6 +16,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 from utils.logger import logger
+from utils.chunk_metadata import build_chunk_preview, enrich_chunks_for_visualization
 
 router = APIRouter()
 
@@ -406,6 +407,13 @@ def process_document_background(
         except Exception:
             # 统计失败不影响主流程
             pass
+
+        chunks = enrich_chunks_for_visualization(
+            chunks,
+            text,
+            metadata,
+            document_id=doc_id,
+        )
         
         logger.info(f"文档分块完成 - 文档ID: {doc_id}, 块数量: {len(chunks)}")
         
@@ -686,6 +694,14 @@ def process_document_background(
                             "chunker_type": meta.get("chunker_type"),
                             "token_count": meta.get("token_count"),
                             "section_path": section_path,
+                            "page": meta.get("page"),
+                            "page_start": meta.get("page_start"),
+                            "page_end": meta.get("page_end"),
+                            "char_start": meta.get("char_start"),
+                            "char_end": meta.get("char_end"),
+                            "preview": meta.get("preview"),
+                            "features": meta.get("features") or {},
+                            "parse_summary": meta.get("parse_summary") or {},
                             "file_type": meta.get("file_type"),
                         }
                     })
@@ -1118,6 +1134,17 @@ class DocumentDetailResponse(BaseModel):
     total_vectors: int
 
 
+class DocumentChunksResponse(BaseModel):
+    """文档分块预览响应模型"""
+    document_id: str
+    title: str
+    status: str
+    chunks: List[Dict[str, Any]]
+    total_chunks: int
+    skip: int
+    limit: int
+
+
 @router.post("/{doc_id}/retry")
 async def retry_document_processing(
     doc_id: str,
@@ -1215,6 +1242,51 @@ async def retry_document_processing(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"重新处理文档失败: {str(e)}"
+        )
+
+
+@router.get("/{doc_id}/chunks", response_model=DocumentChunksResponse)
+async def get_document_chunks(
+    doc_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    include_text: bool = Query(True),
+):
+    """获取文档分块预览，用于切块可视化和证据定位。"""
+    logger.info(f"获取文档分块预览请求 - 文档ID: {doc_id}, skip: {skip}, limit: {limit}")
+
+    try:
+        doc_repo = get_document_repo()
+        chunk_repo = get_chunk_repo()
+
+        doc = doc_repo.get_document(doc_id)
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="文档不存在"
+            )
+
+        chunks = chunk_repo.get_chunks_by_document(doc_id)
+        total = len(chunks)
+        page = chunks[skip: skip + limit]
+        previews = [build_chunk_preview(chunk, include_text=include_text) for chunk in page]
+
+        return DocumentChunksResponse(
+            document_id=doc["_id"],
+            title=doc.get("title", ""),
+            status=doc.get("status", "unknown"),
+            chunks=previews,
+            total_chunks=total,
+            skip=skip,
+            limit=limit,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取文档分块预览失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取文档分块预览失败: {str(e)}"
         )
 
 
@@ -1511,4 +1583,3 @@ async def delete_document(
             detail=f"删除文档失败: {str(e)}"
         )
 
- 

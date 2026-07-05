@@ -52,12 +52,20 @@ def format_evidence_context(evidence: Iterable[EvidenceItem | Dict[str, Any]]) -
             location_bits.append(" / ".join(item.section_path))
         if item.page is not None:
             location_bits.append(f"page {item.page}")
+        elif item.metadata.get("page_start") is not None:
+            page_start = item.metadata.get("page_start")
+            page_end = item.metadata.get("page_end")
+            if page_end is not None and page_end != page_start:
+                location_bits.append(f"pages {page_start}-{page_end}")
+            else:
+                location_bits.append(f"page {page_start}")
         if item.chunk_index is not None:
             location_bits.append(f"chunk {item.chunk_index}")
         location = f" ({'; '.join(location_bits)})" if location_bits else ""
+        content_type = item.metadata.get("content_type") or "text"
         parts.append(
             f"[{item.id}] 来源: {title}{location}\n"
-            f"检索类型: {item.retrieval_type}; 分数: {item.score:.4f}\n"
+            f"证据类型: {content_type}; 检索类型: {item.retrieval_type}; 分数: {item.score:.4f}\n"
             f"{item.text}"
         )
     return "\n\n".join(parts)

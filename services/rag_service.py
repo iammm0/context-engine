@@ -281,6 +281,11 @@ class RAGService:
                                         chunk_index=nb.get("chunk_index") if isinstance(nb.get("chunk_index"), int) else None,
                                         document_title=document_title,
                                         section_path=[str(s) for s in nb_section_path],
+                                        page=(
+                                            int(nb_meta.get("page"))
+                                            if nb_meta.get("page") is not None and str(nb_meta.get("page")).isdigit()
+                                            else None
+                                        ),
                                         score=float(score or 0.0),
                                         retrieval_type="neighbor",
                                         metadata=nb_meta,
@@ -302,6 +307,9 @@ class RAGService:
                         "retrieval_type": result.get("retrieval_type") or result["payload"].get("retrieval_type", "vector"),
                         "document_title": filename,
                         "file_type": result["payload"].get("metadata", {}).get("file_type", ""),
+                        "page": page,
+                        "content_type": metadata.get("content_type"),
+                        "section_path": section_path,
                         "is_conversation_attachment": True
                     }
                 else:
@@ -317,6 +325,9 @@ class RAGService:
                         "document_title": doc_title,
                         "file_type": doc_info.get("file_type", ""),
                         "status": doc_info.get("status", ""),
+                        "page": page,
+                        "content_type": metadata.get("content_type"),
+                        "section_path": section_path,
                         "is_conversation_attachment": False
                     }
                 
