@@ -41,6 +41,8 @@ def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
         bits.append(f"{image.get('line_count')} lines")
     if image.get("width") is not None and image.get("height") is not None:
         bits.append(f"{image.get('width')}x{image.get('height')}")
+    if image.get("target"):
+        bits.append(str(image.get("target")))
     return ", ".join(bits)
 
 

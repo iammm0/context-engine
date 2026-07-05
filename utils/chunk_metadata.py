@@ -510,6 +510,7 @@ def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any
                 "text_length": image_meta.get("text_length"),
                 "width": image_meta.get("width"),
                 "height": image_meta.get("height"),
+                "target": image_meta.get("target"),
             }
         )
 
@@ -529,6 +530,7 @@ def _extract_ocr_refs(text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any
                     "text_length": image.get("text_length"),
                     "width": image.get("width"),
                     "height": image.get("height"),
+                    "target": image.get("target"),
                 }
             )
     return refs

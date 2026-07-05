@@ -122,6 +122,36 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
     assert artifact["images"][0]["height"] == 320
 
 
+def test_ocr_artifact_tracks_word_embedded_image_targets():
+    chunk_text = "[图片文字 image=2]\n图中包含利润率 18%"
+    image_ocr = {
+        "image_count": 2,
+        "ocr_text_length": len("图中包含利润率 18%"),
+        "images": [
+            {"image_index": 1, "target": "media/image1.png", "text_length": 0, "line_count": 0},
+            {
+                "image_index": 2,
+                "target": "media/image2.png",
+                "confidence": 0.93,
+                "line_count": 2,
+                "text_length": len("图中包含利润率 18%"),
+            },
+        ],
+    }
+
+    enriched = enrich_chunks_for_visualization(
+        [{"text": chunk_text, "metadata": {"image_ocr": image_ocr}}],
+        chunk_text,
+        {"image_ocr": image_ocr},
+    )
+
+    artifact = enriched[0]["metadata"]["artifact"]
+    assert artifact["type"] == "image_ocr"
+    assert artifact["text"] == "图中包含利润率 18%"
+    assert artifact["images"][0]["image_index"] == 2
+    assert artifact["images"][0]["target"] == "media/image2.png"
+
+
 def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
     metadata = {
         "content_type": "table",

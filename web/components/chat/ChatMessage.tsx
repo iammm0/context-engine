@@ -81,6 +81,7 @@ function formatOcrImageRef(image: OcrImageRef, index: number) {
   if (typeof image.width === "number" && typeof image.height === "number") {
     bits.push(`${image.width}x${image.height}`);
   }
+  if (image.target) bits.push(image.target);
   return bits.join(" · ") || `图片 ${index + 1}`;
 }
 

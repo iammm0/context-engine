@@ -30,6 +30,9 @@ enriched with compact metadata for preview, citation, and debugging:
 - `preview`: normalized short text used by chunk visualization UIs.
 - `features`: booleans such as `has_table`, `has_image_ocr`, `has_formula`, and
   `has_code`.
+- `image_ocr`: normalized OCR metadata for parsed images. PDF images, standalone
+  image files, and Word embedded images use the same compact shape when OCR is
+  enabled.
 - `parse_summary`: compact document-level parse quality counters, including
   parser type, extraction method, page count, extracted page count, table count,
   formula count, OCR image count, OCR text length, OCR image coverage, OCR
@@ -91,7 +94,8 @@ For table and OCR chunks, preview responses include a compact `artifact`:
   Markdown fallback.
 - OCR artifacts expose the normalized OCR text preview, image count, and image
   source refs when known. Each source ref can include `page`, `image_index`,
-  `confidence`, `line_count`, `text_length`, `width`, and `height`.
+  `confidence`, `line_count`, `text_length`, `width`, `height`, and parser
+  source `target` for embedded Word images.
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to

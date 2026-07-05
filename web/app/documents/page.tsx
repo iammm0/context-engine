@@ -167,6 +167,7 @@ function formatOcrImageRef(image: OcrImageRef, index: number) {
     bits.push(`${image.width}x${image.height}`);
   }
   if (typeof image.text_length === "number") bits.push(`${image.text_length} 字`);
+  if (image.target) bits.push(image.target);
   return bits.join(" · ") || `图片 ${index + 1}`;
 }
 

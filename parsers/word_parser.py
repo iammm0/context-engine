@@ -15,6 +15,31 @@ except ImportError:
     DOCX_AVAILABLE = False
 
 
+def _build_word_image_ocr_metadata(images_info: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build normalized OCR metadata for embedded Word images."""
+    ocr_text_parts = [
+        str(image.get("ocr_text") or "").strip()
+        for image in images_info
+        if str(image.get("ocr_text") or "").strip()
+    ]
+    return {
+        "image_count": len(images_info),
+        "ocr_text_length": len("\n\n".join(ocr_text_parts)),
+        "images": [
+            {
+                "image_index": image.get("image_index"),
+                "target": image.get("target"),
+                "confidence": image.get("confidence"),
+                "line_count": image.get("line_count"),
+                "text_length": len(str(image.get("ocr_text") or "")),
+                "width": image.get("width"),
+                "height": image.get("height"),
+            }
+            for image in images_info
+        ],
+    }
+
+
 class WordParser(BaseParser):
     """Word文档解析器（支持.docx和.doc格式）"""
     
@@ -239,7 +264,9 @@ class WordParser(BaseParser):
                 for rel in doc.part.rels.values():
                     if "image" not in rel.target_ref:
                         continue
+                    image_index = len(images_info) + 1
                     images_info.append({
+                        "image_index": image_index,
                         "target": rel.target_ref,
                         "type": "embedded_image"
                     })
@@ -260,6 +287,11 @@ class WordParser(BaseParser):
                             ext = os.path.splitext(ref)[1].lower() if ref else ".png"
                             if ext not in (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif", ".gif"):
                                 ext = ".png"
+                            images_info[-1]["extension"] = ext.lstrip(".")
+                            source_image = getattr(target_part, "image", None)
+                            if source_image is not None:
+                                images_info[-1]["width"] = getattr(source_image, "px_width", None)
+                                images_info[-1]["height"] = getattr(source_image, "px_height", None)
                             fd, tmp_path = tempfile.mkstemp(suffix=ext)
                             try:
                                 with os.fdopen(fd, "wb") as f:
@@ -268,9 +300,11 @@ class WordParser(BaseParser):
                                 ocr_result = image_ocr.extract_text_from_image(tmp_path)
                                 ocr_text = (ocr_result.get("text") or "").strip()
                                 if ocr_text:
-                                    full_text += "\n\n[图片文字]\n" + ocr_text
+                                    full_text += f"\n\n[图片文字 image={image_index}]\n" + ocr_text
                                 if images_info:
                                     images_info[-1]["ocr_text"] = ocr_text
+                                    images_info[-1]["confidence"] = ocr_result.get("confidence", 0.0)
+                                    images_info[-1]["line_count"] = ocr_result.get("line_count", 0)
                             finally:
                                 try:
                                     os.unlink(tmp_path)
@@ -280,6 +314,7 @@ class WordParser(BaseParser):
                             logger.warning(f"Word 内嵌图 OCR 失败: {rel.target_ref}, {img_e}")
                 if images_info:
                     metadata["images"] = images_info
+                    metadata["image_ocr"] = _build_word_image_ocr_metadata(images_info)
             except Exception as e:
                 logger.warning(f"图片提取失败: {e}")
             

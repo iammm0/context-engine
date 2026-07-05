@@ -146,6 +146,7 @@ export interface OcrImageRef {
   text_length?: number | null
   width?: number | null
   height?: number | null
+  target?: string | null
 }
 
 export interface DocumentChunksResponse {

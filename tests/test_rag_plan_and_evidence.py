@@ -59,6 +59,7 @@ def test_evidence_format_and_citation_validation():
                             "line_count": 4,
                             "width": 640,
                             "height": 320,
+                            "target": "media/image2.png",
                         }
                     ],
                 },
@@ -75,7 +76,7 @@ def test_evidence_format_and_citation_validation():
     assert "列: 指标, 数值" in context
     assert "样例行: recall | 0.9" in context
     assert "结构化证据: image_ocr" in context
-    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320" in context
+    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320, media/image2.png" in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
     assert validate_citations("Answer [S3]", evidence)
