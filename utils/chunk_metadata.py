@@ -120,6 +120,52 @@ def _summarize_ocr_quality(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _chunk_token_count(chunk: Dict[str, Any]) -> Optional[int]:
+    metadata = chunk.get("metadata") or {}
+    for value in (metadata.get("token_count"), chunk.get("token_count")):
+        parsed = _safe_int(value)
+        if parsed is not None:
+            return max(0, parsed)
+    return None
+
+
+def _chunk_has_anchor(chunk: Dict[str, Any]) -> bool:
+    metadata = chunk.get("metadata") or {}
+    visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
+    for source in (metadata, visual):
+        if source.get("page") is not None or source.get("page_start") is not None or source.get("page_end") is not None:
+            return True
+        if source.get("char_start") is not None and source.get("char_end") is not None:
+            return True
+    artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else visual.get("artifact")
+    images = artifact.get("images") if isinstance(artifact, dict) and isinstance(artifact.get("images"), list) else []
+    return any(
+        isinstance(image, dict) and (image.get("page") is not None or image.get("target") or image.get("image_index") is not None)
+        for image in images
+    )
+
+
+def _summarize_chunk_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    token_counts = [count for chunk in chunks if (count := _chunk_token_count(chunk)) is not None]
+    anchored_count = sum(1 for chunk in chunks if _chunk_has_anchor(chunk))
+    summary: Dict[str, Any] = {
+        "chunk_anchor_count": anchored_count,
+        "chunk_missing_anchor_count": max(len(chunks) - anchored_count, 0),
+        "chunk_anchor_coverage": (anchored_count / len(chunks)) if chunks else None,
+    }
+    if token_counts:
+        summary.update(
+            {
+                "chunk_token_min": min(token_counts),
+                "chunk_token_max": max(token_counts),
+                "chunk_token_avg": round(sum(token_counts) / len(token_counts), 1),
+                "chunk_short_count": sum(1 for count in token_counts if count < 40),
+                "chunk_large_count": sum(1 for count in token_counts if count > 1200),
+            }
+        )
+    return summary
+
+
 def summarize_parse_metadata(metadata: Dict[str, Any], document_text: str = "") -> Dict[str, Any]:
     """Build a compact document-level parse summary safe to repeat on chunks."""
     image_ocr = metadata.get("image_ocr") if isinstance(metadata.get("image_ocr"), dict) else {}
@@ -155,6 +201,7 @@ def build_parse_quality_summary(
         chunk_meta = chunk.get("metadata") or {}
         content_type = str(chunk_meta.get("content_type") or "text")
         content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
+    chunk_quality = _summarize_chunk_quality(chunks)
 
     page_count = summary.get("page_count") or 0
     extracted_pages = summary.get("extracted_pages")
@@ -305,6 +352,52 @@ def build_parse_quality_summary(
     elif chunks:
         add_check("chunk_types", "切块类型", "pass", "info", f"识别到 {len(content_type_counts)} 类切块")
 
+    if chunks:
+        anchor_coverage = chunk_quality.get("chunk_anchor_coverage")
+        missing_anchor_count = int(chunk_quality.get("chunk_missing_anchor_count") or 0)
+        if isinstance(anchor_coverage, float) and anchor_coverage < 0.8:
+            score -= 6
+            add_check(
+                "chunk_anchors",
+                "切块定位",
+                "warn",
+                "warning",
+                f"切块定位覆盖率偏低：{anchor_coverage:.0%}，{missing_anchor_count} 个 chunk 缺少页码、字符范围或图片来源",
+                "重新解析并保留页码/字符偏移，或检查切块器是否丢失 metadata。",
+            )
+            warnings.append(f"切块定位覆盖率偏低：{anchor_coverage:.0%}")
+        else:
+            message = "切块均带有可视化定位"
+            if isinstance(anchor_coverage, float):
+                message = f"切块定位覆盖率 {anchor_coverage:.0%}"
+            add_check("chunk_anchors", "切块定位", "pass", "info", message)
+
+        token_counts_seen = chunk_quality.get("chunk_token_avg") is not None
+        if token_counts_seen:
+            short_count = int(chunk_quality.get("chunk_short_count") or 0)
+            large_count = int(chunk_quality.get("chunk_large_count") or 0)
+            problem_count = short_count + large_count
+            problem_ratio = problem_count / max(len(chunks), 1)
+            if problem_ratio >= 0.3:
+                score -= 6
+                add_check(
+                    "chunk_size",
+                    "切块大小",
+                    "warn",
+                    "warning",
+                    f"切块大小分布不均：{short_count} 个过短，{large_count} 个过长，平均 {chunk_quality.get('chunk_token_avg')} tokens",
+                    "调整 chunk_size/chunk_overlap，避免过碎或超长 chunk 影响召回和引用。",
+                )
+                warnings.append("切块大小分布不均")
+            else:
+                add_check(
+                    "chunk_size",
+                    "切块大小",
+                    "pass",
+                    "info",
+                    f"平均 {chunk_quality.get('chunk_token_avg')} tokens，范围 {chunk_quality.get('chunk_token_min')}-{chunk_quality.get('chunk_token_max')}",
+                )
+
     table_count = int(summary.get("table_count") or 0)
     formula_count = int(summary.get("formula_count") or 0)
     if table_count > 0 and int(content_type_counts.get("table") or 0) == 0:
@@ -350,6 +443,7 @@ def build_parse_quality_summary(
         risk_level = "low"
     return {
         **summary,
+        **chunk_quality,
         "chunk_count": len(chunks),
         "content_type_counts": content_type_counts,
         "page_coverage": page_coverage,

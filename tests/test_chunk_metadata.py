@@ -247,7 +247,12 @@ def test_build_parse_quality_summary_warns_when_structured_artifacts_are_not_chu
             "formulas": [{"latex": "E=mc^2"}],
         },
         "Structured parsing found a table and formula. " * 8,
-        [{"text": "Metric Value recall 0.9 E equals m c squared", "metadata": {"content_type": "text"}}],
+        [
+            {
+                "text": "Metric Value recall 0.9 E equals m c squared",
+                "metadata": {"content_type": "text", "char_start": 0, "char_end": 46, "token_count": 80},
+            }
+        ],
     )
 
     checks = {item["id"]: item for item in summary["quality_checks"]}
@@ -295,3 +300,43 @@ def test_build_parse_quality_summary_scores_ocr_coverage_and_confidence():
     assert checks["ocr_confidence"]["status"] == "warn"
     assert any("OCR 覆盖率" in warning for warning in summary["warnings"])
     assert any("OCR 置信度" in warning for warning in summary["warnings"])
+
+
+def test_build_parse_quality_summary_scores_chunk_size_and_anchor_coverage():
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "pdf",
+            "extraction_method": "text_extraction",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {"image_count": 0, "ocr_text_length": 0},
+            "tables": [],
+            "formulas": [],
+        },
+        "Chunk quality diagnostics need enough body text for a clean parse score. " * 5,
+        [
+            {"text": "tiny", "metadata": {"content_type": "text", "token_count": 8}},
+            {
+                "text": "healthy chunk",
+                "metadata": {"content_type": "text", "token_count": 120, "char_start": 0, "char_end": 80},
+            },
+            {
+                "text": "oversized chunk",
+                "metadata": {"content_type": "text", "token_count": 1400, "char_start": 80, "char_end": 160},
+            },
+        ],
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["chunk_anchor_count"] == 2
+    assert summary["chunk_missing_anchor_count"] == 1
+    assert round(summary["chunk_anchor_coverage"], 2) == 0.67
+    assert summary["chunk_token_min"] == 8
+    assert summary["chunk_token_max"] == 1400
+    assert summary["chunk_token_avg"] == 509.3
+    assert summary["chunk_short_count"] == 1
+    assert summary["chunk_large_count"] == 1
+    assert checks["chunk_anchors"]["status"] == "warn"
+    assert checks["chunk_size"]["status"] == "warn"
+    assert any("切块定位覆盖率偏低" in warning for warning in summary["warnings"])
+    assert any("切块大小分布不均" in warning for warning in summary["warnings"])

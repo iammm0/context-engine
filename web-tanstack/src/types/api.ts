@@ -186,6 +186,14 @@ export interface ParseQualitySummary {
   ocr_image_coverage?: number | null
   text_length?: number
   chunk_count?: number
+  chunk_anchor_count?: number
+  chunk_missing_anchor_count?: number
+  chunk_anchor_coverage?: number | null
+  chunk_token_min?: number
+  chunk_token_max?: number
+  chunk_token_avg?: number
+  chunk_short_count?: number
+  chunk_large_count?: number
   content_type_counts?: Record<string, number>
   page_coverage?: number | null
   quality_score?: number

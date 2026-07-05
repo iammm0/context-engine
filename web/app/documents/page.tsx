@@ -114,6 +114,8 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
   if (!quality) return "";
   const bits = [];
   if (typeof quality.quality_score === "number") bits.push(`质量 ${quality.quality_score}/100`);
+  if (typeof quality.chunk_count === "number") bits.push(`chunk ${quality.chunk_count}`);
+  if (typeof quality.chunk_anchor_coverage === "number") bits.push(`定位 ${formatPercent(quality.chunk_anchor_coverage)}`);
   if (typeof quality.table_count === "number") bits.push(`表格 ${quality.table_count}`);
   if (typeof quality.image_count === "number") bits.push(`图片 ${quality.image_count}`);
   if (typeof quality.ocr_text_length === "number" && quality.ocr_text_length > 0) {
@@ -888,6 +890,26 @@ export default function DocumentsPage() {
                         {contentTypeLabel[type] || type} {count}
                       </span>
                     ))}
+                    {typeof chunkPanelQuality.chunk_anchor_coverage === "number" && (
+                      <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        定位 {formatPercent(chunkPanelQuality.chunk_anchor_coverage)}
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.chunk_token_avg === "number" && (
+                      <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        平均 {chunkPanelQuality.chunk_token_avg} tokens
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.chunk_short_count === "number" && chunkPanelQuality.chunk_short_count > 0 && (
+                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+                        过短 {chunkPanelQuality.chunk_short_count}
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.chunk_large_count === "number" && chunkPanelQuality.chunk_large_count > 0 && (
+                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+                        过长 {chunkPanelQuality.chunk_large_count}
+                      </span>
+                    )}
                   </div>
                   {chunkPanelQuality.warnings && chunkPanelQuality.warnings.length > 0 && (
                     <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
