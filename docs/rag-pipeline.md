@@ -108,7 +108,10 @@ Each evidence item includes `id`, `text`, `document_id` or `file_id`,
 `content_type` and can display page ranges when a chunk spans multiple pages.
 When available, compact table/OCR/formula/code `artifact` data is carried in
 `metadata.artifact` so chat evidence cards can render the same source-specific
-preview as the document chunk inspector.
+preview as the document chunk inspector. The generation context also includes a
+short artifact summary before the raw chunk text: table evidence exposes column
+names and sample rows, OCR evidence exposes image source refs and confidence,
+and formula/code evidence exposes a compact content preview.
 
 ## Compatibility
 

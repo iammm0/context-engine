@@ -21,7 +21,48 @@ def test_evidence_format_and_citation_validation():
             document_title="Demo",
             score=0.9,
             retrieval_type="vector",
-            metadata={"content_type": "table", "page_start": 1, "page_end": 2},
+            metadata={
+                "content_type": "table",
+                "page_start": 1,
+                "page_end": 2,
+                "artifact": {
+                    "type": "table",
+                    "headers": ["指标", "数值"],
+                    "rows": [["recall", "0.9"]],
+                    "row_count": 1,
+                    "column_count": 2,
+                },
+            },
+        ),
+        EvidenceItem(
+            id="S2",
+            text="图中包含召回率 0.92",
+            document_id="doc1",
+            chunk_id="chunk2",
+            chunk_index=1,
+            document_title="Demo",
+            score=0.8,
+            retrieval_type="vector",
+            metadata={
+                "content_type": "image_ocr",
+                "page_start": 3,
+                "page_end": 3,
+                "artifact": {
+                    "type": "image_ocr",
+                    "text": "图中包含召回率 0.92",
+                    "image_count": 1,
+                    "images": [
+                        {
+                            "page": 3,
+                            "image_index": 2,
+                            "confidence": 0.88,
+                            "line_count": 4,
+                            "width": 640,
+                            "height": 320,
+                        }
+                    ],
+                },
+            },
         )
     ]
 
@@ -30,9 +71,14 @@ def test_evidence_format_and_citation_validation():
     assert "Demo" in context
     assert "证据类型: table" in context
     assert "pages 1-2" in context
+    assert "结构化证据: table" in context
+    assert "列: 指标, 数值" in context
+    assert "样例行: recall | 0.9" in context
+    assert "结构化证据: image_ocr" in context
+    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320" in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
-    assert validate_citations("Answer [S2]", evidence)
+    assert validate_citations("Answer [S3]", evidence)
 
 
 def test_query_planner_rewrites_only_complex_queries():
