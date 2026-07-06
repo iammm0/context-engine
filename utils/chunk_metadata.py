@@ -440,6 +440,8 @@ def build_parse_quality_summary(
                 "warning",
                 f"切块定位覆盖率偏低：{anchor_coverage:.0%}，{missing_anchor_count} 个 chunk 缺少页码、字符范围或图片来源",
                 "重新解析并保留页码/字符偏移，或检查切块器是否丢失 metadata。",
+                feature_filter="missing_anchor",
+                filter_label="查看缺定位切块",
             )
             warnings.append(f"切块定位覆盖率偏低：{anchor_coverage:.0%}")
         else:
@@ -1028,6 +1030,14 @@ def _features_with_artifact_issue_flags(
     return merged
 
 
+def _features_with_anchor_flags(features: Dict[str, bool], chunk: Dict[str, Any]) -> Dict[str, bool]:
+    merged = dict(features or {})
+    if not _chunk_has_anchor(chunk):
+        merged["has_missing_anchor"] = True
+        merged["has_location_issue"] = True
+    return merged
+
+
 def _features_for_filtering(
     chunk: Dict[str, Any],
     metadata: Dict[str, Any],
@@ -1047,12 +1057,15 @@ def _features_for_filtering(
         or _build_chunk_artifact_quality(str(content_type), artifact)
     )
     artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else None
-    return _features_with_artifact_issue_flags(
+    merged = _features_with_artifact_issue_flags(
         {**inferred, **visual_features, **stored_features},
         str(content_type),
         artifact,
         artifact_quality,
     )
+    anchor_probe = dict(chunk)
+    anchor_probe["metadata"] = {**metadata, "visual": visual}
+    return _features_with_anchor_flags(merged, anchor_probe)
 
 
 def enrich_chunks_for_visualization(
@@ -1098,6 +1111,19 @@ def enrich_chunks_for_visualization(
             if ocr_pages:
                 page_start = min(ocr_pages)
                 page_end = max(ocr_pages)
+        features = _features_with_anchor_flags(
+            features,
+            {
+                "metadata": {
+                    "page": page_start if page_start == page_end else None,
+                    "page_start": page_start,
+                    "page_end": page_end,
+                    "char_start": start,
+                    "char_end": end,
+                    "artifact": artifact,
+                }
+            },
+        )
         visual = {
             "preview": preview,
             "char_start": start,

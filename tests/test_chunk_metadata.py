@@ -334,6 +334,8 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
                 "artifact": {"type": "image_ocr", "text": "ocr without source", "images": []},
             },
         },
+        {"text": "floating", "metadata": {"content_type": "text", "features": {}}},
+        {"text": "anchored", "metadata": {"content_type": "text", "char_start": 0, "char_end": 8}},
     ]
 
     assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1], chunks[3]]
@@ -343,6 +345,7 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
     assert filter_chunks_for_preview(chunks, feature="table_artifact_issue") == [chunks[1], chunks[3]]
     assert filter_chunks_for_preview(chunks, feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
     assert filter_chunks_for_preview(chunks, content_type="image_ocr", feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="missing_anchor") == [chunks[0], chunks[1], chunks[2], chunks[3], chunks[4], chunks[5]]
     assert filter_chunks_for_preview(chunks, query="overview") == [chunks[0]]
     assert filter_chunks_for_preview(chunks, query="recall") == [chunks[1]]
     assert filter_chunks_for_preview(chunks, content_type="table", query="recall") == [chunks[1]]
@@ -594,6 +597,8 @@ def test_build_parse_quality_summary_scores_chunk_size_and_anchor_coverage():
     assert summary["chunk_short_count"] == 1
     assert summary["chunk_large_count"] == 1
     assert checks["chunk_anchors"]["status"] == "warn"
+    assert checks["chunk_anchors"]["feature_filter"] == "missing_anchor"
+    assert checks["chunk_anchors"]["filter_label"] == "查看缺定位切块"
     assert checks["chunk_size"]["status"] == "warn"
     assert any("切块定位覆盖率偏低" in warning for warning in summary["warnings"])
     assert any("切块大小分布不均" in warning for warning in summary["warnings"])

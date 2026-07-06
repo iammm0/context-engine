@@ -29,8 +29,8 @@ enriched with compact metadata for preview, citation, and debugging:
   parser page spans.
 - `char_start`, `char_end`: character offsets in the synthesized document text.
 - `preview`: normalized short text used by chunk visualization UIs.
-- `features`: booleans such as `has_table`, `has_image_ocr`, `has_formula`, and
-  `has_code`.
+- `features`: booleans such as `has_table`, `has_image_ocr`, `has_formula`,
+  `has_code`, `has_missing_anchor`, and `has_location_issue`.
 - `image_ocr`: normalized OCR metadata for parsed images. PDF images, standalone
   image files, and Word embedded images use the same compact shape when OCR is
   enabled.
@@ -82,7 +82,8 @@ Query parameters:
   `image_ocr`, `formula`, or `code`.
 - `feature`: optional feature filter, for example `has_table`,
   `has_image_ocr`, `artifact_issue`, `table_artifact_issue`, or
-  `ocr_artifact_issue`.
+  `ocr_artifact_issue`. Use `missing_anchor` to inspect chunks that lack page,
+  character, or image-source anchors.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When
