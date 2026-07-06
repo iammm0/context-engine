@@ -465,6 +465,8 @@ def build_parse_quality_summary(
                     "warning",
                     f"切块大小分布不均：{short_count} 个过短，{large_count} 个过长，平均 {chunk_quality.get('chunk_token_avg')} tokens",
                     "调整 chunk_size/chunk_overlap，避免过碎或超长 chunk 影响召回和引用。",
+                    feature_filter="size_issue",
+                    filter_label="查看尺寸异常切块",
                 )
                 warnings.append("切块大小分布不均")
             else:
@@ -1038,6 +1040,20 @@ def _features_with_anchor_flags(features: Dict[str, bool], chunk: Dict[str, Any]
     return merged
 
 
+def _features_with_size_flags(features: Dict[str, bool], chunk: Dict[str, Any]) -> Dict[str, bool]:
+    merged = dict(features or {})
+    token_count = _chunk_token_count(chunk)
+    if token_count is None:
+        return merged
+    if token_count < 40:
+        merged["has_short_chunk"] = True
+        merged["has_size_issue"] = True
+    if token_count > 1200:
+        merged["has_large_chunk"] = True
+        merged["has_size_issue"] = True
+    return merged
+
+
 def _features_for_filtering(
     chunk: Dict[str, Any],
     metadata: Dict[str, Any],
@@ -1065,7 +1081,8 @@ def _features_for_filtering(
     )
     anchor_probe = dict(chunk)
     anchor_probe["metadata"] = {**metadata, "visual": visual}
-    return _features_with_anchor_flags(merged, anchor_probe)
+    merged = _features_with_anchor_flags(merged, anchor_probe)
+    return _features_with_size_flags(merged, anchor_probe)
 
 
 def enrich_chunks_for_visualization(
@@ -1124,6 +1141,7 @@ def enrich_chunks_for_visualization(
                 }
             },
         )
+        features = _features_with_size_flags(features, {**chunk, "metadata": meta})
         visual = {
             "preview": preview,
             "char_start": start,

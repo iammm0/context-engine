@@ -336,6 +336,8 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
         },
         {"text": "floating", "metadata": {"content_type": "text", "features": {}}},
         {"text": "anchored", "metadata": {"content_type": "text", "char_start": 0, "char_end": 8}},
+        {"text": "short", "metadata": {"content_type": "text", "token_count": 10, "char_start": 8, "char_end": 13}},
+        {"text": "large", "metadata": {"content_type": "text", "token_count": 1300, "char_start": 13, "char_end": 18}},
     ]
 
     assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1], chunks[3]]
@@ -346,6 +348,9 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
     assert filter_chunks_for_preview(chunks, feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
     assert filter_chunks_for_preview(chunks, content_type="image_ocr", feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
     assert filter_chunks_for_preview(chunks, feature="missing_anchor") == [chunks[0], chunks[1], chunks[2], chunks[3], chunks[4], chunks[5]]
+    assert filter_chunks_for_preview(chunks, feature="short_chunk") == [chunks[7]]
+    assert filter_chunks_for_preview(chunks, feature="large_chunk") == [chunks[8]]
+    assert filter_chunks_for_preview(chunks, feature="size_issue") == [chunks[7], chunks[8]]
     assert filter_chunks_for_preview(chunks, query="overview") == [chunks[0]]
     assert filter_chunks_for_preview(chunks, query="recall") == [chunks[1]]
     assert filter_chunks_for_preview(chunks, content_type="table", query="recall") == [chunks[1]]
@@ -600,5 +605,7 @@ def test_build_parse_quality_summary_scores_chunk_size_and_anchor_coverage():
     assert checks["chunk_anchors"]["feature_filter"] == "missing_anchor"
     assert checks["chunk_anchors"]["filter_label"] == "查看缺定位切块"
     assert checks["chunk_size"]["status"] == "warn"
+    assert checks["chunk_size"]["feature_filter"] == "size_issue"
+    assert checks["chunk_size"]["filter_label"] == "查看尺寸异常切块"
     assert any("切块定位覆盖率偏低" in warning for warning in summary["warnings"])
     assert any("切块大小分布不均" in warning for warning in summary["warnings"])

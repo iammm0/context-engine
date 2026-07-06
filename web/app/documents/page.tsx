@@ -31,6 +31,7 @@ const chunkFeatureFilterBaseOptions: ChunkFilterOption[] = [
   { value: "table_artifact_issue", label: "表格问题" },
   { value: "ocr_artifact_issue", label: "OCR问题" },
   { value: "missing_anchor", label: "缺定位" },
+  { value: "size_issue", label: "尺寸异常" },
 ];
 
 const featureFlagLabel: Record<string, string> = {
@@ -43,6 +44,9 @@ const featureFlagLabel: Record<string, string> = {
   ocr_artifact_issue: "OCR问题",
   missing_anchor: "缺定位",
   location_issue: "定位问题",
+  short_chunk: "过短",
+  large_chunk: "过长",
+  size_issue: "尺寸异常",
 };
 
 type ChunkDeepLinkTarget = {
@@ -122,6 +126,7 @@ function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null): Chu
     table_artifact_issue: quality?.table_artifact_issue_count,
     ocr_artifact_issue: quality?.ocr_artifact_issue_count,
     missing_anchor: quality?.chunk_missing_anchor_count,
+    size_issue: (quality?.chunk_short_count || 0) + (quality?.chunk_large_count || 0),
   };
   return chunkFeatureFilterBaseOptions.map((option) => ({
     ...option,
