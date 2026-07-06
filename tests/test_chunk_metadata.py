@@ -190,6 +190,7 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
                 "text": "图中包含召回率 0.92\n更多说明",
                 "width": 640,
                 "height": 320,
+                "bbox": [10, 20, 300, 180],
             }
         ],
     }
@@ -216,6 +217,7 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
     assert artifact["images"][0]["text_preview"] == "图中包含召回率 0.92 更多说明"
     assert artifact["images"][0]["width"] == 640
     assert artifact["images"][0]["height"] == 320
+    assert artifact["images"][0]["bbox"] == [10, 20, 300, 180]
 
 
 def test_ocr_artifact_marks_low_confidence_image_refs_without_markers():

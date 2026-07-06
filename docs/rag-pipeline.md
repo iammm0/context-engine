@@ -130,6 +130,9 @@ For table and OCR chunks, preview responses include a compact `artifact`:
   `confidence`, `line_count`, `text_length`, compact `text_preview`,
   optional `bbox`, `low_confidence`, `width`, `height`, and parser source
   `target` for embedded Word images.
+  The OCR parser merges recognized line boxes into a compact image-level bbox
+  so standalone images, PDF images, and Word embedded images can share the same
+  source locator shape when OCR boxes are available.
 The document chunk inspector and chat evidence cards render these table/OCR refs
 as source locator blocks, so reviewers can inspect page, table/image index,
 parser target, dimensions, confidence, and bbox metadata without opening raw

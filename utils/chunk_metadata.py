@@ -778,6 +778,7 @@ def _build_ocr_ref(page: Optional[int], image_index: Optional[int], image_meta: 
         "width": image_meta.get("width"),
         "height": image_meta.get("height"),
         "target": image_meta.get("target"),
+        "bbox": image_meta.get("bbox"),
     }
     text_preview = _ocr_text_preview(image_meta)
     if text_preview:

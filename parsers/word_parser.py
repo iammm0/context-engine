@@ -41,6 +41,7 @@ def _build_word_image_ocr_metadata(images_info: List[Dict[str, Any]]) -> Dict[st
                 "text_preview": compact_ocr_text(image.get("ocr_text")),
                 "width": image.get("width"),
                 "height": image.get("height"),
+                "bbox": image.get("bbox"),
             }
             for image in images_info
         ],
@@ -312,6 +313,7 @@ class WordParser(BaseParser):
                                     images_info[-1]["ocr_text"] = ocr_text
                                     images_info[-1]["confidence"] = ocr_result.get("confidence", 0.0)
                                     images_info[-1]["line_count"] = ocr_result.get("line_count", 0)
+                                    images_info[-1]["bbox"] = ocr_result.get("bbox")
                             finally:
                                 try:
                                     os.unlink(tmp_path)

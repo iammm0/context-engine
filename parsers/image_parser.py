@@ -58,6 +58,7 @@ class ImageParser(BaseParser):
                         "confidence": ocr_result.get("confidence", 0.0),
                         "line_count": ocr_result.get("line_count", 0),
                         "text_length": len(text),
+                        "bbox": ocr_result.get("bbox"),
                     }
                 ] if text else [],
             },
@@ -66,6 +67,8 @@ class ImageParser(BaseParser):
             metadata["error"] = ocr_result["error"]
         if ocr_result.get("boxes"):
             metadata["boxes"] = ocr_result["boxes"]
+        if ocr_result.get("bbox"):
+            metadata["bbox"] = ocr_result["bbox"]
         return {"text": text, "metadata": metadata}
 
     def supported_extensions(self) -> List[str]:

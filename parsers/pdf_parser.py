@@ -172,6 +172,7 @@ class PDFParser(BaseParser):
                                         "text_preview": _compact_ocr_text(image.get("text")),
                                         "width": image.get("width"),
                                         "height": image.get("height"),
+                                        "bbox": image.get("bbox"),
                                     }
                                     for image in ocr_images
                                 ],

@@ -4,6 +4,52 @@ from utils.logger import logger
 import os
 
 
+def _clean_coord(value: float) -> int | float:
+    rounded = round(float(value), 2)
+    return int(rounded) if rounded.is_integer() else rounded
+
+
+def _bbox_from_boxes(boxes: List[Any]) -> Optional[List[int | float]]:
+    """Merge OCR line boxes into one compact [x1, y1, x2, y2] bbox."""
+    xs: List[float] = []
+    ys: List[float] = []
+
+    def add_point(x_value: Any, y_value: Any) -> None:
+        if isinstance(x_value, (int, float)) and isinstance(y_value, (int, float)):
+            xs.append(float(x_value))
+            ys.append(float(y_value))
+
+    for box in boxes or []:
+        if isinstance(box, dict):
+            left = box.get("left", box.get("x1", box.get("x")))
+            top = box.get("top", box.get("y1", box.get("y")))
+            right = box.get("right", box.get("x2"))
+            bottom = box.get("bottom", box.get("y2"))
+            width = box.get("width", box.get("w"))
+            height = box.get("height", box.get("h"))
+            if right is None and isinstance(left, (int, float)) and isinstance(width, (int, float)):
+                right = float(left) + float(width)
+            if bottom is None and isinstance(top, (int, float)) and isinstance(height, (int, float)):
+                bottom = float(top) + float(height)
+            add_point(left, top)
+            add_point(right, bottom)
+            continue
+
+        if not isinstance(box, (list, tuple)):
+            continue
+        if len(box) == 4 and all(isinstance(value, (int, float)) for value in box):
+            add_point(box[0], box[1])
+            add_point(box[2], box[3])
+            continue
+        for point in box:
+            if isinstance(point, (list, tuple)) and len(point) >= 2:
+                add_point(point[0], point[1])
+
+    if not xs or not ys:
+        return None
+    return [_clean_coord(min(xs)), _clean_coord(min(ys)), _clean_coord(max(xs)), _clean_coord(max(ys))]
+
+
 class ImageOCR:
     """图片OCR工具类"""
     
@@ -115,6 +161,7 @@ class ImageOCR:
                 "text": full_text,
                 "confidence": avg_confidence,
                 "boxes": boxes,
+                "bbox": _bbox_from_boxes(boxes),
                 "line_count": len(text_parts),
                 "lines": lines,
             }
@@ -201,6 +248,7 @@ class ImageOCR:
                                 "height": base_image.get("height"),
                                 "text": ocr_result.get("text", ""),
                                 "confidence": ocr_result.get("confidence", 0.0),
+                                "bbox": ocr_result.get("bbox"),
                                 "line_count": ocr_result.get("line_count", 0),
                                 "lines": ocr_result.get("lines", []),
                             })
