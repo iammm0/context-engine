@@ -25,14 +25,19 @@ Markdown.
 - Citation recall
 - Citation precision
 - Artifact quality
+- Source locator quality
 - Citation quality
 
 `Artifact quality` checks whether retrieved evidence preserves structured
-preview artifacts needed by document review and answer citation UI:
+preview artifacts and normalized source locators needed by document review and
+answer citation UI:
 
 - gold chunk coverage and missing gold chunk indices
 - artifact coverage among retrieved evidence
 - structured artifact coverage for table, OCR, formula, and code chunks
+- source locator coverage among retrieved evidence
+- source locator coverage for gold hits and structured evidence
+- bbox, table-source, OCR-source, and source-anchor locator counts
 - table artifact structure and source-reference retention
 - OCR source-reference coverage, low-confidence image counts, and average OCR
   confidence
@@ -71,10 +76,15 @@ the top level of the dataset item. Supported structured artifact types are
 The JSON result now includes an `items` array with per-query diagnostics:
 
 - `artifact_quality`: per-query gold coverage, artifact coverage, table/OCR
-  completeness, and missing required artifact types
+  completeness, source locator coverage, and missing required artifact types
 - `citation_quality`: optional per-query citation diagnostics when an answer or
   precomputed citation quality object is available
 
 The aggregate values are also written under `metrics.artifact` and
 `metrics.citation_quality`, and the Markdown report renders separate
-`Artifact Quality` and `Citation Quality` sections.
+`Artifact Quality` and `Citation Quality` sections. The `Artifact Quality`
+section includes source locator coverage rows such as
+`avg_source_locator_coverage`, `avg_structured_source_locator_coverage`, and
+`structured_missing_source_locator_count`, so evaluation runs can catch evidence
+that retrieves the right chunk but cannot reliably jump back to the original
+page, table, OCR image, or bbox.

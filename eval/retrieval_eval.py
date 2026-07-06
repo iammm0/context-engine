@@ -62,6 +62,64 @@ def _artifact_from_payload(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _source_locator_from_payload(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    metadata = _metadata_from_payload(payload)
+    locator = metadata.get("source_locator")
+    if isinstance(locator, dict):
+        return locator
+
+    locator = payload.get("source_locator")
+    if isinstance(locator, dict):
+        return locator
+
+    visual = metadata.get("visual")
+    if isinstance(visual, dict) and isinstance(visual.get("source_locator"), dict):
+        return visual["source_locator"]
+    return None
+
+
+def _source_locator_anchor_count(locator: Optional[Dict[str, Any]]) -> int:
+    if not isinstance(locator, dict):
+        return 0
+    anchors = locator.get("anchors")
+    anchor_list_count = len(anchors) if isinstance(anchors, list) else 0
+    anchor_count = locator.get("anchor_count")
+    if isinstance(anchor_count, int):
+        return max(anchor_count, anchor_list_count, 0)
+    return anchor_list_count
+
+
+def _source_locator_has_anchor(locator: Optional[Dict[str, Any]]) -> bool:
+    return _source_locator_anchor_count(locator) > 0
+
+
+def _source_locator_has_bbox(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_bbox"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("bbox") is not None for anchor in anchors)
+
+
+def _source_locator_has_table_source(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_table_source"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("type") == "table" for anchor in anchors)
+
+
+def _source_locator_has_image_source(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_image_source"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("type") == "image" for anchor in anchors)
+
+
 def _normalize_artifact_type(value: Any) -> str:
     return str(value or "").strip().lower()
 
@@ -153,6 +211,9 @@ def results_to_evidence_items(results: List[Dict[str, Any]]) -> List[Dict[str, A
         artifact = _artifact_from_payload(payload)
         if artifact and not isinstance(metadata.get("artifact"), dict):
             metadata["artifact"] = artifact
+        source_locator = _source_locator_from_payload(payload)
+        if source_locator and not isinstance(metadata.get("source_locator"), dict):
+            metadata["source_locator"] = source_locator
 
         chunk_index = payload.get("chunk_index")
         score = result.get("score", result.get("combined_score", 0.0))
@@ -216,10 +277,19 @@ def build_artifact_diagnostics(
     retrieved_count = len(results)
     gold_hit_count = 0
     gold_hit_artifact_count = 0
+    gold_hit_source_locator_count = 0
     gold_found_indices = set()
     artifact_evidence_count = 0
     structured_evidence_count = 0
     structured_artifact_count = 0
+    source_locator_count = 0
+    structured_source_locator_count = 0
+    missing_source_locator_count = 0
+    structured_missing_source_locator_count = 0
+    bbox_source_locator_count = 0
+    table_source_locator_count = 0
+    ocr_source_locator_count = 0
+    source_anchor_count = 0
     table_artifact_count = 0
     table_artifact_complete_count = 0
     table_artifact_with_source_count = 0
@@ -234,9 +304,11 @@ def build_artifact_diagnostics(
         payload = _result_payload(result)
         metadata = _metadata_from_payload(payload)
         artifact = _artifact_from_payload(payload)
+        source_locator = _source_locator_from_payload(payload)
         content_type = _content_type_from_payload(payload, artifact)
         artifact_type = _normalize_artifact_type((artifact or {}).get("type") or content_type)
         is_structured = content_type in STRUCTURED_ARTIFACT_TYPES or artifact_type in STRUCTURED_ARTIFACT_TYPES
+        has_source_locator = _source_locator_has_anchor(source_locator)
 
         chunk_index = payload.get("chunk_index")
         is_gold_hit = (
@@ -248,6 +320,8 @@ def build_artifact_diagnostics(
         if is_gold_hit:
             gold_hit_count += 1
             gold_found_indices.add(chunk_index)
+            if has_source_locator:
+                gold_hit_source_locator_count += 1
 
         if artifact:
             artifact_evidence_count += 1
@@ -260,6 +334,22 @@ def build_artifact_diagnostics(
             structured_evidence_count += 1
             if artifact:
                 structured_artifact_count += 1
+            if has_source_locator:
+                structured_source_locator_count += 1
+            else:
+                structured_missing_source_locator_count += 1
+
+        if has_source_locator:
+            source_locator_count += 1
+            source_anchor_count += _source_locator_anchor_count(source_locator)
+            if _source_locator_has_bbox(source_locator):
+                bbox_source_locator_count += 1
+            if _source_locator_has_table_source(source_locator):
+                table_source_locator_count += 1
+            if _source_locator_has_image_source(source_locator):
+                ocr_source_locator_count += 1
+        else:
+            missing_source_locator_count += 1
 
         if artifact and artifact_type == "table":
             table_artifact_count += 1
@@ -297,11 +387,23 @@ def build_artifact_diagnostics(
         "gold_coverage": _safe_ratio(len(gold_found_indices), len(gold_index_set)),
         "gold_hit_artifact_count": gold_hit_artifact_count,
         "gold_hit_artifact_coverage": _safe_ratio(gold_hit_artifact_count, gold_hit_count),
+        "gold_hit_source_locator_count": gold_hit_source_locator_count,
+        "gold_hit_source_locator_coverage": _safe_ratio(gold_hit_source_locator_count, gold_hit_count),
         "artifact_evidence_count": artifact_evidence_count,
         "artifact_coverage": _safe_ratio(artifact_evidence_count, retrieved_count),
         "structured_evidence_count": structured_evidence_count,
         "structured_artifact_count": structured_artifact_count,
         "structured_artifact_coverage": _safe_ratio(structured_artifact_count, structured_evidence_count),
+        "source_locator_count": source_locator_count,
+        "source_locator_coverage": _safe_ratio(source_locator_count, retrieved_count),
+        "structured_source_locator_count": structured_source_locator_count,
+        "structured_source_locator_coverage": _safe_ratio(structured_source_locator_count, structured_evidence_count),
+        "missing_source_locator_count": missing_source_locator_count,
+        "structured_missing_source_locator_count": structured_missing_source_locator_count,
+        "bbox_source_locator_count": bbox_source_locator_count,
+        "table_source_locator_count": table_source_locator_count,
+        "ocr_source_locator_count": ocr_source_locator_count,
+        "source_anchor_count": source_anchor_count,
         "artifact_type_counts": artifact_type_counts,
         "required_artifact_types": sorted(required_types),
         "missing_required_artifact_types": missing_required_types,
@@ -325,9 +427,18 @@ def summarize_artifact_diagnostics(items: List[Dict[str, Any]]) -> Dict[str, Any
         "gold_hit_count",
         "gold_found_count",
         "gold_hit_artifact_count",
+        "gold_hit_source_locator_count",
         "artifact_evidence_count",
         "structured_evidence_count",
         "structured_artifact_count",
+        "source_locator_count",
+        "structured_source_locator_count",
+        "missing_source_locator_count",
+        "structured_missing_source_locator_count",
+        "bbox_source_locator_count",
+        "table_source_locator_count",
+        "ocr_source_locator_count",
+        "source_anchor_count",
         "table_artifact_count",
         "table_artifact_complete_count",
         "table_artifact_with_source_count",
@@ -338,8 +449,11 @@ def summarize_artifact_diagnostics(items: List[Dict[str, Any]]) -> Dict[str, Any
     ratio_fields = [
         "gold_coverage",
         "gold_hit_artifact_coverage",
+        "gold_hit_source_locator_coverage",
         "artifact_coverage",
         "structured_artifact_coverage",
+        "source_locator_coverage",
+        "structured_source_locator_coverage",
         "ocr_average_confidence",
     ]
 
@@ -549,11 +663,21 @@ def _to_markdown(result: Dict[str, Any]) -> str:
             "evaluated_count",
             "avg_gold_coverage",
             "avg_gold_hit_artifact_coverage",
+            "avg_gold_hit_source_locator_coverage",
             "avg_artifact_coverage",
             "avg_structured_artifact_coverage",
+            "avg_source_locator_coverage",
+            "avg_structured_source_locator_coverage",
             "artifact_evidence_count",
             "structured_evidence_count",
             "structured_artifact_count",
+            "source_locator_count",
+            "structured_source_locator_count",
+            "structured_missing_source_locator_count",
+            "bbox_source_locator_count",
+            "table_source_locator_count",
+            "ocr_source_locator_count",
+            "source_anchor_count",
             "table_artifact_complete_count",
             "table_artifact_with_source_count",
             "ocr_artifact_with_source_count",
