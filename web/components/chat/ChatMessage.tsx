@@ -231,6 +231,12 @@ function appendChunkInspectorContext(params: URLSearchParams, contentType?: stri
   if (normalizedFeature) params.set("feature", normalizedFeature);
 }
 
+function appendEvidenceDeepLinkContext(params: URLSearchParams, evidenceId?: string | null) {
+  const normalizedEvidenceId = evidenceId?.trim();
+  if (normalizedEvidenceId) params.set("evidence_id", normalizedEvidenceId);
+  params.set("context_window", "6");
+}
+
 type CitationUseState = "used" | "unused" | "unknown";
 
 function citationUseBadge(state: CitationUseState) {
@@ -255,6 +261,7 @@ function buildSourceChunkHref(source: SourceInfo) {
   if (source.chunk_id) params.set("chunk_id", source.chunk_id);
   if (typeof source.chunk_index === "number") params.set("chunk_index", String(source.chunk_index));
   appendChunkInspectorContext(params, source.content_type || source.artifact?.type || null, null);
+  appendEvidenceDeepLinkContext(params, source.evidence_id);
   return `/documents?${params.toString()}`;
 }
 
@@ -264,6 +271,7 @@ function buildEvidenceChunkHref(item: EvidenceItem) {
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
   appendChunkInspectorContext(params, getEvidenceType(item), artifactIssueFeature(item.metadata?.artifact_quality));
+  appendEvidenceDeepLinkContext(params, item.id);
   return `/documents?${params.toString()}`;
 }
 
@@ -273,6 +281,7 @@ function buildCitationEvidenceChunkHref(item: CitationEvidenceRef) {
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
   appendChunkInspectorContext(params, item.content_type || null, null);
+  appendEvidenceDeepLinkContext(params, item.id);
   return `/documents?${params.toString()}`;
 }
 

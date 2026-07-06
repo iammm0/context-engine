@@ -117,6 +117,8 @@ Query parameters:
   near its surrounding context.
 - `context_window`: number of chunks to keep before the target when using a
   target locator, default `4`.
+- `evidence_id`: optional UI label for chunk deep links opened from chat
+  evidence or citation diagnostics.
 
 The response includes `total_chunks` for the current filtered result and
 `total_all_chunks` for the full document chunk count. When a target locator is
@@ -194,7 +196,9 @@ locator, opening the chunk inspector around the cited chunk for source review.
 Those deep links can also carry `content_type` and `feature`, so table/OCR
 evidence opens with the matching type filter and incomplete artifact evidence
 opens directly inside the relevant issue filter, such as `table_missing_source`
-or `ocr_low_confidence`.
+or `ocr_low_confidence`. They also carry `evidence_id` and `context_window`
+when opened from chat, letting the document page label the highlighted chunk
+with the evidence id and load surrounding chunks for review.
 Source and evidence cards also expose an original-file preview link backed by
 `/api/documents/{doc_id}/preview`, with `#page=N` for page-aware PDF viewers
 when a page locator is available.

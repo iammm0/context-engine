@@ -75,6 +75,8 @@ type ChunkDeepLinkTarget = {
   chunkIndex?: number;
   contentType?: string;
   feature?: string;
+  evidenceId?: string;
+  contextWindow?: number;
 };
 
 type ParseQualityCheckItem = NonNullable<ParseQualitySummary["quality_checks"]>[number];
@@ -96,12 +98,20 @@ function parseChunkDeepLinkTarget(): ChunkDeepLinkTarget | null {
   const chunkIndex = Number.isFinite(parsedIndex) && parsedIndex >= 0 ? parsedIndex : undefined;
   const contentType = params.get("content_type")?.trim() || undefined;
   const feature = params.get("feature")?.trim() || undefined;
+  const evidenceId = params.get("evidence_id")?.trim() || undefined;
+  const rawContextWindow = params.get("context_window");
+  const parsedContextWindow = rawContextWindow !== null ? Number.parseInt(rawContextWindow, 10) : Number.NaN;
+  const contextWindow = Number.isFinite(parsedContextWindow)
+    ? Math.max(0, Math.min(50, parsedContextWindow))
+    : undefined;
   return {
     documentId,
     chunkId,
     chunkIndex,
     contentType: contentType && contentType !== "all" ? contentType : undefined,
     feature: feature && feature !== "all" ? feature : undefined,
+    evidenceId,
+    contextWindow,
   };
 }
 
@@ -112,6 +122,8 @@ function chunkTargetKey(target: ChunkDeepLinkTarget) {
     typeof target.chunkIndex === "number" ? target.chunkIndex : "",
     target.contentType || "",
     target.feature || "",
+    target.evidenceId || "",
+    typeof target.contextWindow === "number" ? target.contextWindow : "",
   ].join(":");
 }
 
@@ -670,6 +682,7 @@ export default function DocumentsPage() {
         targetChunkId?: string;
         targetChunkIndex?: number;
         contextWindow?: number;
+        evidenceId?: string;
       },
     ) => {
       const append = options?.append ?? false;
@@ -720,6 +733,8 @@ export default function DocumentsPage() {
                 typeof result.data?.target_chunk_index === "number"
                   ? result.data.target_chunk_index
                   : options.targetChunkIndex,
+              evidenceId: options.evidenceId,
+              contextWindow: options.contextWindow,
             });
           }
         }
@@ -841,7 +856,8 @@ export default function DocumentsPage() {
       await loadChunkPreview(targetDoc, nextFilter, nextFeature, "", {
         targetChunkId: target.chunkId,
         targetChunkIndex: target.chunkIndex,
-        contextWindow: 6,
+        contextWindow: target.contextWindow ?? 6,
+        evidenceId: target.evidenceId,
       });
     };
 
@@ -1416,6 +1432,16 @@ export default function DocumentsPage() {
                         <span className="rounded bg-gray-900 px-2 py-1 font-medium text-white dark:bg-gray-100 dark:text-gray-900">
                           #{typeof chunk.chunk_index === "number" ? chunk.chunk_index + 1 : "-"}
                         </span>
+                        {highlighted && (
+                          <span className="rounded bg-amber-100 px-2 py-1 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                            {highlightedChunkTarget?.evidenceId ? `证据 ${highlightedChunkTarget.evidenceId}` : "目标证据"}
+                          </span>
+                        )}
+                        {highlighted && typeof highlightedChunkTarget?.contextWindow === "number" && (
+                          <span className="rounded bg-amber-50 px-2 py-1 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                            上下文 {highlightedChunkTarget.contextWindow}
+                          </span>
+                        )}
                         <span className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
                           {typeLabel}
                         </span>
