@@ -20,6 +20,21 @@ class FakeDocumentRepo:
         }
 
 
+class FakePreviewDocumentRepo:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def get_document(self, doc_id):
+        return {
+            "_id": doc_id,
+            "title": "Demo.pdf",
+            "status": "completed",
+            "file_type": "pdf",
+            "file_path": str(self.file_path),
+            "metadata": {},
+        }
+
+
 class FakeChunkRepo:
     def get_chunks_by_document(self, document_id):
         return [
@@ -140,3 +155,15 @@ async def test_get_document_chunks_centers_target_inside_filtered_artifact_issue
     assert response.filters == {"content_type": "table", "feature": "table_missing_source", "q": None}
     assert [chunk["chunk_index"] for chunk in response.chunks] == [4]
     assert response.chunks[0]["features"]["has_table_missing_source"] is True
+
+
+@pytest.mark.asyncio
+async def test_preview_document_serves_original_file_inline(monkeypatch, tmp_path):
+    file_path = tmp_path / "demo.pdf"
+    file_path.write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakePreviewDocumentRepo(file_path))
+
+    response = await documents_router.preview_document("doc1")
+
+    assert response.media_type == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")

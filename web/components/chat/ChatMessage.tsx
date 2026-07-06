@@ -4,6 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import BboxMiniMap from "@/components/ui/BboxMiniMap";
+import { buildDocumentPreviewUrl } from "@/lib/api";
 import { formatChatTimestamp } from "@/lib/timezone";
 import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
@@ -571,6 +572,7 @@ function ChatMessageImpl({
             <ul className="space-y-1">
               {message.sources.slice(0, 10).map((source) => {
                 const chunkHref = buildSourceChunkHref(source);
+                const previewHref = buildDocumentPreviewUrl(source.document_id, source.page_start || source.page || null);
                 const useBadge = citationUseBadge(getCitationUseState(source.evidence_id));
                 return (
                   <li
@@ -611,6 +613,11 @@ function ChatMessageImpl({
                           查看切块
                         </Link>
                       )}
+                      {previewHref && (
+                        <a href={previewHref} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
+                          打开原文
+                        </a>
+                      )}
                     </div>
                   </li>
                 );
@@ -629,6 +636,7 @@ function ChatMessageImpl({
             <ul className="mt-1 space-y-1">
               {message.evidence.slice(0, 8).map((item) => {
                 const chunkHref = buildEvidenceChunkHref(item);
+                const previewHref = buildDocumentPreviewUrl(item.document_id, item.metadata?.page_start || item.page || null);
                 const useBadge = citationUseBadge(getCitationUseState(item.id));
                 return (
                   <li
@@ -669,6 +677,11 @@ function ChatMessageImpl({
                           查看切块
                         </Link>
                       )}
+                      {previewHref && (
+                        <a href={previewHref} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
+                          打开原文
+                        </a>
+                      )}
                     </div>
                     <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                       {item.metadata?.preview || item.text}
@@ -706,6 +719,7 @@ function ChatMessageImpl({
             <div className="space-y-1">
               {message.citation_quality.unreferenced_top_evidence.slice(0, 3).map((item) => {
                 const chunkHref = buildCitationEvidenceChunkHref(item);
+                const previewHref = buildDocumentPreviewUrl(item.document_id, item.page_start || item.page || null);
                 const location = formatCitationEvidenceLocation(item);
                 const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
                 return (
@@ -747,6 +761,11 @@ function ChatMessageImpl({
                         <Link href={chunkHref} className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
                           查看切块
                         </Link>
+                      )}
+                      {previewHref && (
+                        <a href={previewHref} target="_blank" rel="noreferrer" className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
+                          打开原文
+                        </a>
                       )}
                     </div>
                     {item.preview && (

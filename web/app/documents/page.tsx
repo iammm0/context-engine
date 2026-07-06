@@ -8,7 +8,7 @@ import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type TableSourceRef } from "@/lib/api";
+import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type TableSourceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -1291,6 +1291,7 @@ export default function DocumentsPage() {
               <div className="space-y-3">
                 {chunkPreview.map((chunk) => {
                   const typeLabel = contentTypeLabel[chunk.content_type] || chunk.content_type || "文本";
+                  const previewHref = buildDocumentPreviewUrl(chunk.document_id || chunkPanelDoc.id, chunk.page_start || chunk.page || null);
                   const featureFlags = Object.entries(chunk.features || {})
                     .filter(([, enabled]) => enabled)
                     .map(([key]) => {
@@ -1327,6 +1328,16 @@ export default function DocumentsPage() {
                             {flag.label}
                           </span>
                         ))}
+                        {previewHref && (
+                          <a
+                            href={previewHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded bg-white px-2 py-1 font-medium text-blue-600 ring-1 ring-inset ring-blue-100 hover:bg-blue-50 dark:bg-gray-900 dark:text-blue-300 dark:ring-blue-900/60 dark:hover:bg-gray-800"
+                          >
+                            打开原文
+                          </a>
+                        )}
                       </div>
                       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{formatChunkLocation(chunk)}</div>
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">

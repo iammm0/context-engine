@@ -1550,7 +1550,8 @@ async def preview_document(
         return FileResponse(
             path=file_path,
             filename=filename,
-            media_type=media_type
+            media_type=media_type,
+            content_disposition_type="inline",
         )
     except HTTPException:
         raise

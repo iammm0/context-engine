@@ -114,6 +114,10 @@ chunk inspector keeps the active `content_type`/`q` filters while using
 `skip`/`limit` to load more matching chunks for long documents. The
 document list also shows a compact parse quality line for completed documents
 when `metadata.parse_quality` is available.
+Chunk cards also link to `GET /api/documents/{doc_id}/preview`, using
+`#page=N` when page metadata is available, so reviewers can open the original
+file next to the structured preview. The preview response is served inline
+where the browser supports it.
 
 For table and OCR chunks, preview responses include a compact `artifact`:
 
@@ -164,6 +168,9 @@ Those deep links can also carry `content_type` and `feature`, so table/OCR
 evidence opens with the matching type filter and incomplete artifact evidence
 opens directly inside the relevant issue filter, such as `table_missing_source`
 or `ocr_low_confidence`.
+Source and evidence cards also expose an original-file preview link backed by
+`/api/documents/{doc_id}/preview`, with `#page=N` for page-aware PDF viewers
+when a page locator is available.
 Assistant messages can include `citation_quality` with citation coverage,
 valid/invalid citation ids, duplicate citations, unused evidence ids, and the
 highest-scored evidence that was not referenced. The UI displays this as a

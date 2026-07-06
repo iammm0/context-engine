@@ -317,6 +317,12 @@ export type RetrievalBody = {
   conversation_id?: string | null;
 };
 
+export function buildDocumentPreviewUrl(documentId?: string | null, page?: number | null) {
+  if (!documentId) return "";
+  const url = `/api/documents/${encodeURIComponent(documentId)}/preview`;
+  return typeof page === "number" && page > 0 ? `${url}#page=${page}` : url;
+}
+
 const apiClientImpl = {
   async getRuntimeSettings(): Promise<ApiResult<RuntimeConfigResponse>> {
     return requestJson<RuntimeConfigResponse>("/api/settings/runtime");
