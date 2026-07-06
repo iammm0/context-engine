@@ -138,7 +138,9 @@ valid/invalid citation ids, duplicate citations, unused evidence ids, and the
 highest-scored evidence that was not referenced. The UI displays this as a
 compact citation audit line next to any non-blocking `citation_warnings`, and
 renders unreferenced high-score evidence as locator cards that can highlight the
-current evidence entry or open the exact document chunk.
+current evidence entry or open the exact document chunk. Source and evidence
+cards also mark whether each evidence id was cited or left unused, making
+coverage gaps visible without reading the raw answer text.
 Assistant messages can also include `evidence_quality`, a runtime diagnostic for
 retrieved structured evidence. It reports artifact coverage, structured artifact
 coverage, table structure/source gaps, OCR source gaps, low-confidence OCR image

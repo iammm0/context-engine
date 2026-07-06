@@ -116,6 +116,24 @@ function formatArtifactQualityWarnings(item: EvidenceItem) {
   return quality.warnings.join(" · ");
 }
 
+type CitationUseState = "used" | "unused" | "unknown";
+
+function citationUseBadge(state: CitationUseState) {
+  if (state === "used") {
+    return {
+      label: "已引用",
+      className: "bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-200",
+    };
+  }
+  if (state === "unused") {
+    return {
+      label: "未引用",
+      className: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200",
+    };
+  }
+  return null;
+}
+
 function buildSourceChunkHref(source: SourceInfo) {
   if (!source.document_id) return "";
   const params = new URLSearchParams({ document_id: source.document_id });
@@ -321,6 +339,24 @@ function ChatMessageImpl({
     return [...ids];
   }, [message.evidence, message.sources]);
 
+  const citationUseSets = useMemo(
+    () => ({
+      used: new Set(message.citation_quality?.valid_citation_ids || []),
+      unused: new Set(message.citation_quality?.unused_evidence_ids || []),
+    }),
+    [message.citation_quality?.unused_evidence_ids, message.citation_quality?.valid_citation_ids],
+  );
+
+  const getCitationUseState = useCallback(
+    (evidenceId?: string | null): CitationUseState => {
+      if (!evidenceId) return "unknown";
+      if (citationUseSets.used.has(evidenceId)) return "used";
+      if (citationUseSets.unused.has(evidenceId)) return "unused";
+      return "unknown";
+    },
+    [citationUseSets],
+  );
+
   useEffect(() => {
     if (!isEditing) setEditContent(message.content);
   }, [message.content, isEditing]);
@@ -480,6 +516,7 @@ function ChatMessageImpl({
             <ul className="space-y-1">
               {message.sources.slice(0, 10).map((source) => {
                 const chunkHref = buildSourceChunkHref(source);
+                const useBadge = citationUseBadge(getCitationUseState(source.evidence_id));
                 return (
                   <li
                     key={`${source.chunk_id || source.document_id || source.file_id || source.evidence_id || source.document_title || source.score}`}
@@ -498,6 +535,11 @@ function ChatMessageImpl({
                       {source.content_type && (
                         <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
                           {evidenceTypeLabel[source.content_type] || source.content_type}
+                        </span>
+                      )}
+                      {useBadge && (
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${useBadge.className}`}>
+                          {useBadge.label}
                         </span>
                       )}
                       <span className="truncate font-medium">
@@ -532,6 +574,7 @@ function ChatMessageImpl({
             <ul className="mt-1 space-y-1">
               {message.evidence.slice(0, 8).map((item) => {
                 const chunkHref = buildEvidenceChunkHref(item);
+                const useBadge = citationUseBadge(getCitationUseState(item.id));
                 return (
                   <li
                     key={item.id}
@@ -551,6 +594,11 @@ function ChatMessageImpl({
                       <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
                         {evidenceTypeLabel[getEvidenceType(item)] || getEvidenceType(item)}
                       </span>
+                      {useBadge && (
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${useBadge.className}`}>
+                          {useBadge.label}
+                        </span>
+                      )}
                       <span className="truncate font-medium">
                         {item.document_title || item.document_id || item.file_id || "证据"}
                       </span>
