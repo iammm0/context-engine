@@ -30,6 +30,18 @@ def test_evidence_quality_passes_complete_structured_artifacts():
                     "rows": [["recall", "0.9"]],
                     "sources": [{"page": 2, "table_index": 1}],
                 },
+                "source_locator": {
+                    "source_type": "table",
+                    "page_start": 2,
+                    "page_end": 2,
+                    "anchor_count": 2,
+                    "has_table_source": True,
+                    "has_bbox": True,
+                    "anchors": [
+                        {"type": "page_range", "page_start": 2, "page_end": 2},
+                        {"type": "table", "page": 2, "table_index": 1, "bbox": [10, 20, 300, 180]},
+                    ],
+                },
             },
         ),
         EvidenceItem(
@@ -52,6 +64,18 @@ def test_evidence_quality_passes_complete_structured_artifacts():
                         }
                     ],
                 },
+                "source_locator": {
+                    "source_type": "image_ocr",
+                    "page_start": 3,
+                    "page_end": 3,
+                    "anchor_count": 2,
+                    "has_image_source": True,
+                    "has_bbox": True,
+                    "anchors": [
+                        {"type": "page_range", "page_start": 3, "page_end": 3},
+                        {"type": "image", "page": 3, "image_index": 1, "bbox": [20, 30, 420, 260]},
+                    ],
+                },
             },
         ),
     ]
@@ -63,6 +87,16 @@ def test_evidence_quality_passes_complete_structured_artifacts():
     assert diagnostics["evidence_count"] == 2
     assert diagnostics["artifact_coverage"] == 1
     assert diagnostics["structured_artifact_coverage"] == 1
+    assert diagnostics["source_locator_count"] == 2
+    assert diagnostics["source_locator_coverage"] == 1
+    assert diagnostics["structured_source_locator_count"] == 2
+    assert diagnostics["structured_source_locator_coverage"] == 1
+    assert diagnostics["missing_source_locator_count"] == 0
+    assert diagnostics["structured_missing_source_locator_count"] == 0
+    assert diagnostics["bbox_source_locator_count"] == 2
+    assert diagnostics["table_source_locator_count"] == 1
+    assert diagnostics["ocr_source_locator_count"] == 1
+    assert diagnostics["source_anchor_count"] == 4
     assert diagnostics["table_missing_structure_count"] == 0
     assert diagnostics["table_missing_source_count"] == 0
     assert diagnostics["ocr_missing_source_count"] == 0
@@ -117,12 +151,68 @@ def test_evidence_quality_warns_on_incomplete_table_and_ocr_artifacts():
     assert diagnostics["structured_evidence_count"] == 3
     assert diagnostics["structured_artifact_count"] == 2
     assert diagnostics["structured_artifact_coverage"] == 0.6667
+    assert diagnostics["source_locator_count"] == 0
+    assert diagnostics["source_locator_coverage"] == 0
+    assert diagnostics["structured_source_locator_count"] == 0
+    assert diagnostics["structured_source_locator_coverage"] == 0
+    assert diagnostics["missing_source_locator_count"] == 3
+    assert diagnostics["structured_missing_source_locator_count"] == 3
     assert diagnostics["table_missing_structure_count"] == 1
     assert diagnostics["table_missing_source_count"] == 1
     assert diagnostics["ocr_low_confidence_source_count"] == 1
     assert any("结构化证据缺少 artifact" in warning for warning in diagnostics["warnings"])
     assert any("表格证据缺少表头" in warning for warning in diagnostics["warnings"])
     assert any("置信度偏低" in warning for warning in diagnostics["warnings"])
+    assert any("统一来源定位" in warning for warning in diagnostics["warnings"])
+
+
+def test_evidence_quality_warns_when_structured_source_locator_is_missing():
+    evidence = [
+        {
+            "id": "S1",
+            "text": "完整表格 artifact 但没有 source_locator",
+            "score": 0.9,
+            "metadata": {
+                "content_type": "table",
+                "artifact": {
+                    "type": "table",
+                    "headers": ["指标", "数值"],
+                    "rows": [["precision", "0.8"]],
+                    "sources": [{"page": 2, "table_index": 1}],
+                },
+            },
+        },
+        {
+            "id": "S2",
+            "text": "普通文本证据可以定位",
+            "score": 0.8,
+            "metadata": {
+                "content_type": "text",
+                "source_locator": {
+                    "source_type": "text",
+                    "page_start": 4,
+                    "page_end": 4,
+                    "anchor_count": 1,
+                    "anchors": [{"type": "page_range", "page_start": 4, "page_end": 4}],
+                },
+            },
+        },
+    ]
+
+    diagnostics = build_evidence_quality_diagnostics(evidence)
+
+    assert diagnostics["status"] == "warn"
+    assert diagnostics["risk_level"] == "high"
+    assert diagnostics["artifact_coverage"] == 0.5
+    assert diagnostics["structured_artifact_coverage"] == 1
+    assert diagnostics["source_locator_count"] == 1
+    assert diagnostics["source_locator_coverage"] == 0.5
+    assert diagnostics["structured_source_locator_count"] == 0
+    assert diagnostics["structured_source_locator_coverage"] == 0
+    assert diagnostics["missing_source_locator_count"] == 1
+    assert diagnostics["structured_missing_source_locator_count"] == 1
+    assert diagnostics["source_anchor_count"] == 1
+    assert any("统一来源定位" in warning for warning in diagnostics["warnings"])
 
 
 def test_evidence_item_artifact_diagnostics_marks_specific_table_gap():
@@ -187,3 +277,5 @@ def test_evidence_quality_marks_empty_evidence_as_high_risk():
     assert diagnostics["evidence_count"] == 0
     assert diagnostics["artifact_coverage"] is None
     assert diagnostics["structured_artifact_coverage"] is None
+    assert diagnostics["source_locator_coverage"] is None
+    assert diagnostics["structured_source_locator_coverage"] is None

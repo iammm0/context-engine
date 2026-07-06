@@ -203,9 +203,10 @@ was cited or left unused, making coverage gaps visible without reading the raw
 answer text.
 Assistant messages can also include `evidence_quality`, a runtime diagnostic for
 retrieved structured evidence. It reports artifact coverage, structured artifact
-coverage, table structure/source gaps, OCR source gaps, low-confidence OCR image
-refs, and compact recommendations for re-parsing or reindexing when evidence is
-not source-complete.
+coverage, source locator coverage, missing locator counts, table/OCR/bbox
+locator counters, table structure/source gaps, OCR source gaps,
+low-confidence OCR image refs, and compact recommendations for re-parsing or
+reindexing when evidence is not source-complete.
 
 ## EvidenceItem
 
@@ -236,9 +237,12 @@ content type, score, preview text, and `source_locator` so clients can jump
 from a citation audit warning to the exact missing source.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
-`structured_artifact_coverage`, table/OCR completeness counters, warnings, and
-recommendations. This lets the chat UI expose when an answer used table or OCR
-evidence whose source preview is incomplete.
+`structured_artifact_coverage`, `source_locator_coverage`,
+`structured_source_locator_coverage`, `missing_source_locator_count`,
+`structured_missing_source_locator_count`, table/OCR completeness counters,
+source locator counters, warnings, and recommendations. This lets the chat UI
+expose when an answer used table or OCR evidence whose source preview or
+original-file locator is incomplete.
 Each structured evidence item can also carry `metadata.artifact_quality` with
 per-item warnings such as missing table structure, missing table source refs,
 missing OCR image refs, or low-confidence OCR refs. Evidence cards render these

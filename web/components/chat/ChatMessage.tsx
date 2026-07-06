@@ -122,6 +122,17 @@ function formatEvidenceQuality(quality?: EvidenceQuality | null) {
   } else if (typeof quality.artifact_coverage === "number") {
     bits.push(`artifact ${Math.round(quality.artifact_coverage * 100)}%`);
   }
+  if (typeof quality.source_locator_coverage === "number") {
+    bits.push(`定位 ${Math.round(quality.source_locator_coverage * 100)}%`);
+  }
+  if ((quality.structured_missing_source_locator_count || 0) > 0) {
+    bits.push(`结构化缺定位 ${quality.structured_missing_source_locator_count}`);
+  } else if ((quality.missing_source_locator_count || 0) > 0) {
+    bits.push(`缺定位 ${quality.missing_source_locator_count}`);
+  }
+  if ((quality.bbox_source_locator_count || 0) > 0) {
+    bits.push(`bbox定位 ${quality.bbox_source_locator_count}`);
+  }
   if (quality.table_missing_structure_count > 0) {
     bits.push(`表格结构缺失 ${quality.table_missing_structure_count}`);
   }

@@ -32,6 +32,54 @@ def _artifact(item: EvidenceItem | Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return artifact if isinstance(artifact, dict) else None
 
 
+def _source_locator(item: EvidenceItem | Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    metadata = _metadata(item)
+    locator = metadata.get("source_locator")
+    return locator if isinstance(locator, dict) else None
+
+
+def _source_locator_anchor_count(locator: Optional[Dict[str, Any]]) -> int:
+    if not isinstance(locator, dict):
+        return 0
+    anchors = locator.get("anchors")
+    anchor_list_count = len(anchors) if isinstance(anchors, list) else 0
+    anchor_count = locator.get("anchor_count")
+    if isinstance(anchor_count, int):
+        return max(anchor_count, anchor_list_count, 0)
+    return anchor_list_count
+
+
+def _source_locator_has_anchor(locator: Optional[Dict[str, Any]]) -> bool:
+    return _source_locator_anchor_count(locator) > 0
+
+
+def _source_locator_has_bbox(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_bbox"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("bbox") is not None for anchor in anchors)
+
+
+def _source_locator_has_table_source(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_table_source"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("type") == "table" for anchor in anchors)
+
+
+def _source_locator_has_image_source(locator: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(locator, dict):
+        return False
+    if locator.get("has_image_source"):
+        return True
+    anchors = locator.get("anchors") if isinstance(locator.get("anchors"), list) else []
+    return any(isinstance(anchor, dict) and anchor.get("type") == "image" for anchor in anchors)
+
+
 def _has_table_structure(artifact: Dict[str, Any]) -> bool:
     headers = artifact.get("headers")
     rows = artifact.get("rows")
@@ -158,6 +206,14 @@ def build_evidence_quality_diagnostics(
     ocr_missing_source_count = 0
     ocr_low_confidence_source_count = 0
     ocr_confidence_values: List[float] = []
+    source_locator_count = 0
+    structured_source_locator_count = 0
+    missing_source_locator_count = 0
+    structured_missing_source_locator_count = 0
+    bbox_source_locator_count = 0
+    table_source_locator_count = 0
+    ocr_source_locator_count = 0
+    source_anchor_count = 0
     content_type_counts: Dict[str, int] = {}
     artifact_type_counts: Dict[str, int] = {}
 
@@ -165,6 +221,8 @@ def build_evidence_quality_diagnostics(
         artifact = _artifact(item)
         content_type = _content_type(item, artifact)
         artifact_type = _artifact_type(artifact, content_type)
+        locator = _source_locator(item)
+        has_source_locator = _source_locator_has_anchor(locator)
         content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
 
         if artifact:
@@ -172,10 +230,26 @@ def build_evidence_quality_diagnostics(
             artifact_type_counts[artifact_type] = artifact_type_counts.get(artifact_type, 0) + 1
 
         is_structured = content_type in STRUCTURED_EVIDENCE_TYPES or artifact_type in STRUCTURED_EVIDENCE_TYPES
+        if has_source_locator:
+            source_locator_count += 1
+            source_anchor_count += _source_locator_anchor_count(locator)
+            if _source_locator_has_bbox(locator):
+                bbox_source_locator_count += 1
+            if _source_locator_has_table_source(locator):
+                table_source_locator_count += 1
+            if _source_locator_has_image_source(locator):
+                ocr_source_locator_count += 1
+        else:
+            missing_source_locator_count += 1
+
         if is_structured:
             structured_count += 1
             if artifact:
                 structured_with_artifact_count += 1
+            if has_source_locator:
+                structured_source_locator_count += 1
+            else:
+                structured_missing_source_locator_count += 1
 
         if content_type == "table" or artifact_type == "table":
             table_count += 1
@@ -199,6 +273,10 @@ def build_evidence_quality_diagnostics(
     artifact_coverage = round(artifact_count / evidence_count, 4) if evidence_count else None
     structured_artifact_coverage = (
         round(structured_with_artifact_count / structured_count, 4) if structured_count else None
+    )
+    source_locator_coverage = round(source_locator_count / evidence_count, 4) if evidence_count else None
+    structured_source_locator_coverage = (
+        round(structured_source_locator_count / structured_count, 4) if structured_count else None
     )
     ocr_avg_confidence = (
         round(sum(ocr_confidence_values) / len(ocr_confidence_values), 4)
@@ -224,13 +302,23 @@ def build_evidence_quality_diagnostics(
     if ocr_low_confidence_source_count:
         warnings.append(f"{ocr_low_confidence_source_count} 个 OCR 图片来源置信度偏低")
         recommendations.append("低置信 OCR 证据需要人工复核或提高图片解析质量")
+    if structured_missing_source_locator_count:
+        warnings.append(f"{structured_missing_source_locator_count} 条结构化证据缺少统一来源定位")
+        recommendations.append("重新解析或重建索引，确保 source_locator 保留页码、字符范围、表格/OCR来源和 bbox")
+    elif missing_source_locator_count:
+        warnings.append(f"{missing_source_locator_count} 条证据缺少统一来源定位")
+        recommendations.append("重建索引，确保检索证据携带 source_locator，便于答案引用回到原文位置")
 
     if evidence_count == 0:
         status = "no_evidence"
         risk_level = "high"
     elif warnings:
         status = "warn"
-        risk_level = "high" if table_missing_structure_count or ocr_missing_source_count else "medium"
+        risk_level = (
+            "high"
+            if table_missing_structure_count or ocr_missing_source_count or structured_missing_source_locator_count
+            else "medium"
+        )
     else:
         status = "pass"
         risk_level = "low"
@@ -244,6 +332,16 @@ def build_evidence_quality_diagnostics(
         "structured_evidence_count": structured_count,
         "structured_artifact_count": structured_with_artifact_count,
         "structured_artifact_coverage": structured_artifact_coverage,
+        "source_locator_count": source_locator_count,
+        "source_locator_coverage": source_locator_coverage,
+        "structured_source_locator_count": structured_source_locator_count,
+        "structured_source_locator_coverage": structured_source_locator_coverage,
+        "missing_source_locator_count": missing_source_locator_count,
+        "structured_missing_source_locator_count": structured_missing_source_locator_count,
+        "bbox_source_locator_count": bbox_source_locator_count,
+        "table_source_locator_count": table_source_locator_count,
+        "ocr_source_locator_count": ocr_source_locator_count,
+        "source_anchor_count": source_anchor_count,
         "table_count": table_count,
         "table_missing_structure_count": table_missing_structure_count,
         "table_missing_source_count": table_missing_source_count,

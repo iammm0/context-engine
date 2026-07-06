@@ -232,6 +232,16 @@ export interface EvidenceQuality {
   structured_evidence_count: number;
   structured_artifact_count: number;
   structured_artifact_coverage?: number | null;
+  source_locator_count?: number;
+  source_locator_coverage?: number | null;
+  structured_source_locator_count?: number;
+  structured_source_locator_coverage?: number | null;
+  missing_source_locator_count?: number;
+  structured_missing_source_locator_count?: number;
+  bbox_source_locator_count?: number;
+  table_source_locator_count?: number;
+  ocr_source_locator_count?: number;
+  source_anchor_count?: number;
   table_count: number;
   table_missing_structure_count: number;
   table_missing_source_count: number;
