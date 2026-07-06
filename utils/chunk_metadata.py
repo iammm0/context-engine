@@ -1016,8 +1016,16 @@ def _artifact_issue_feature_flags(
     flags = {"has_artifact_issue": True}
     if normalized_type == "table" or artifact_type == "table":
         flags["has_table_artifact_issue"] = True
+        if artifact_quality.get("table_missing_structure"):
+            flags["has_table_missing_structure"] = True
+        if artifact_quality.get("table_missing_source"):
+            flags["has_table_missing_source"] = True
     if normalized_type in {"image_ocr", "ocr"} or artifact_type in {"image_ocr", "ocr"}:
         flags["has_ocr_artifact_issue"] = True
+        if artifact_quality.get("ocr_missing_source"):
+            flags["has_ocr_missing_source"] = True
+        if int(artifact_quality.get("ocr_low_confidence_source_count") or 0) > 0:
+            flags["has_ocr_low_confidence"] = True
     return flags
 
 

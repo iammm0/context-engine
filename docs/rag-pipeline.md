@@ -31,7 +31,9 @@ enriched with compact metadata for preview, citation, and debugging:
 - `preview`: normalized short text used by chunk visualization UIs.
 - `features`: booleans such as `has_table`, `has_image_ocr`, `has_formula`,
   `has_code`, `has_missing_anchor`, `has_location_issue`, `has_short_chunk`,
-  `has_large_chunk`, and `has_size_issue`.
+  `has_large_chunk`, `has_size_issue`, `has_table_missing_structure`,
+  `has_table_missing_source`, `has_ocr_missing_source`, and
+  `has_ocr_low_confidence`.
 - `image_ocr`: normalized OCR metadata for parsed images. PDF images, standalone
   image files, and Word embedded images use the same compact shape when OCR is
   enabled.
@@ -86,7 +88,8 @@ Query parameters:
   `ocr_artifact_issue`. Use `missing_anchor` to inspect chunks that lack page,
   character, or image-source anchors. Use `size_issue`, `short_chunk`, or
   `large_chunk` to inspect chunks whose token sizes are likely to hurt recall
-  or citation quality.
+  or citation quality. Use `table_missing_structure`, `table_missing_source`,
+  `ocr_missing_source`, or `ocr_low_confidence` for finer artifact triage.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When

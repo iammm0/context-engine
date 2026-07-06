@@ -338,15 +338,30 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
         {"text": "anchored", "metadata": {"content_type": "text", "char_start": 0, "char_end": 8}},
         {"text": "short", "metadata": {"content_type": "text", "token_count": 10, "char_start": 8, "char_end": 13}},
         {"text": "large", "metadata": {"content_type": "text", "token_count": 1300, "char_start": 13, "char_end": 18}},
+        {
+            "text": "low confidence ocr",
+            "metadata": {
+                "content_type": "image_ocr",
+                "artifact": {
+                    "type": "image_ocr",
+                    "text": "low confidence ocr",
+                    "images": [{"image_index": 1, "low_confidence": True}],
+                },
+            },
+        },
     ]
 
     assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1], chunks[3]]
-    assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2], chunks[4], chunks[9]]
     assert filter_chunks_for_preview(chunks, content_type="table", feature="has_image_ocr") == []
-    assert filter_chunks_for_preview(chunks, feature="artifact_issue") == [chunks[1], chunks[2], chunks[3], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="artifact_issue") == [chunks[1], chunks[2], chunks[3], chunks[4], chunks[9]]
     assert filter_chunks_for_preview(chunks, feature="table_artifact_issue") == [chunks[1], chunks[3]]
-    assert filter_chunks_for_preview(chunks, feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
-    assert filter_chunks_for_preview(chunks, content_type="image_ocr", feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="ocr_artifact_issue") == [chunks[2], chunks[4], chunks[9]]
+    assert filter_chunks_for_preview(chunks, content_type="image_ocr", feature="ocr_artifact_issue") == [chunks[2], chunks[4], chunks[9]]
+    assert filter_chunks_for_preview(chunks, feature="table_missing_source") == [chunks[1], chunks[3]]
+    assert filter_chunks_for_preview(chunks, feature="table_missing_structure") == [chunks[3]]
+    assert filter_chunks_for_preview(chunks, feature="ocr_missing_source") == [chunks[2], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="ocr_low_confidence") == [chunks[9]]
     assert filter_chunks_for_preview(chunks, feature="missing_anchor") == [chunks[0], chunks[1], chunks[2], chunks[3], chunks[4], chunks[5]]
     assert filter_chunks_for_preview(chunks, feature="short_chunk") == [chunks[7]]
     assert filter_chunks_for_preview(chunks, feature="large_chunk") == [chunks[8]]
