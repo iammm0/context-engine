@@ -136,6 +136,7 @@ export interface OcrImageRef {
   width?: number | null;
   height?: number | null;
   target?: string | null;
+  bbox?: unknown;
 }
 
 export interface EvidenceItem {

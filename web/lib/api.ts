@@ -139,6 +139,7 @@ export type OcrImageRef = {
   width?: number | null;
   height?: number | null;
   target?: string | null;
+  bbox?: unknown;
 };
 
 export type DocumentChunksResponse = {

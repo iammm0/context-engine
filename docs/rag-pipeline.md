@@ -128,8 +128,12 @@ For table and OCR chunks, preview responses include a compact `artifact`:
 - OCR artifacts expose the normalized OCR text preview, image count, and image
   source refs when known. Each source ref can include `page`, `image_index`,
   `confidence`, `line_count`, `text_length`, compact `text_preview`,
-  `low_confidence`, `width`, `height`, and parser source `target` for embedded
-  Word images.
+  optional `bbox`, `low_confidence`, `width`, `height`, and parser source
+  `target` for embedded Word images.
+The document chunk inspector and chat evidence cards render these table/OCR refs
+as source locator blocks, so reviewers can inspect page, table/image index,
+parser target, dimensions, confidence, and bbox metadata without opening raw
+chunk JSON.
 
 Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these

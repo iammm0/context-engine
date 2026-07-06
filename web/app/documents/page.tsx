@@ -231,6 +231,19 @@ function formatOcrConfidence(value?: number | null) {
   return `置信度 ${Math.round(percent)}%`;
 }
 
+function formatLocatorValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 function formatOcrImageRef(image: OcrImageRef, index: number) {
   const bits = [];
   if (typeof image.page === "number") bits.push(`第 ${image.page} 页`);
@@ -243,6 +256,7 @@ function formatOcrImageRef(image: OcrImageRef, index: number) {
   }
   if (typeof image.text_length === "number") bits.push(`${image.text_length} 字`);
   if (image.target) bits.push(image.target);
+  if (image.bbox) bits.push(`bbox ${formatLocatorValue(image.bbox)}`);
   if (image.low_confidence) bits.push("低置信");
   if (image.text_preview) bits.push(image.text_preview);
   return bits.join(" · ") || `图片 ${index + 1}`;
@@ -264,7 +278,51 @@ function formatTableSourceRef(source: TableSourceRef, index: number) {
   }
   if (source.source) bits.push(source.source);
   if (source.target) bits.push(source.target);
+  if (source.bbox) bits.push(`bbox ${formatLocatorValue(source.bbox)}`);
   return bits.join(" · ") || `表格来源 ${index + 1}`;
+}
+
+function TableSourceLocator({ sources }: { sources: TableSourceRef[] }) {
+  if (!sources.length) return null;
+  return (
+    <div className="mt-2 border-t border-blue-100 pt-2 text-[11px] text-blue-900 dark:border-blue-900/60 dark:text-blue-100">
+      <div className="mb-1 font-medium">来源定位</div>
+      <div className="space-y-1">
+        {sources.map((source, index) => (
+          <div key={`${source.page ?? "page"}-${source.table_index ?? "table"}-${index}`} className="flex min-w-0 flex-wrap gap-x-2 gap-y-1">
+            <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-blue-700 dark:bg-gray-900 dark:text-blue-200">
+              来源 {index + 1}
+            </span>
+            <span className="min-w-0 break-all">{formatTableSourceRef(source, index)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OcrSourceLocator({ images }: { images: OcrImageRef[] }) {
+  if (!images.length) return null;
+  return (
+    <div className="mt-2 border-t border-amber-200 pt-2 text-[11px] text-amber-900 dark:border-amber-800/60 dark:text-amber-100">
+      <div className="mb-1 font-medium">图片来源</div>
+      <div className="space-y-1">
+        {images.map((image, index) => (
+          <div
+            key={`${image.page ?? "page"}-${image.image_index ?? "image"}-${index}`}
+            className={`flex min-w-0 flex-wrap gap-x-2 gap-y-1 rounded px-1.5 py-1 ${
+              image.low_confidence ? "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-100" : "bg-amber-50/70 dark:bg-amber-950/30"
+            }`}
+          >
+            <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+              图片 {typeof image.image_index === "number" ? image.image_index : index + 1}
+            </span>
+            <span className="min-w-0 break-all">{formatOcrImageRef(image, index)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function formatChunkArtifactQualityWarnings(chunk: DocumentChunkPreview) {
@@ -281,19 +339,7 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
     const headers = artifact.headers || [];
     const rows = artifact.rows || [];
     const sources = artifact.sources || [];
-    const sourceBadges =
-      sources.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {sources.map((source, index) => (
-            <span
-              key={`${source.page ?? "page"}-${source.table_index ?? "table"}-${index}`}
-              className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-800 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-100"
-            >
-              {formatTableSourceRef(source, index)}
-            </span>
-          ))}
-        </div>
-      ) : null;
+    const sourceLocator = <TableSourceLocator sources={sources} />;
     if (headers.length > 0 && rows.length > 0) {
       return (
         <div className="mt-3">
@@ -321,7 +367,7 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
               </tbody>
             </table>
           </div>
-          {sourceBadges}
+          {sourceLocator}
         </div>
       );
     }
@@ -332,12 +378,12 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
           <pre className="overflow-x-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
             {artifact.markdown}
           </pre>
-          {sourceBadges}
+          {sourceLocator}
         </div>
       );
     }
 
-    return sourceBadges;
+    return sourceLocator;
   }
 
   if (artifact.type === "image_ocr" || artifact.type === "ocr") {
@@ -345,22 +391,7 @@ function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
     return (
       <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         <div className="whitespace-pre-wrap break-words">{artifact.text || chunk.preview}</div>
-        {images.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {images.map((image, index) => (
-              <span
-                key={`${image.page ?? "page"}-${image.image_index ?? "image"}-${index}`}
-                className={`inline-block max-w-full truncate rounded border px-2 py-0.5 text-[11px] sm:max-w-[360px] ${
-                  image.low_confidence
-                    ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100"
-                    : "border-amber-200 bg-white/70 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/50 dark:text-amber-100"
-                }`}
-              >
-                {formatOcrImageRef(image, index)}
-              </span>
-            ))}
-          </div>
-        )}
+        <OcrSourceLocator images={images} />
       </div>
     );
   }
