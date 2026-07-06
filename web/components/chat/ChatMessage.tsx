@@ -6,7 +6,7 @@ import ThinkingDots from "@/components/message/ThinkingDots";
 import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import { buildDocumentPreviewUrl } from "@/lib/api";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, SourceLocatorSummary, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, SourceLocatorAnchor, SourceLocatorSummary, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -77,6 +77,64 @@ function formatSourceLocatorSummary(locator?: SourceLocatorSummary | null) {
   if (locator.has_bbox) bits.push("bbox");
   bits.push(`${locator.anchor_count} anchors`);
   return bits.join(" · ");
+}
+
+const sourceLocatorAnchorTypeLabel: Record<string, string> = {
+  page_range: "页码",
+  char_range: "字符",
+  table: "表格",
+  image: "图片",
+  section: "章节",
+};
+
+function formatSourceLocatorAnchor(anchor: SourceLocatorAnchor, index: number) {
+  const bits: string[] = [];
+  const type = anchor.type ? sourceLocatorAnchorTypeLabel[anchor.type] || anchor.type : `锚点 ${index + 1}`;
+  bits.push(type);
+  if (typeof anchor.page_start === "number" && typeof anchor.page_end === "number" && anchor.page_end !== anchor.page_start) {
+    bits.push(`第 ${anchor.page_start}-${anchor.page_end} 页`);
+  } else if (typeof anchor.page === "number") {
+    bits.push(`第 ${anchor.page} 页`);
+  } else if (typeof anchor.page_start === "number") {
+    bits.push(`第 ${anchor.page_start} 页`);
+  }
+  if (typeof anchor.char_start === "number" && typeof anchor.char_end === "number") {
+    bits.push(`字符 ${anchor.char_start}-${anchor.char_end}`);
+  }
+  if (typeof anchor.table_index === "number") bits.push(`表格 ${anchor.table_index}`);
+  if (typeof anchor.image_index === "number") bits.push(`图片 ${anchor.image_index}`);
+  if (typeof anchor.confidence === "number") bits.push(formatOcrConfidence(anchor.confidence));
+  if (anchor.low_confidence) bits.push("低置信");
+  if (anchor.caption) bits.push(anchor.caption);
+  else if (anchor.title) bits.push(anchor.title);
+  if (anchor.source) bits.push(anchor.source);
+  if (anchor.target) bits.push(anchor.target);
+  if (anchor.text_preview) bits.push(anchor.text_preview);
+  return bits.filter(Boolean).join(" · ");
+}
+
+function SourceLocatorAnchorPreview({ locator }: { locator?: SourceLocatorSummary | null }) {
+  const anchors = (locator?.anchors || []).filter((anchor) => anchor && typeof anchor === "object").slice(0, 3);
+  if (!anchors.length) return null;
+  const total = typeof locator?.anchor_count === "number" ? Math.max(locator.anchor_count, anchors.length) : anchors.length;
+  const remaining = Math.max(total - anchors.length, 0);
+
+  return (
+    <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-[11px] text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
+      <div className="mb-1 font-medium">定位锚点</div>
+      <div className="space-y-1">
+        {anchors.map((anchor, index) => (
+          <div key={`${anchor.type || "anchor"}-${anchor.page ?? anchor.page_start ?? "page"}-${anchor.table_index ?? anchor.image_index ?? index}`} className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+            <span className="min-w-0 flex-1 break-words">{formatSourceLocatorAnchor(anchor, index)}</span>
+            {anchor.bbox ? (
+              <BboxMiniMap bbox={anchor.bbox} frameWidth={anchor.width} frameHeight={anchor.height} compact />
+            ) : null}
+          </div>
+        ))}
+        {remaining > 0 && <div className="text-emerald-700 dark:text-emerald-200">还有 {remaining} 个锚点</div>}
+      </div>
+    </div>
+  );
 }
 
 function getEvidenceType(item: EvidenceItem) {
@@ -664,6 +722,7 @@ function ChatMessageImpl({
                         来源定位：{sourceLocatorSummary}
                       </div>
                     )}
+                    <SourceLocatorAnchorPreview locator={source.source_locator} />
                   </li>
                 );
               })}
@@ -734,6 +793,7 @@ function ChatMessageImpl({
                         来源定位：{sourceLocatorSummary}
                       </div>
                     )}
+                    <SourceLocatorAnchorPreview locator={item.metadata?.source_locator} />
                     <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                       {item.metadata?.preview || item.text}
                     </div>
@@ -830,6 +890,7 @@ function ChatMessageImpl({
                         来源定位：{sourceLocatorSummary}
                       </div>
                     )}
+                    <SourceLocatorAnchorPreview locator={item.source_locator} />
                     {item.preview && (
                       <div className="mt-0.5 line-clamp-2 text-[11px] text-amber-900/70 dark:text-amber-100/70">
                         {item.preview}

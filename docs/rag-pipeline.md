@@ -239,7 +239,11 @@ from missing, invalid, or partially covered answers and show concrete repair
 guidance. The structured `unreferenced_top_evidence` field carries compact
 locator data such as `document_id`, `chunk_id`, `chunk_index`, page range,
 content type, score, preview text, and `source_locator` so clients can jump
-from a citation audit warning to the exact missing source.
+from a citation audit warning to the exact missing source. Chat source,
+evidence, and unreferenced-evidence cards render `source_locator.anchors` when
+available, including table/image/page/character anchor details and compact bbox
+mini maps, so users can inspect source location even when the artifact preview
+is incomplete.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
 `structured_artifact_coverage`, `source_locator_coverage`,
