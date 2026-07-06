@@ -71,8 +71,9 @@ Query parameters:
 - `include_text`: default `true`; set to `false` for a lightweight preview.
 - `content_type`: optional chunk type filter, for example `table`,
   `image_ocr`, `formula`, or `code`.
-- `feature`: optional feature filter, for example `has_table` or
-  `has_image_ocr`.
+- `feature`: optional feature filter, for example `has_table`,
+  `has_image_ocr`, `artifact_issue`, `table_artifact_issue`, or
+  `ocr_artifact_issue`.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When
@@ -114,6 +115,10 @@ Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these
 per-chunk warnings beside the affected preview, such as missing table structure,
 missing table source refs, missing OCR image refs, or low-confidence OCR refs.
+Chunks with such warnings also expose feature flags like `has_artifact_issue`,
+`has_table_artifact_issue`, and `has_ocr_artifact_issue`, so callers can pass
+`feature=artifact_issue`, `feature=table_artifact_issue`, or
+`feature=ocr_artifact_issue` to inspect only problematic structured chunks.
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to

@@ -148,11 +148,31 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert preview["page_start"] == 2
     assert preview["page_end"] == 3
     assert preview["features"]["has_image_ocr"] is True
+    assert preview["features"]["has_artifact_issue"] is True
+    assert preview["features"]["has_ocr_artifact_issue"] is True
     assert preview["artifact"]["type"] == "image_ocr"
     assert preview["artifact"]["text"] == "A long chunk body"
     assert preview["artifact_quality"]["status"] == "warn"
     assert preview["artifact_quality"]["ocr_missing_source"] is True
     assert "text" not in preview
+
+
+def test_enrich_chunks_marks_artifact_issue_features():
+    chunks = [
+        {
+            "text": "broken table preview",
+            "metadata": {"content_type": "table"},
+        }
+    ]
+
+    enriched = enrich_chunks_for_visualization(chunks, "broken table preview", {})
+
+    features = enriched[0]["metadata"]["features"]
+    assert features["has_table"] is True
+    assert features["has_artifact_issue"] is True
+    assert features["has_table_artifact_issue"] is True
+    assert enriched[0]["metadata"]["visual"]["features"]["has_artifact_issue"] is True
+    assert enriched[0]["metadata"]["artifact_quality"]["status"] == "warn"
 
 
 def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
@@ -298,11 +318,31 @@ def test_filter_chunks_for_preview_by_content_type_and_feature():
             },
         },
         {"metadata": {"content_type": "image_ocr", "features": {"has_image_ocr": True}}},
+        {
+            "text": "broken table",
+            "metadata": {
+                "content_type": "table",
+                "features": {"has_table": True},
+                "artifact": {"type": "table", "headers": [], "rows": [], "sources": []},
+            },
+        },
+        {
+            "text": "ocr without source",
+            "metadata": {
+                "content_type": "image_ocr",
+                "features": {},
+                "artifact": {"type": "image_ocr", "text": "ocr without source", "images": []},
+            },
+        },
     ]
 
-    assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1]]
-    assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2]]
+    assert filter_chunks_for_preview(chunks, content_type="table") == [chunks[1], chunks[3]]
+    assert filter_chunks_for_preview(chunks, feature="image_ocr") == [chunks[2], chunks[4]]
     assert filter_chunks_for_preview(chunks, content_type="table", feature="has_image_ocr") == []
+    assert filter_chunks_for_preview(chunks, feature="artifact_issue") == [chunks[1], chunks[2], chunks[3], chunks[4]]
+    assert filter_chunks_for_preview(chunks, feature="table_artifact_issue") == [chunks[1], chunks[3]]
+    assert filter_chunks_for_preview(chunks, feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
+    assert filter_chunks_for_preview(chunks, content_type="image_ocr", feature="ocr_artifact_issue") == [chunks[2], chunks[4]]
     assert filter_chunks_for_preview(chunks, query="overview") == [chunks[0]]
     assert filter_chunks_for_preview(chunks, query="recall") == [chunks[1]]
     assert filter_chunks_for_preview(chunks, content_type="table", query="recall") == [chunks[1]]

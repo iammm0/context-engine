@@ -25,6 +25,23 @@ type ChunkFilterOption = {
   count?: number;
 };
 
+const chunkFeatureFilterOptions: ChunkFilterOption[] = [
+  { value: "all", label: "全部质量" },
+  { value: "artifact_issue", label: "Artifact问题" },
+  { value: "table_artifact_issue", label: "表格问题" },
+  { value: "ocr_artifact_issue", label: "OCR问题" },
+];
+
+const featureFlagLabel: Record<string, string> = {
+  table: "表格",
+  image_ocr: "OCR",
+  formula: "公式",
+  code: "代码",
+  artifact_issue: "Artifact问题",
+  table_artifact_issue: "表格问题",
+  ocr_artifact_issue: "OCR问题",
+};
+
 type ChunkDeepLinkTarget = {
   documentId: string;
   chunkId?: string;
@@ -315,6 +332,7 @@ export default function DocumentsPage() {
   const [chunkPreviewTotal, setChunkPreviewTotal] = useState(0);
   const [chunkPreviewAllTotal, setChunkPreviewAllTotal] = useState(0);
   const [chunkPreviewFilter, setChunkPreviewFilter] = useState("all");
+  const [chunkPreviewFeature, setChunkPreviewFeature] = useState("all");
   const [chunkPreviewQuery, setChunkPreviewQuery] = useState("");
   const [chunkPreviewAppliedQuery, setChunkPreviewAppliedQuery] = useState("");
   const [chunkPreviewLoading, setChunkPreviewLoading] = useState(false);
@@ -443,6 +461,7 @@ export default function DocumentsPage() {
     async (
       doc: Document,
       filter: string,
+      feature: string,
       query: string,
       options?: {
         skip?: number;
@@ -471,6 +490,7 @@ export default function DocumentsPage() {
           limit: 80,
           includeText: false,
           contentType: filter,
+          feature,
           query,
           targetChunkId: options?.targetChunkId,
           targetChunkIndex: options?.targetChunkIndex,
@@ -517,11 +537,12 @@ export default function DocumentsPage() {
 
   const handleViewChunks = async (doc: Document) => {
     setChunkPreviewFilter("all");
+    setChunkPreviewFeature("all");
     setChunkPreviewQuery("");
     setChunkPreviewAppliedQuery("");
     setHighlightedChunkTarget(null);
     highlightedChunkRef.current = null;
-    await loadChunkPreview(doc, "all", "");
+    await loadChunkPreview(doc, "all", "all", "");
   };
 
   const handleChunkFilterChange = async (filter: string) => {
@@ -529,7 +550,15 @@ export default function DocumentsPage() {
     setChunkPreviewFilter(filter);
     setHighlightedChunkTarget(null);
     highlightedChunkRef.current = null;
-    await loadChunkPreview(chunkPanelDoc, filter, chunkPreviewAppliedQuery);
+    await loadChunkPreview(chunkPanelDoc, filter, chunkPreviewFeature, chunkPreviewAppliedQuery);
+  };
+
+  const handleChunkFeatureChange = async (feature: string) => {
+    if (!chunkPanelDoc || feature === chunkPreviewFeature) return;
+    setChunkPreviewFeature(feature);
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, feature, chunkPreviewAppliedQuery);
   };
 
   const handleChunkSearch = async () => {
@@ -538,7 +567,7 @@ export default function DocumentsPage() {
     setChunkPreviewAppliedQuery(nextQuery);
     setHighlightedChunkTarget(null);
     highlightedChunkRef.current = null;
-    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, nextQuery);
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, chunkPreviewFeature, nextQuery);
   };
 
   const handleClearChunkSearch = async () => {
@@ -547,12 +576,12 @@ export default function DocumentsPage() {
     setChunkPreviewAppliedQuery("");
     setHighlightedChunkTarget(null);
     highlightedChunkRef.current = null;
-    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, "");
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, chunkPreviewFeature, "");
   };
 
   const handleLoadMoreChunks = async () => {
     if (!chunkPanelDoc || chunkPreviewLoading || chunkPreviewLoadingMore || !chunkPreviewHasMore) return;
-    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, chunkPreviewAppliedQuery, {
+    await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, chunkPreviewFeature, chunkPreviewAppliedQuery, {
       skip: chunkPreview.length,
       append: true,
     });
@@ -576,11 +605,12 @@ export default function DocumentsPage() {
       }
 
       setChunkPreviewFilter("all");
+      setChunkPreviewFeature("all");
       setChunkPreviewQuery("");
       setChunkPreviewAppliedQuery("");
       setHighlightedChunkTarget(target);
       highlightedChunkRef.current = null;
-      await loadChunkPreview(targetDoc, "all", "", {
+      await loadChunkPreview(targetDoc, "all", "all", "", {
         targetChunkId: target.chunkId,
         targetChunkIndex: target.chunkIndex,
         contextWindow: 6,
@@ -1061,6 +1091,28 @@ export default function DocumentsPage() {
                 })}
               </div>
 
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-gray-500 dark:text-gray-400">质量筛选</span>
+                {chunkFeatureFilterOptions.map((option) => {
+                  const active = option.value === chunkPreviewFeature;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={chunkPreviewLoading}
+                      onClick={() => handleChunkFeatureChange(option.value)}
+                      className={`rounded border px-2.5 py-1.5 transition-colors disabled:opacity-60 ${
+                        active
+                          ? "border-amber-700 bg-amber-700 text-white dark:border-amber-200 dark:bg-amber-200 dark:text-amber-950"
+                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {chunkPreviewLoading && (
                 <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
                   加载中...
@@ -1084,7 +1136,10 @@ export default function DocumentsPage() {
                   const typeLabel = contentTypeLabel[chunk.content_type] || chunk.content_type || "文本";
                   const featureFlags = Object.entries(chunk.features || {})
                     .filter(([, enabled]) => enabled)
-                    .map(([key]) => key.replace(/^has_/, ""));
+                    .map(([key]) => {
+                      const value = key.replace(/^has_/, "");
+                      return { key, label: featureFlagLabel[value] || value };
+                    });
                   const highlighted = isHighlightedChunk(chunk, highlightedChunkTarget);
                   return (
                     <div
@@ -1111,8 +1166,8 @@ export default function DocumentsPage() {
                           </span>
                         )}
                         {featureFlags.map((flag) => (
-                          <span key={flag} className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                            {flag}
+                          <span key={flag.key} className="rounded bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                            {flag.label}
                           </span>
                         ))}
                       </div>

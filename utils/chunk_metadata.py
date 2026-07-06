@@ -967,6 +967,62 @@ def _build_chunk_artifact_quality(content_type: str, artifact: Optional[Dict[str
     return diagnostics if diagnostics.get("structured") else None
 
 
+def _artifact_issue_feature_flags(
+    content_type: str,
+    artifact: Optional[Dict[str, Any]],
+    artifact_quality: Optional[Dict[str, Any]],
+) -> Dict[str, bool]:
+    if not artifact_quality or artifact_quality.get("status") not in {"warn", "fail"}:
+        return {}
+
+    normalized_type = str(content_type or "").strip().lower()
+    artifact_type = str((artifact or {}).get("type") or normalized_type).strip().lower()
+    flags = {"has_artifact_issue": True}
+    if normalized_type == "table" or artifact_type == "table":
+        flags["has_table_artifact_issue"] = True
+    if normalized_type in {"image_ocr", "ocr"} or artifact_type in {"image_ocr", "ocr"}:
+        flags["has_ocr_artifact_issue"] = True
+    return flags
+
+
+def _features_with_artifact_issue_flags(
+    features: Dict[str, bool],
+    content_type: str,
+    artifact: Optional[Dict[str, Any]],
+    artifact_quality: Optional[Dict[str, Any]],
+) -> Dict[str, bool]:
+    merged = dict(features or {})
+    merged.update(_artifact_issue_feature_flags(content_type, artifact, artifact_quality))
+    return merged
+
+
+def _features_for_filtering(
+    chunk: Dict[str, Any],
+    metadata: Dict[str, Any],
+    visual: Optional[Dict[str, Any]] = None,
+) -> Dict[str, bool]:
+    visual = visual if isinstance(visual, dict) else {}
+    text = str(chunk.get("text") or "")
+    content_type = metadata.get("content_type") or visual.get("content_type") or "text"
+    inferred = _infer_features(text, {**metadata, "content_type": content_type})
+    stored_features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+    visual_features = visual.get("features") if isinstance(visual.get("features"), dict) else {}
+    artifact = metadata.get("artifact") or visual.get("artifact")
+    artifact = artifact if isinstance(artifact, dict) else None
+    artifact_quality = (
+        metadata.get("artifact_quality")
+        or visual.get("artifact_quality")
+        or _build_chunk_artifact_quality(str(content_type), artifact)
+    )
+    artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else None
+    return _features_with_artifact_issue_flags(
+        {**inferred, **visual_features, **stored_features},
+        str(content_type),
+        artifact,
+        artifact_quality,
+    )
+
+
 def enrich_chunks_for_visualization(
     chunks: List[Dict[str, Any]],
     document_text: str,
@@ -1000,6 +1056,7 @@ def enrich_chunks_for_visualization(
 
         artifact = _build_chunk_artifact(text, content_type, original_meta)
         artifact_quality = _build_chunk_artifact_quality(content_type, artifact)
+        features = _features_with_artifact_issue_flags(features, content_type, artifact, artifact_quality)
         if (page_start is None or page_end is None) and artifact and artifact.get("type") == "image_ocr":
             ocr_pages = [
                 _safe_int(image.get("page"))
@@ -1068,6 +1125,7 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         or visual.get("artifact_quality")
         or _build_chunk_artifact_quality(str(content_type), artifact)
     )
+    features = _features_for_filtering(chunk, metadata, visual)
 
     item = {
         "id": str(chunk.get("_id") or chunk.get("id") or ""),
@@ -1082,7 +1140,7 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         "char_start": metadata.get("char_start") if metadata.get("char_start") is not None else visual.get("char_start"),
         "char_end": metadata.get("char_end") if metadata.get("char_end") is not None else visual.get("char_end"),
         "token_count": metadata.get("token_count"),
-        "features": metadata.get("features") or visual.get("features") or {},
+        "features": features,
         "artifact": artifact,
         "artifact_quality": artifact_quality,
         "chunker_type": metadata.get("chunker_type"),
@@ -1152,7 +1210,8 @@ def filter_chunks_for_preview(
             if chunk_type != normalized_type:
                 return False
         if normalized_feature and normalized_feature != "all":
-            features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+            visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
+            features = _features_for_filtering(chunk, metadata, visual)
             if features.get(normalized_feature) is not True:
                 return False
         if normalized_query:
