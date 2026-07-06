@@ -25,6 +25,7 @@ _HEAVY_METADATA_KEYS = {"pages", "tables", "formulas", "code_blocks"}
 _MARKDOWN_TABLE_LINE_RE = re.compile(r"^\s*\|(.+)\|\s*$")
 _MARKDOWN_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 _OCR_MARKER_RE = re.compile(r"\[图片文字(?:\s+page=(?P<page>\d+))?(?:\s+image=(?P<image>\d+))?\]")
+STRUCTURED_CONTENT_TYPES = {"table", "image_ocr", "ocr", "formula", "code"}
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -134,10 +135,8 @@ def _chunk_token_count(chunk: Dict[str, Any]) -> Optional[int]:
 def _chunk_has_anchor(chunk: Dict[str, Any]) -> bool:
     metadata = chunk.get("metadata") or {}
     visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
-    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else None
-    if not source_locator and isinstance(visual.get("source_locator"), dict):
-        source_locator = visual.get("source_locator")
-    if isinstance(source_locator, dict) and int(source_locator.get("anchor_count") or 0) > 0:
+    source_locator = _source_locator_from_metadata(metadata, visual)
+    if _source_locator_has_anchor(source_locator):
         return True
     for source in (metadata, visual):
         if source.get("page") is not None or source.get("page_start") is not None or source.get("page_end") is not None:
@@ -152,33 +151,78 @@ def _chunk_has_anchor(chunk: Dict[str, Any]) -> bool:
     )
 
 
+def _source_locator_from_metadata(metadata: Dict[str, Any], visual: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    visual = visual if isinstance(visual, dict) else {}
+    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
+    return source_locator if isinstance(source_locator, dict) else None
+
+
+def _source_locator_anchor_count(source_locator: Optional[Dict[str, Any]]) -> int:
+    if not isinstance(source_locator, dict):
+        return 0
+    anchors = source_locator.get("anchors")
+    anchor_list_count = len(anchors) if isinstance(anchors, list) else 0
+    anchor_count = source_locator.get("anchor_count")
+    if isinstance(anchor_count, int):
+        return max(anchor_count, anchor_list_count, 0)
+    return anchor_list_count
+
+
+def _source_locator_has_anchor(source_locator: Optional[Dict[str, Any]]) -> bool:
+    return _source_locator_anchor_count(source_locator) > 0
+
+
+def _chunk_structured_content_type(metadata: Dict[str, Any], visual: Optional[Dict[str, Any]] = None) -> bool:
+    visual = visual if isinstance(visual, dict) else {}
+    content_type = str(metadata.get("content_type") or visual.get("content_type") or "").strip().lower()
+    artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else visual.get("artifact")
+    artifact_type = str((artifact or {}).get("type") or "").strip().lower() if isinstance(artifact, dict) else ""
+    return content_type in STRUCTURED_CONTENT_TYPES or artifact_type in STRUCTURED_CONTENT_TYPES
+
+
 def _summarize_chunk_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     token_counts = [count for chunk in chunks if (count := _chunk_token_count(chunk)) is not None]
     anchored_count = sum(1 for chunk in chunks if _chunk_has_anchor(chunk))
     locator_count = 0
+    missing_source_locator_count = 0
+    structured_source_locator_count = 0
+    structured_missing_source_locator_count = 0
+    structured_count = 0
     bbox_locator_count = 0
     table_source_locator_count = 0
     ocr_source_locator_count = 0
     for chunk in chunks:
         metadata = chunk.get("metadata") or {}
         visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
-        source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
-        if not isinstance(source_locator, dict):
-            continue
-        if int(source_locator.get("anchor_count") or 0) > 0:
+        source_locator = _source_locator_from_metadata(metadata, visual)
+        is_structured = _chunk_structured_content_type(metadata, visual)
+        if is_structured:
+            structured_count += 1
+        if _source_locator_has_anchor(source_locator):
             locator_count += 1
-        if source_locator.get("has_bbox"):
+            if is_structured:
+                structured_source_locator_count += 1
+        else:
+            missing_source_locator_count += 1
+            if is_structured:
+                structured_missing_source_locator_count += 1
+            continue
+        if source_locator and source_locator.get("has_bbox"):
             bbox_locator_count += 1
-        if source_locator.get("has_table_source"):
+        if source_locator and source_locator.get("has_table_source"):
             table_source_locator_count += 1
-        if source_locator.get("has_image_source"):
+        if source_locator and source_locator.get("has_image_source"):
             ocr_source_locator_count += 1
     summary: Dict[str, Any] = {
         "chunk_anchor_count": anchored_count,
         "chunk_missing_anchor_count": max(len(chunks) - anchored_count, 0),
         "chunk_anchor_coverage": (anchored_count / len(chunks)) if chunks else None,
         "source_locator_count": locator_count,
+        "missing_source_locator_count": missing_source_locator_count,
         "source_locator_coverage": (locator_count / len(chunks)) if chunks else None,
+        "structured_source_locator_count": structured_source_locator_count,
+        "structured_missing_source_locator_count": structured_missing_source_locator_count,
+        "structured_source_locator_coverage": (structured_source_locator_count / structured_count) if structured_count else None,
         "bbox_locator_count": bbox_locator_count,
         "table_source_locator_count": table_source_locator_count,
         "ocr_source_locator_count": ocr_source_locator_count,
@@ -477,6 +521,31 @@ def build_parse_quality_summary(
             if isinstance(anchor_coverage, float):
                 message = f"切块定位覆盖率 {anchor_coverage:.0%}"
             add_check("chunk_anchors", "切块定位", "pass", "info", message)
+
+        structured_locator_coverage = chunk_quality.get("structured_source_locator_coverage")
+        structured_missing_locator_count = int(chunk_quality.get("structured_missing_source_locator_count") or 0)
+        if isinstance(structured_locator_coverage, float):
+            if structured_locator_coverage < 1:
+                score -= min(8, max(3, structured_missing_locator_count * 2))
+                add_check(
+                    "structured_source_locators",
+                    "结构化定位",
+                    "warn",
+                    "warning",
+                    f"结构化切块 source_locator 覆盖率 {structured_locator_coverage:.0%}，{structured_missing_locator_count} 个表格/OCR/公式/代码 chunk 缺少统一来源定位",
+                    "重新解析或重建索引，确保结构化 chunk 保留 source_locator、表格/OCR来源和 bbox。",
+                    feature_filter="structured_missing_source_locator",
+                    filter_label="查看结构化缺定位",
+                )
+                warnings.append(f"结构化切块 source_locator 覆盖率偏低：{structured_locator_coverage:.0%}")
+            else:
+                add_check(
+                    "structured_source_locators",
+                    "结构化定位",
+                    "pass",
+                    "info",
+                    f"结构化切块 source_locator 覆盖率 {structured_locator_coverage:.0%}",
+                )
 
         token_counts_seen = chunk_quality.get("chunk_token_avg") is not None
         if token_counts_seen:
@@ -1255,7 +1324,7 @@ def _features_with_source_locator_flags(features: Dict[str, bool], source_locato
     merged = dict(features or {})
     if not isinstance(source_locator, dict):
         return merged
-    if int(source_locator.get("anchor_count") or 0) > 0:
+    if _source_locator_has_anchor(source_locator):
         merged["has_source_locator"] = True
     if source_locator.get("has_bbox"):
         merged["has_bbox_locator"] = True
@@ -1307,7 +1376,8 @@ def _features_for_filtering(
         or _build_chunk_artifact_quality(str(content_type), artifact)
     )
     artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else None
-    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
+    original_source_locator = _source_locator_from_metadata(metadata, visual)
+    source_locator = original_source_locator
     if not isinstance(source_locator, dict):
         source_locator = _build_source_locator(
             content_type=str(content_type),
@@ -1327,6 +1397,14 @@ def _features_for_filtering(
         artifact,
         artifact_quality,
     )
+    is_structured_missing_locator = (
+        _chunk_structured_content_type({**metadata, "content_type": content_type, "artifact": artifact}, visual)
+        and not _source_locator_has_anchor(original_source_locator)
+    )
+    if is_structured_missing_locator:
+        merged["has_structured_missing_source_locator"] = True
+        merged["has_source_locator_issue"] = True
+        merged["has_location_issue"] = True
     merged = _features_with_source_locator_flags(merged, source_locator)
     anchor_probe = dict(chunk)
     anchor_probe["metadata"] = {**metadata, "visual": visual, "source_locator": source_locator}

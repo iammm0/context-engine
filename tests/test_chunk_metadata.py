@@ -608,6 +608,83 @@ def test_build_parse_quality_summary_tracks_structured_artifact_coverage():
     assert checks["chunk_artifacts"]["status"] == "pass"
 
 
+def test_build_parse_quality_summary_tracks_structured_source_locator_coverage():
+    chunks = [
+        {
+            "text": "metrics",
+            "metadata": {
+                "content_type": "table",
+                "token_count": 80,
+                "char_start": 0,
+                "char_end": 40,
+                "artifact": {
+                    "type": "table",
+                    "headers": ["metric", "value"],
+                    "rows": [["recall", "0.9"]],
+                    "sources": [{"page": 1, "table_index": 1}],
+                },
+            },
+        },
+        {
+            "text": "ocr text",
+            "metadata": {
+                "content_type": "image_ocr",
+                "token_count": 90,
+                "char_start": 40,
+                "char_end": 90,
+                "artifact": {
+                    "type": "image_ocr",
+                    "text": "ocr text",
+                    "images": [{"page": 1, "image_index": 2, "text_preview": "ocr text"}],
+                },
+                "source_locator": {
+                    "source_type": "image_ocr",
+                    "page_start": 1,
+                    "page_end": 1,
+                    "anchor_count": 2,
+                    "has_image_source": True,
+                    "has_bbox": True,
+                    "anchors": [
+                        {"type": "page_range", "page_start": 1, "page_end": 1},
+                        {"type": "image", "page": 1, "image_index": 2, "bbox": [10, 20, 300, 180]},
+                    ],
+                },
+            },
+        },
+    ]
+
+    summary = build_parse_quality_summary(
+        {
+            "parser_type": "pdf",
+            "extraction_method": "text_extraction",
+            "page_count": 1,
+            "extracted_pages": 1,
+            "image_ocr": {"image_count": 0, "ocr_text_length": 0},
+            "tables": [],
+            "formulas": [],
+        },
+        "Structured locator diagnostics need enough body text for a clean baseline. " * 5,
+        chunks,
+    )
+
+    checks = {item["id"]: item for item in summary["quality_checks"]}
+    assert summary["source_locator_count"] == 1
+    assert summary["missing_source_locator_count"] == 1
+    assert summary["source_locator_coverage"] == 0.5
+    assert summary["structured_source_locator_count"] == 1
+    assert summary["structured_missing_source_locator_count"] == 1
+    assert summary["structured_source_locator_coverage"] == 0.5
+    assert summary["bbox_locator_count"] == 1
+    assert summary["ocr_source_locator_count"] == 1
+    assert checks["structured_source_locators"]["status"] == "warn"
+    assert checks["structured_source_locators"]["feature_filter"] == "structured_missing_source_locator"
+    assert checks["structured_source_locators"]["filter_label"] == "查看结构化缺定位"
+    assert any("结构化切块 source_locator 覆盖率偏低" in warning for warning in summary["warnings"])
+    missing = filter_chunks_for_preview(chunks, feature="structured_missing_source_locator")
+    assert len(missing) == 1
+    assert missing[0]["metadata"]["content_type"] == "table"
+
+
 def test_build_parse_quality_summary_warns_on_incomplete_structured_artifacts():
     summary = build_parse_quality_summary(
         {

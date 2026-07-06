@@ -42,7 +42,9 @@ enriched with compact metadata for preview, citation, and debugging:
   `has_table_missing_source`, `has_ocr_missing_source`, and
   `has_ocr_low_confidence`. Locator-oriented flags include
   `has_source_locator`, `has_bbox_locator`, `has_table_source_locator`, and
-  `has_ocr_source_locator`.
+  `has_ocr_source_locator`. `has_structured_missing_source_locator` marks
+  table/OCR/formula/code chunks whose normalized `source_locator` was not
+  preserved even if page or character fallback data exists.
 - `image_ocr`: normalized OCR metadata for parsed images. PDF images, standalone
   image files, and Word embedded images use the same compact shape when OCR is
   enabled.
@@ -50,8 +52,9 @@ enriched with compact metadata for preview, citation, and debugging:
   parser type, extraction method, page count, extracted page count, table count,
   formula count, OCR image count, OCR text length, OCR image coverage, OCR
   average confidence, low-confidence image counts, chunk anchor coverage, chunk
-  token size distribution, structured artifact preview coverage, artifact issue
-  counts, table artifact issue counts, and OCR artifact issue counts.
+  source locator coverage, structured source locator coverage, chunk token size
+  distribution, structured artifact preview coverage, artifact issue counts,
+  table artifact issue counts, and OCR artifact issue counts.
 - `parse_quality`: the document-level quality summary stored on
   `documents.metadata`, including `quality_score`, `page_coverage`, warning
   messages, chunk `content_type_counts`, `risk_level`, structured
@@ -104,7 +107,9 @@ Query parameters:
   or citation quality. Use `table_missing_structure`, `table_missing_source`,
   `ocr_missing_source`, or `ocr_low_confidence` for finer artifact triage. Use
   `source_locator`, `bbox_locator`, `table_source_locator`, or
-  `ocr_source_locator` to inspect chunks with normalized source anchors.
+  `ocr_source_locator` to inspect chunks with normalized source anchors. Use
+  `structured_missing_source_locator` to inspect table/OCR/formula/code chunks
+  that need reindexing because their normalized locator is missing.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When

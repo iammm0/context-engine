@@ -39,6 +39,7 @@ const chunkFeatureFilterBaseOptions: ChunkFilterOption[] = [
   { value: "bbox_locator", label: "bbox定位" },
   { value: "table_source_locator", label: "表格定位" },
   { value: "ocr_source_locator", label: "OCR定位" },
+  { value: "structured_missing_source_locator", label: "结构化缺定位" },
   { value: "missing_anchor", label: "缺定位" },
   { value: "size_issue", label: "尺寸异常" },
 ];
@@ -59,6 +60,8 @@ const featureFlagLabel: Record<string, string> = {
   bbox_locator: "bbox定位",
   table_source_locator: "表格定位",
   ocr_source_locator: "OCR定位",
+  structured_missing_source_locator: "结构化缺定位",
+  source_locator_issue: "来源定位问题",
   missing_anchor: "缺定位",
   location_issue: "定位问题",
   short_chunk: "过短",
@@ -171,6 +174,7 @@ function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null): Chu
     bbox_locator: quality?.bbox_locator_count,
     table_source_locator: quality?.table_source_locator_count,
     ocr_source_locator: quality?.ocr_source_locator_count,
+    structured_missing_source_locator: quality?.structured_missing_source_locator_count,
     missing_anchor: quality?.chunk_missing_anchor_count,
     size_issue: (quality?.chunk_short_count || 0) + (quality?.chunk_large_count || 0),
   };
@@ -220,6 +224,9 @@ function formatParseQualityLine(quality?: ParseQualitySummary | null) {
   if (typeof quality.quality_score === "number") bits.push(`质量 ${quality.quality_score}/100`);
   if (typeof quality.chunk_count === "number") bits.push(`chunk ${quality.chunk_count}`);
   if (typeof quality.chunk_anchor_coverage === "number") bits.push(`定位 ${formatPercent(quality.chunk_anchor_coverage)}`);
+  if (typeof quality.structured_source_locator_coverage === "number" && quality.structured_source_locator_coverage < 1) {
+    bits.push(`结构化定位 ${formatPercent(quality.structured_source_locator_coverage)}`);
+  }
   if (typeof quality.table_count === "number") bits.push(`表格 ${quality.table_count}`);
   if (typeof quality.image_count === "number") bits.push(`图片 ${quality.image_count}`);
   if (typeof quality.ocr_text_length === "number" && quality.ocr_text_length > 0) {
@@ -1139,6 +1146,11 @@ export default function DocumentsPage() {
                     {typeof chunkPanelQuality.chunk_anchor_coverage === "number" && (
                       <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
                         定位 {formatPercent(chunkPanelQuality.chunk_anchor_coverage)}
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.structured_source_locator_coverage === "number" && (
+                      <span className="rounded bg-white px-2 py-1 text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                        结构化定位 {formatPercent(chunkPanelQuality.structured_source_locator_coverage)}
                       </span>
                     )}
                     {typeof chunkPanelQuality.chunk_token_avg === "number" && (
