@@ -114,7 +114,9 @@ Query parameters:
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When
   provided, the API shifts the returned window so the matching chunk is included
-  near its surrounding context.
+  near its surrounding context. If both are provided, `target_chunk_id` is
+  tried first and `target_chunk_index` is used as a fallback when the stored
+  chunk id does not match the retrieval payload id.
 - `context_window`: number of chunks to keep before the target when using a
   target locator, default `4`.
 - `evidence_id`: optional UI label for chunk deep links opened from chat

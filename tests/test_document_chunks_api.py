@@ -128,6 +128,32 @@ async def test_get_document_chunks_centers_window_on_target_chunk(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_document_chunks_falls_back_to_target_index_when_chunk_id_is_stale(monkeypatch):
+    monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeDocumentRepo())
+    monkeypatch.setattr(documents_router, "get_chunk_repo", lambda: FakeChunkRepo())
+
+    response = await documents_router.get_document_chunks(
+        "doc1",
+        skip=0,
+        limit=3,
+        include_text=False,
+        content_type=None,
+        feature=None,
+        q=None,
+        target_chunk_id="stale-retrieval-id",
+        target_chunk_index=4,
+        context_window=1,
+    )
+
+    assert response.skip == 3
+    assert response.target_found is True
+    assert response.target_chunk_index == 4
+    assert response.target_chunk_id == "chunk4"
+    assert response.target_offset == 1
+    assert [chunk["chunk_index"] for chunk in response.chunks] == [3, 4, 5]
+
+
+@pytest.mark.asyncio
 async def test_get_document_chunks_centers_target_inside_filtered_artifact_issue(monkeypatch):
     monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeDocumentRepo())
     monkeypatch.setattr(documents_router, "get_chunk_repo", lambda: FakeMixedChunkRepo())

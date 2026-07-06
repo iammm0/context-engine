@@ -1284,17 +1284,18 @@ async def get_document_chunks(
         target_position: Optional[int] = None
         target_found = False
         if target_chunk_id or target_chunk_index is not None:
-            for index, chunk in enumerate(filtered_chunks):
-                chunk_id = str(chunk.get("_id") or chunk.get("id") or "")
-                chunk_index = chunk.get("chunk_index")
-                if target_chunk_id and chunk_id == target_chunk_id:
-                    target_position = index
-                    break
-                if target_chunk_id:
-                    continue
-                if target_chunk_index is not None and chunk_index == target_chunk_index:
-                    target_position = index
-                    break
+            if target_chunk_id:
+                for index, chunk in enumerate(filtered_chunks):
+                    chunk_id = str(chunk.get("_id") or chunk.get("id") or "")
+                    if chunk_id == target_chunk_id:
+                        target_position = index
+                        break
+            if target_position is None and target_chunk_index is not None:
+                for index, chunk in enumerate(filtered_chunks):
+                    chunk_index = chunk.get("chunk_index")
+                    if chunk_index == target_chunk_index:
+                        target_position = index
+                        break
 
             target_found = target_position is not None
             if target_found:
@@ -1307,7 +1308,7 @@ async def get_document_chunks(
         target_offset = (target_position - skip) if target_position is not None and skip <= target_position < skip + len(page) else None
         if target_found and target_position is not None:
             target_chunk = filtered_chunks[target_position]
-            target_chunk_id = target_chunk_id or str(target_chunk.get("_id") or target_chunk.get("id") or "")
+            target_chunk_id = str(target_chunk.get("_id") or target_chunk.get("id") or target_chunk_id or "")
             raw_target_index = target_chunk.get("chunk_index")
             target_chunk_index = raw_target_index if isinstance(raw_target_index, int) else target_chunk_index
         parse_quality = (doc.get("metadata") or {}).get("parse_quality")
