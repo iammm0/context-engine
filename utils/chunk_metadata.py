@@ -173,7 +173,11 @@ def _summarize_artifact_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     expected_count = 0
     present_count = 0
     missing_count = 0
+    issue_count = 0
+    table_issue_count = 0
     table_missing_structure_count = 0
+    table_missing_source_count = 0
+    ocr_issue_count = 0
     ocr_missing_source_count = 0
     low_confidence_ocr_source_count = 0
 
@@ -184,31 +188,44 @@ def _summarize_artifact_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
         expected_count += 1
         artifact = metadata.get("artifact")
-        if not isinstance(artifact, dict):
+        artifact = artifact if isinstance(artifact, dict) else None
+        diagnostics = build_evidence_item_artifact_diagnostics(
+            {"metadata": {"content_type": content_type, "artifact": artifact}}
+        )
+
+        if not artifact:
             missing_count += 1
-            continue
-        present_count += 1
-        artifact_type = str(artifact.get("type") or "").lower()
+        else:
+            present_count += 1
+
+        if diagnostics.get("status") in {"warn", "fail"}:
+            issue_count += 1
+
+        artifact_type = str((artifact or {}).get("type") or diagnostics.get("artifact_type") or "").lower()
         if content_type == "table" or artifact_type == "table":
-            headers = artifact.get("headers") if isinstance(artifact.get("headers"), list) else []
-            rows = artifact.get("rows") if isinstance(artifact.get("rows"), list) else []
-            markdown = str(artifact.get("markdown") or "").strip()
-            if not headers and not rows and not markdown:
+            if diagnostics.get("status") in {"warn", "fail"}:
+                table_issue_count += 1
+            if diagnostics.get("table_missing_structure"):
                 table_missing_structure_count += 1
+            if diagnostics.get("table_missing_source"):
+                table_missing_source_count += 1
         if content_type in {"image_ocr", "ocr"} or artifact_type in {"image_ocr", "ocr"}:
-            images = artifact.get("images") if isinstance(artifact.get("images"), list) else []
-            if not images:
+            if diagnostics.get("status") in {"warn", "fail"}:
+                ocr_issue_count += 1
+            if diagnostics.get("ocr_missing_source"):
                 ocr_missing_source_count += 1
-            low_confidence_ocr_source_count += sum(
-                1 for image in images if isinstance(image, dict) and image.get("low_confidence") is True
-            )
+            low_confidence_ocr_source_count += int(diagnostics.get("ocr_low_confidence_source_count") or 0)
 
     return {
         "artifact_expected_count": expected_count,
         "artifact_present_count": present_count,
         "artifact_missing_count": missing_count,
+        "artifact_issue_count": issue_count,
         "artifact_preview_coverage": (present_count / expected_count) if expected_count else None,
+        "table_artifact_issue_count": table_issue_count,
         "table_artifact_missing_structure_count": table_missing_structure_count,
+        "table_artifact_missing_source_count": table_missing_source_count,
+        "ocr_artifact_issue_count": ocr_issue_count,
         "ocr_artifact_missing_source_count": ocr_missing_source_count,
         "ocr_artifact_low_confidence_source_count": low_confidence_ocr_source_count,
     }
@@ -449,35 +466,38 @@ def build_parse_quality_summary(
 
         artifact_expected_count = int(artifact_quality.get("artifact_expected_count") or 0)
         artifact_missing_count = int(artifact_quality.get("artifact_missing_count") or 0)
+        artifact_issue_count = int(artifact_quality.get("artifact_issue_count") or 0)
         table_artifact_missing_structure_count = int(artifact_quality.get("table_artifact_missing_structure_count") or 0)
+        table_artifact_missing_source_count = int(artifact_quality.get("table_artifact_missing_source_count") or 0)
         ocr_artifact_missing_source_count = int(artifact_quality.get("ocr_artifact_missing_source_count") or 0)
+        ocr_artifact_low_confidence_source_count = int(artifact_quality.get("ocr_artifact_low_confidence_source_count") or 0)
         artifact_preview_coverage = artifact_quality.get("artifact_preview_coverage")
         if artifact_expected_count:
-            if artifact_missing_count:
-                score -= min(8, max(4, artifact_missing_count * 2))
-                add_check(
-                    "chunk_artifacts",
-                    "结构化预览",
-                    "warn",
-                    "warning",
-                    f"{artifact_missing_count} 个结构化 chunk 缺少可视化 artifact，覆盖率 {artifact_preview_coverage:.0%}",
-                    "检查切块 enrichment 是否保留 table/OCR/formula/code artifact，避免证据卡退化为纯文本。",
-                )
-                warnings.append("结构化 chunk 缺少可视化 artifact")
-            elif table_artifact_missing_structure_count or ocr_artifact_missing_source_count:
-                score -= min(6, max(3, table_artifact_missing_structure_count + ocr_artifact_missing_source_count))
+            if artifact_issue_count:
+                score -= min(10, max(3, artifact_issue_count * 2))
                 issues = []
+                if artifact_missing_count:
+                    issues.append(f"{artifact_missing_count} 个结构化 chunk 缺少 artifact")
                 if table_artifact_missing_structure_count:
                     issues.append(f"{table_artifact_missing_structure_count} 个表格 artifact 缺少表头/行或 Markdown")
+                if table_artifact_missing_source_count:
+                    issues.append(f"{table_artifact_missing_source_count} 个表格 artifact 缺少页码或来源")
                 if ocr_artifact_missing_source_count:
                     issues.append(f"{ocr_artifact_missing_source_count} 个 OCR artifact 缺少图片来源")
+                if ocr_artifact_low_confidence_source_count:
+                    issues.append(f"{ocr_artifact_low_confidence_source_count} 个 OCR 图片来源置信度偏低")
+                coverage_text = (
+                    f"，覆盖率 {artifact_preview_coverage:.0%}"
+                    if isinstance(artifact_preview_coverage, float)
+                    else ""
+                )
                 add_check(
                     "chunk_artifacts",
                     "结构化预览",
                     "warn",
                     "warning",
-                    "；".join(issues),
-                    "复核结构化 artifact 是否携带表格结构、图片来源和 OCR 文本预览。",
+                    f"{artifact_issue_count} 个结构化 chunk 存在 artifact 问题{coverage_text}：" + "；".join(issues),
+                    "复核结构化 artifact 是否携带表格结构、页码来源、图片来源和 OCR 文本预览。",
                 )
                 warnings.append("结构化 artifact 信息不完整")
             else:

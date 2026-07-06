@@ -25,7 +25,7 @@ type ChunkFilterOption = {
   count?: number;
 };
 
-const chunkFeatureFilterOptions: ChunkFilterOption[] = [
+const chunkFeatureFilterBaseOptions: ChunkFilterOption[] = [
   { value: "all", label: "全部质量" },
   { value: "artifact_issue", label: "Artifact问题" },
   { value: "table_artifact_issue", label: "表格问题" },
@@ -109,6 +109,18 @@ function getChunkFilterOptions(quality?: ParseQualitySummary | null): ChunkFilte
   }
 
   return options;
+}
+
+function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null): ChunkFilterOption[] {
+  const counts: Record<string, number | undefined> = {
+    artifact_issue: quality?.artifact_issue_count,
+    table_artifact_issue: quality?.table_artifact_issue_count,
+    ocr_artifact_issue: quality?.ocr_artifact_issue_count,
+  };
+  return chunkFeatureFilterBaseOptions.map((option) => ({
+    ...option,
+    count: option.value === "all" ? undefined : counts[option.value],
+  }));
 }
 
 function formatChunkLocation(chunk: DocumentChunkPreview) {
@@ -385,6 +397,10 @@ export default function DocumentsPage() {
 
   const chunkFilterOptions = useMemo(
     () => getChunkFilterOptions(chunkPanelQuality),
+    [chunkPanelQuality],
+  );
+  const chunkFeatureFilterOptions = useMemo(
+    () => getChunkFeatureFilterOptions(chunkPanelQuality),
     [chunkPanelQuality],
   );
   const chunkPreviewHasMore = chunkPreview.length < chunkPreviewTotal;
@@ -993,6 +1009,22 @@ export default function DocumentsPage() {
                         过长 {chunkPanelQuality.chunk_large_count}
                       </span>
                     )}
+                    {typeof chunkPanelQuality.artifact_issue_count === "number" && chunkPanelQuality.artifact_issue_count > 0 && (
+                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+                        Artifact问题 {chunkPanelQuality.artifact_issue_count}
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.table_artifact_missing_source_count === "number" && chunkPanelQuality.table_artifact_missing_source_count > 0 && (
+                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+                        表格缺来源 {chunkPanelQuality.table_artifact_missing_source_count}
+                      </span>
+                    )}
+                    {typeof chunkPanelQuality.ocr_artifact_low_confidence_source_count === "number" &&
+                      chunkPanelQuality.ocr_artifact_low_confidence_source_count > 0 && (
+                        <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
+                          OCR低置信 {chunkPanelQuality.ocr_artifact_low_confidence_source_count}
+                        </span>
+                      )}
                   </div>
                   {chunkPanelQuality.warnings && chunkPanelQuality.warnings.length > 0 && (
                     <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">
@@ -1095,6 +1127,7 @@ export default function DocumentsPage() {
                 <span className="text-gray-500 dark:text-gray-400">质量筛选</span>
                 {chunkFeatureFilterOptions.map((option) => {
                   const active = option.value === chunkPreviewFeature;
+                  const count = option.count;
                   return (
                     <button
                       key={option.value}
@@ -1108,6 +1141,7 @@ export default function DocumentsPage() {
                       }`}
                     >
                       {option.label}
+                      {typeof count === "number" && count > 0 ? ` ${count}` : ""}
                     </button>
                   );
                 })}

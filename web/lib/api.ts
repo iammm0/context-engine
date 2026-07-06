@@ -189,8 +189,12 @@ export type ParseQualitySummary = {
   artifact_expected_count?: number;
   artifact_present_count?: number;
   artifact_missing_count?: number;
+  artifact_issue_count?: number;
   artifact_preview_coverage?: number | null;
+  table_artifact_issue_count?: number;
   table_artifact_missing_structure_count?: number;
+  table_artifact_missing_source_count?: number;
+  ocr_artifact_issue_count?: number;
   ocr_artifact_missing_source_count?: number;
   ocr_artifact_low_confidence_source_count?: number;
   content_type_counts?: Record<string, number>;

@@ -38,7 +38,8 @@ enriched with compact metadata for preview, citation, and debugging:
   parser type, extraction method, page count, extracted page count, table count,
   formula count, OCR image count, OCR text length, OCR image coverage, OCR
   average confidence, low-confidence image counts, chunk anchor coverage, chunk
-  token size distribution, and structured artifact preview coverage.
+  token size distribution, structured artifact preview coverage, artifact issue
+  counts, table artifact issue counts, and OCR artifact issue counts.
 - `parse_quality`: the document-level quality summary stored on
   `documents.metadata`, including `quality_score`, `page_coverage`, warning
   messages, chunk `content_type_counts`, `risk_level`, structured
@@ -50,10 +51,15 @@ The current checks cover text extraction, page coverage, image OCR, chunk type
 recognition, chunk anchor coverage, chunk size distribution, OCR confidence,
 structured artifact completeness, table chunk retention, and formula chunk
 retention. Artifact completeness checks whether table/OCR/formula/code chunks
-carry compact preview artifacts, whether table artifacts preserve structure, and
-whether OCR artifacts retain image source refs. The legacy `warnings` array is
-still returned for compatibility, while `risk_level` gives clients a compact
-`low` / `medium` / `high` signal.
+carry compact preview artifacts, whether table artifacts preserve structure and
+source refs, whether OCR artifacts retain image source refs, and whether OCR
+source refs are low-confidence. The summary exposes `artifact_issue_count`,
+`table_artifact_issue_count`, `table_artifact_missing_source_count`,
+`ocr_artifact_issue_count`, `ocr_artifact_missing_source_count`, and
+`ocr_artifact_low_confidence_source_count` so clients can put counts next to
+quality filters. The legacy `warnings` array is still returned for
+compatibility, while `risk_level` gives clients a compact `low` / `medium` /
+`high` signal.
 
 Heavy parser fields such as `pages`, `tables`, `formulas`, and `code_blocks`
 remain on the document metadata when available, but are removed from repeated

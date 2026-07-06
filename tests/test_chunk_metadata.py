@@ -435,6 +435,7 @@ def test_build_parse_quality_summary_tracks_structured_artifact_coverage():
                         "type": "table",
                         "headers": ["metric", "value"],
                         "rows": [["recall", "0.9"]],
+                        "sources": [{"page": 1, "table_index": 1}],
                     },
                 },
             },
@@ -448,7 +449,7 @@ def test_build_parse_quality_summary_tracks_structured_artifact_coverage():
                     "artifact": {
                         "type": "image_ocr",
                         "text": "ocr text",
-                        "images": [{"image_index": 1, "text_preview": "ocr text", "low_confidence": True}],
+                        "images": [{"image_index": 1, "text_preview": "ocr text", "low_confidence": False}],
                     },
                 },
             },
@@ -459,8 +460,12 @@ def test_build_parse_quality_summary_tracks_structured_artifact_coverage():
     assert summary["artifact_expected_count"] == 2
     assert summary["artifact_present_count"] == 2
     assert summary["artifact_missing_count"] == 0
+    assert summary["artifact_issue_count"] == 0
     assert summary["artifact_preview_coverage"] == 1
-    assert summary["ocr_artifact_low_confidence_source_count"] == 1
+    assert summary["table_artifact_issue_count"] == 0
+    assert summary["table_artifact_missing_source_count"] == 0
+    assert summary["ocr_artifact_issue_count"] == 0
+    assert summary["ocr_artifact_low_confidence_source_count"] == 0
     assert checks["chunk_artifacts"]["status"] == "pass"
 
 
@@ -503,10 +508,16 @@ def test_build_parse_quality_summary_warns_on_incomplete_structured_artifacts():
     checks = {item["id"]: item for item in summary["quality_checks"]}
     assert summary["artifact_expected_count"] == 2
     assert summary["artifact_present_count"] == 2
+    assert summary["artifact_issue_count"] == 2
+    assert summary["table_artifact_issue_count"] == 1
     assert summary["table_artifact_missing_structure_count"] == 1
+    assert summary["table_artifact_missing_source_count"] == 1
+    assert summary["ocr_artifact_issue_count"] == 1
     assert summary["ocr_artifact_missing_source_count"] == 1
     assert checks["chunk_artifacts"]["status"] == "warn"
+    assert "2 个结构化 chunk 存在 artifact 问题" in checks["chunk_artifacts"]["message"]
     assert "表格 artifact 缺少表头" in checks["chunk_artifacts"]["message"]
+    assert "表格 artifact 缺少页码或来源" in checks["chunk_artifacts"]["message"]
     assert any("结构化 artifact 信息不完整" in warning for warning in summary["warnings"])
 
 
