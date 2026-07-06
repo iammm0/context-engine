@@ -525,24 +525,48 @@ def test_build_parse_quality_summary_warns_on_incomplete_structured_artifacts():
                     "artifact": {"type": "image_ocr", "text": "ocr text", "images": []},
                 },
             },
+            {
+                "text": "low confidence ocr text",
+                "metadata": {
+                    "content_type": "image_ocr",
+                    "token_count": 80,
+                    "char_start": 80,
+                    "char_end": 120,
+                    "artifact": {
+                        "type": "image_ocr",
+                        "text": "low confidence ocr text",
+                        "images": [{"page": 1, "image_index": 2, "low_confidence": True}],
+                    },
+                },
+            },
         ],
     )
 
     checks = {item["id"]: item for item in summary["quality_checks"]}
-    assert summary["artifact_expected_count"] == 2
-    assert summary["artifact_present_count"] == 2
-    assert summary["artifact_issue_count"] == 2
+    assert summary["artifact_expected_count"] == 3
+    assert summary["artifact_present_count"] == 3
+    assert summary["artifact_issue_count"] == 3
     assert summary["table_artifact_issue_count"] == 1
     assert summary["table_artifact_missing_structure_count"] == 1
     assert summary["table_artifact_missing_source_count"] == 1
-    assert summary["ocr_artifact_issue_count"] == 1
+    assert summary["ocr_artifact_issue_count"] == 2
     assert summary["ocr_artifact_missing_source_count"] == 1
+    assert summary["ocr_artifact_low_confidence_source_count"] == 1
     assert checks["chunk_artifacts"]["status"] == "warn"
     assert checks["chunk_artifacts"]["feature_filter"] == "artifact_issue"
     assert checks["chunk_artifacts"]["filter_label"] == "查看问题切块"
-    assert "2 个结构化 chunk 存在 artifact 问题" in checks["chunk_artifacts"]["message"]
+    assert checks["table_artifact_structure"]["feature_filter"] == "table_missing_structure"
+    assert checks["table_artifact_structure"]["filter_label"] == "查看缺结构表格"
+    assert checks["table_artifact_source"]["feature_filter"] == "table_missing_source"
+    assert checks["table_artifact_source"]["filter_label"] == "查看缺来源表格"
+    assert checks["ocr_artifact_source"]["feature_filter"] == "ocr_missing_source"
+    assert checks["ocr_artifact_source"]["filter_label"] == "查看缺来源OCR"
+    assert checks["ocr_artifact_confidence"]["feature_filter"] == "ocr_low_confidence"
+    assert checks["ocr_artifact_confidence"]["filter_label"] == "查看低置信OCR"
+    assert "3 个结构化 chunk 存在 artifact 问题" in checks["chunk_artifacts"]["message"]
     assert "表格 artifact 缺少表头" in checks["chunk_artifacts"]["message"]
     assert "表格 artifact 缺少页码或来源" in checks["chunk_artifacts"]["message"]
+    assert "OCR 图片来源置信度偏低" in checks["chunk_artifacts"]["message"]
     assert any("结构化 artifact 信息不完整" in warning for warning in summary["warnings"])
 
 

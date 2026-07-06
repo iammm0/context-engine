@@ -64,6 +64,11 @@ type ChunkDeepLinkTarget = {
 };
 
 type ParseQualityCheckItem = NonNullable<ParseQualitySummary["quality_checks"]>[number];
+type QualityIssueChip = {
+  feature: string;
+  label: string;
+  count: number;
+};
 
 function parseChunkDeepLinkTarget(): ChunkDeepLinkTarget | null {
   if (typeof window === "undefined") return null;
@@ -426,6 +431,16 @@ export default function DocumentsPage() {
     () => getChunkFeatureFilterOptions(chunkPanelQuality),
     [chunkPanelQuality],
   );
+  const qualityIssueChips = useMemo<QualityIssueChip[]>(() => {
+    if (!chunkPanelQuality) return [];
+    return [
+      { feature: "artifact_issue", label: "Artifact问题", count: chunkPanelQuality.artifact_issue_count },
+      { feature: "table_missing_structure", label: "表格缺结构", count: chunkPanelQuality.table_artifact_missing_structure_count },
+      { feature: "table_missing_source", label: "表格缺来源", count: chunkPanelQuality.table_artifact_missing_source_count },
+      { feature: "ocr_missing_source", label: "OCR缺来源", count: chunkPanelQuality.ocr_artifact_missing_source_count },
+      { feature: "ocr_low_confidence", label: "OCR低置信", count: chunkPanelQuality.ocr_artifact_low_confidence_source_count },
+    ].filter((item): item is QualityIssueChip => typeof item.count === "number" && item.count > 0);
+  }, [chunkPanelQuality]);
   const chunkPreviewHasMore = chunkPreview.length < chunkPreviewTotal;
 
   useEffect(() => {
@@ -612,6 +627,17 @@ export default function DocumentsPage() {
     setHighlightedChunkTarget(null);
     highlightedChunkRef.current = null;
     await loadChunkPreview(chunkPanelDoc, nextFilter, nextFeature, "");
+  };
+
+  const handleQualityFeatureFilter = async (feature: string) => {
+    if (!chunkPanelDoc || feature === "all") return;
+    setChunkPreviewFilter("all");
+    setChunkPreviewFeature(feature);
+    setChunkPreviewQuery("");
+    setChunkPreviewAppliedQuery("");
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
+    await loadChunkPreview(chunkPanelDoc, "all", feature, "");
   };
 
   const handleChunkSearch = async () => {
@@ -1046,22 +1072,18 @@ export default function DocumentsPage() {
                         过长 {chunkPanelQuality.chunk_large_count}
                       </span>
                     )}
-                    {typeof chunkPanelQuality.artifact_issue_count === "number" && chunkPanelQuality.artifact_issue_count > 0 && (
-                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
-                        Artifact问题 {chunkPanelQuality.artifact_issue_count}
-                      </span>
-                    )}
-                    {typeof chunkPanelQuality.table_artifact_missing_source_count === "number" && chunkPanelQuality.table_artifact_missing_source_count > 0 && (
-                      <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
-                        表格缺来源 {chunkPanelQuality.table_artifact_missing_source_count}
-                      </span>
-                    )}
-                    {typeof chunkPanelQuality.ocr_artifact_low_confidence_source_count === "number" &&
-                      chunkPanelQuality.ocr_artifact_low_confidence_source_count > 0 && (
-                        <span className="rounded bg-white px-2 py-1 text-amber-700 dark:bg-gray-900 dark:text-amber-200">
-                          OCR低置信 {chunkPanelQuality.ocr_artifact_low_confidence_source_count}
-                        </span>
-                      )}
+                    {qualityIssueChips.map((chip) => (
+                      <button
+                        key={chip.feature}
+                        type="button"
+                        disabled={chunkPreviewLoading}
+                        onClick={() => handleQualityFeatureFilter(chip.feature).catch(() => {})}
+                        className="rounded bg-white px-2 py-1 text-left text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:bg-gray-900 dark:text-amber-200 dark:hover:bg-gray-800"
+                        title={`筛选${chip.label}切块`}
+                      >
+                        {chip.label} {chip.count}
+                      </button>
+                    ))}
                   </div>
                   {chunkPanelQuality.warnings && chunkPanelQuality.warnings.length > 0 && (
                     <div className="mt-3 text-xs text-amber-700 dark:text-amber-300">

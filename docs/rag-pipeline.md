@@ -60,10 +60,14 @@ retention. Artifact completeness checks whether table/OCR/formula/code chunks
 carry compact preview artifacts, whether table artifacts preserve structure and
 source refs, whether OCR artifacts retain image source refs, and whether OCR
 source refs are low-confidence. The summary exposes `artifact_issue_count`,
-`table_artifact_issue_count`, `table_artifact_missing_source_count`,
-`ocr_artifact_issue_count`, `ocr_artifact_missing_source_count`, and
-`ocr_artifact_low_confidence_source_count` so clients can put counts next to
-quality filters. The legacy `warnings` array is still returned for
+`table_artifact_issue_count`, `table_artifact_missing_structure_count`,
+`table_artifact_missing_source_count`, `ocr_artifact_issue_count`,
+`ocr_artifact_missing_source_count`, and `ocr_artifact_low_confidence_source_count`
+so clients can put counts next to quality filters. When a structured artifact
+check fails, the summary also includes fine-grained `quality_checks` that point
+directly to the affected chunk filters, such as `table_missing_structure`,
+`table_missing_source`, `ocr_missing_source`, and `ocr_low_confidence`.
+The legacy `warnings` array is still returned for
 compatibility, while `risk_level` gives clients a compact `low` / `medium` /
 `high` signal.
 
@@ -132,9 +136,13 @@ table, OCR, formula, or code chunk. The document chunk inspector renders these
 per-chunk warnings beside the affected preview, such as missing table structure,
 missing table source refs, missing OCR image refs, or low-confidence OCR refs.
 Chunks with such warnings also expose feature flags like `has_artifact_issue`,
-`has_table_artifact_issue`, and `has_ocr_artifact_issue`, so callers can pass
-`feature=artifact_issue`, `feature=table_artifact_issue`, or
-`feature=ocr_artifact_issue` to inspect only problematic structured chunks.
+`has_table_artifact_issue`, `has_ocr_artifact_issue`,
+`has_table_missing_structure`, `has_table_missing_source`,
+`has_ocr_missing_source`, and `has_ocr_low_confidence`, so callers can pass
+`feature=artifact_issue`, `feature=table_artifact_issue`,
+`feature=ocr_artifact_issue`, `feature=table_missing_structure`,
+`feature=table_missing_source`, `feature=ocr_missing_source`, or
+`feature=ocr_low_confidence` to inspect only problematic structured chunks.
 
 Chat evidence cards show the evidence id, content type, page/section location,
 retrieval type, and score so generated citations such as `[S1]` are easier to

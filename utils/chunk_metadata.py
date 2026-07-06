@@ -515,6 +515,50 @@ def build_parse_quality_summary(
                     feature_filter="artifact_issue",
                     filter_label="查看问题切块",
                 )
+                if table_artifact_missing_structure_count:
+                    add_check(
+                        "table_artifact_structure",
+                        "表格结构",
+                        "warn",
+                        "warning",
+                        f"{table_artifact_missing_structure_count} 个表格 artifact 缺少表头、行数据或 Markdown 预览",
+                        "复核表格解析结果是否保留列名和单元格结构，必要时切换表格解析策略后重建索引。",
+                        feature_filter="table_missing_structure",
+                        filter_label="查看缺结构表格",
+                    )
+                if table_artifact_missing_source_count:
+                    add_check(
+                        "table_artifact_source",
+                        "表格来源",
+                        "warn",
+                        "warning",
+                        f"{table_artifact_missing_source_count} 个表格 artifact 缺少页码或来源定位",
+                        "重新解析并保留表格页码、表格索引或 bbox，避免答案引用无法回到原文位置。",
+                        feature_filter="table_missing_source",
+                        filter_label="查看缺来源表格",
+                    )
+                if ocr_artifact_missing_source_count:
+                    add_check(
+                        "ocr_artifact_source",
+                        "OCR来源",
+                        "warn",
+                        "warning",
+                        f"{ocr_artifact_missing_source_count} 个 OCR artifact 缺少图片来源",
+                        "复核 OCR 输出是否携带图片索引、页码或嵌入图片路径，避免图片文字证据无法定位。",
+                        feature_filter="ocr_missing_source",
+                        filter_label="查看缺来源OCR",
+                    )
+                if ocr_artifact_low_confidence_source_count:
+                    add_check(
+                        "ocr_artifact_confidence",
+                        "OCR置信度",
+                        "warn",
+                        "warning",
+                        f"{ocr_artifact_low_confidence_source_count} 个 OCR 图片来源置信度偏低",
+                        "优先复核低置信 OCR 来源，必要时提升图片清晰度或更换 OCR 引擎后重新解析。",
+                        feature_filter="ocr_low_confidence",
+                        filter_label="查看低置信OCR",
+                    )
                 warnings.append("结构化 artifact 信息不完整")
             else:
                 add_check(
