@@ -515,6 +515,8 @@ def test_build_parse_quality_summary_warns_on_incomplete_structured_artifacts():
     assert summary["ocr_artifact_issue_count"] == 1
     assert summary["ocr_artifact_missing_source_count"] == 1
     assert checks["chunk_artifacts"]["status"] == "warn"
+    assert checks["chunk_artifacts"]["feature_filter"] == "artifact_issue"
+    assert checks["chunk_artifacts"]["filter_label"] == "查看问题切块"
     assert "2 个结构化 chunk 存在 artifact 问题" in checks["chunk_artifacts"]["message"]
     assert "表格 artifact 缺少表头" in checks["chunk_artifacts"]["message"]
     assert "表格 artifact 缺少页码或来源" in checks["chunk_artifacts"]["message"]

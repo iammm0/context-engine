@@ -48,6 +48,8 @@ type ChunkDeepLinkTarget = {
   chunkIndex?: number;
 };
 
+type ParseQualityCheckItem = NonNullable<ParseQualitySummary["quality_checks"]>[number];
+
 function parseChunkDeepLinkTarget(): ChunkDeepLinkTarget | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
@@ -577,6 +579,20 @@ export default function DocumentsPage() {
     await loadChunkPreview(chunkPanelDoc, chunkPreviewFilter, feature, chunkPreviewAppliedQuery);
   };
 
+  const handleQualityCheckFilter = async (check: ParseQualityCheckItem) => {
+    if (!chunkPanelDoc) return;
+    const nextFilter = check.content_type_filter || "all";
+    const nextFeature = check.feature_filter || "all";
+    if (nextFilter === "all" && nextFeature === "all") return;
+    setChunkPreviewFilter(nextFilter);
+    setChunkPreviewFeature(nextFeature);
+    setChunkPreviewQuery("");
+    setChunkPreviewAppliedQuery("");
+    setHighlightedChunkTarget(null);
+    highlightedChunkRef.current = null;
+    await loadChunkPreview(chunkPanelDoc, nextFilter, nextFeature, "");
+  };
+
   const handleChunkSearch = async () => {
     if (!chunkPanelDoc) return;
     const nextQuery = chunkPreviewQuery.trim();
@@ -1042,6 +1058,16 @@ export default function DocumentsPage() {
                           <div className="mt-1 leading-5">{check.message}</div>
                           {check.action && check.status !== "pass" && (
                             <div className="mt-1 opacity-80">{check.action}</div>
+                          )}
+                          {check.status !== "pass" && (check.content_type_filter || check.feature_filter) && (
+                            <button
+                              type="button"
+                              disabled={chunkPreviewLoading}
+                              onClick={() => handleQualityCheckFilter(check).catch(() => {})}
+                              className="mt-2 rounded bg-white px-2 py-1 text-[11px] font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-200 hover:bg-gray-50 disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-700 dark:hover:bg-gray-800"
+                            >
+                              {check.filter_label || "查看相关切块"}
+                            </button>
                           )}
                         </div>
                       ))}

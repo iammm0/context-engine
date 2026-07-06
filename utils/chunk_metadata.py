@@ -289,6 +289,10 @@ def build_parse_quality_summary(
         severity: str,
         message: str,
         action: str = "",
+        *,
+        content_type_filter: str = "",
+        feature_filter: str = "",
+        filter_label: str = "",
     ) -> None:
         item = {
             "id": check_id,
@@ -299,6 +303,12 @@ def build_parse_quality_summary(
         }
         if action:
             item["action"] = action
+        if content_type_filter:
+            item["content_type_filter"] = content_type_filter
+        if feature_filter:
+            item["feature_filter"] = feature_filter
+        if filter_label:
+            item["filter_label"] = filter_label
         checks.append(item)
 
     text_length = int(summary.get("text_length") or 0)
@@ -498,6 +508,8 @@ def build_parse_quality_summary(
                     "warning",
                     f"{artifact_issue_count} 个结构化 chunk 存在 artifact 问题{coverage_text}：" + "；".join(issues),
                     "复核结构化 artifact 是否携带表格结构、页码来源、图片来源和 OCR 文本预览。",
+                    feature_filter="artifact_issue",
+                    filter_label="查看问题切块",
                 )
                 warnings.append("结构化 artifact 信息不完整")
             else:

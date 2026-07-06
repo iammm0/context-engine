@@ -47,6 +47,9 @@ enriched with compact metadata for preview, citation, and debugging:
 
 `parse_quality.quality_checks` keeps each parser diagnostic as a stable item
 with `id`, `label`, `status`, `severity`, `message`, and optional `action`.
+Checks can also include `content_type_filter`, `feature_filter`, and
+`filter_label` so the document chunk inspector can turn a diagnostic into a
+one-click filtered chunk view.
 The current checks cover text extraction, page coverage, image OCR, chunk type
 recognition, chunk anchor coverage, chunk size distribution, OCR confidence,
 structured artifact completeness, table chunk retention, and formula chunk

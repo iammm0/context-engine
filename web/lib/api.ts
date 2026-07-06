@@ -213,6 +213,9 @@ export type ParseQualityCheck = {
   severity: "info" | "warning" | "critical" | string;
   message: string;
   action?: string;
+  content_type_filter?: string | null;
+  feature_filter?: string | null;
+  filter_label?: string | null;
 };
 
 export type ConversationMessage = {
