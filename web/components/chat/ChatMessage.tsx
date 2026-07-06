@@ -4,7 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -116,6 +116,22 @@ function formatArtifactQualityWarnings(item: EvidenceItem) {
   return quality.warnings.join(" · ");
 }
 
+function artifactIssueFeature(quality?: EvidenceArtifactQuality | null) {
+  if (!quality || quality.status !== "warn") return "";
+  if (quality.table_missing_structure) return "table_missing_structure";
+  if (quality.table_missing_source) return "table_missing_source";
+  if (quality.ocr_missing_source) return "ocr_missing_source";
+  if (quality.ocr_low_confidence_source_count > 0) return "ocr_low_confidence";
+  return "artifact_issue";
+}
+
+function appendChunkInspectorContext(params: URLSearchParams, contentType?: string | null, feature?: string | null) {
+  const normalizedType = contentType?.trim();
+  const normalizedFeature = feature?.trim();
+  if (normalizedType) params.set("content_type", normalizedType);
+  if (normalizedFeature) params.set("feature", normalizedFeature);
+}
+
 type CitationUseState = "used" | "unused" | "unknown";
 
 function citationUseBadge(state: CitationUseState) {
@@ -139,6 +155,7 @@ function buildSourceChunkHref(source: SourceInfo) {
   const params = new URLSearchParams({ document_id: source.document_id });
   if (source.chunk_id) params.set("chunk_id", source.chunk_id);
   if (typeof source.chunk_index === "number") params.set("chunk_index", String(source.chunk_index));
+  appendChunkInspectorContext(params, source.content_type || source.artifact?.type || null, null);
   return `/documents?${params.toString()}`;
 }
 
@@ -147,6 +164,7 @@ function buildEvidenceChunkHref(item: EvidenceItem) {
   const params = new URLSearchParams({ document_id: item.document_id });
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
+  appendChunkInspectorContext(params, getEvidenceType(item), artifactIssueFeature(item.metadata?.artifact_quality));
   return `/documents?${params.toString()}`;
 }
 
@@ -155,6 +173,7 @@ function buildCitationEvidenceChunkHref(item: CitationEvidenceRef) {
   const params = new URLSearchParams({ document_id: item.document_id });
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
+  appendChunkInspectorContext(params, item.content_type || null, null);
   return `/documents?${params.toString()}`;
 }
 

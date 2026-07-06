@@ -34,6 +34,57 @@ class FakeChunkRepo:
         ]
 
 
+class FakeMixedChunkRepo:
+    def get_chunks_by_document(self, document_id):
+        return [
+            {
+                "_id": "text0",
+                "document_id": document_id,
+                "chunk_index": 0,
+                "text": "text chunk",
+                "metadata": {"content_type": "text", "preview": "text chunk"},
+            },
+            {
+                "_id": "table1",
+                "document_id": document_id,
+                "chunk_index": 1,
+                "text": "complete table",
+                "metadata": {
+                    "content_type": "table",
+                    "preview": "complete table",
+                    "artifact": {
+                        "type": "table",
+                        "headers": ["Metric"],
+                        "rows": [["Recall"]],
+                        "sources": [{"page": 1, "table_index": 1}],
+                    },
+                },
+            },
+            {
+                "_id": "table3",
+                "document_id": document_id,
+                "chunk_index": 3,
+                "text": "table without source",
+                "metadata": {
+                    "content_type": "table",
+                    "preview": "table without source",
+                    "artifact": {"type": "table", "headers": ["Metric"], "rows": [["Precision"]]},
+                },
+            },
+            {
+                "_id": "table4",
+                "document_id": document_id,
+                "chunk_index": 4,
+                "text": "target table without source",
+                "metadata": {
+                    "content_type": "table",
+                    "preview": "target table without source",
+                    "artifact": {"type": "table", "headers": ["Metric"], "rows": [["F1"]]},
+                },
+            },
+        ]
+
+
 @pytest.mark.asyncio
 async def test_get_document_chunks_centers_window_on_target_chunk(monkeypatch):
     monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeDocumentRepo())
@@ -59,3 +110,33 @@ async def test_get_document_chunks_centers_window_on_target_chunk(monkeypatch):
     assert response.target_offset == 1
     assert [chunk["chunk_index"] for chunk in response.chunks] == [3, 4, 5]
     assert all("text" not in chunk for chunk in response.chunks)
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_centers_target_inside_filtered_artifact_issue(monkeypatch):
+    monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeDocumentRepo())
+    monkeypatch.setattr(documents_router, "get_chunk_repo", lambda: FakeMixedChunkRepo())
+
+    response = await documents_router.get_document_chunks(
+        "doc1",
+        skip=0,
+        limit=1,
+        include_text=False,
+        content_type="table",
+        feature="table_missing_source",
+        q=None,
+        target_chunk_id=None,
+        target_chunk_index=4,
+        context_window=0,
+    )
+
+    assert response.skip == 1
+    assert response.total_chunks == 2
+    assert response.total_all_chunks == 4
+    assert response.target_found is True
+    assert response.target_chunk_index == 4
+    assert response.target_chunk_id == "table4"
+    assert response.target_offset == 0
+    assert response.filters == {"content_type": "table", "feature": "table_missing_source", "q": None}
+    assert [chunk["chunk_index"] for chunk in response.chunks] == [4]
+    assert response.chunks[0]["features"]["has_table_missing_source"] is True

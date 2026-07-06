@@ -151,6 +151,10 @@ are rendered as citation chips when matching evidence is available; selecting a
 chip opens the evidence list and highlights the corresponding source chunk.
 Evidence and source cards also link to `/documents` with the document and chunk
 locator, opening the chunk inspector around the cited chunk for source review.
+Those deep links can also carry `content_type` and `feature`, so table/OCR
+evidence opens with the matching type filter and incomplete artifact evidence
+opens directly inside the relevant issue filter, such as `table_missing_source`
+or `ocr_low_confidence`.
 Assistant messages can include `citation_quality` with citation coverage,
 valid/invalid citation ids, duplicate citations, unused evidence ids, and the
 highest-scored evidence that was not referenced. The UI displays this as a

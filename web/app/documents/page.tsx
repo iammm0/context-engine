@@ -61,6 +61,8 @@ type ChunkDeepLinkTarget = {
   documentId: string;
   chunkId?: string;
   chunkIndex?: number;
+  contentType?: string;
+  feature?: string;
 };
 
 type ParseQualityCheckItem = NonNullable<ParseQualitySummary["quality_checks"]>[number];
@@ -80,11 +82,25 @@ function parseChunkDeepLinkTarget(): ChunkDeepLinkTarget | null {
   const rawChunkIndex = params.get("chunk_index");
   const parsedIndex = rawChunkIndex !== null ? Number.parseInt(rawChunkIndex, 10) : Number.NaN;
   const chunkIndex = Number.isFinite(parsedIndex) && parsedIndex >= 0 ? parsedIndex : undefined;
-  return { documentId, chunkId, chunkIndex };
+  const contentType = params.get("content_type")?.trim() || undefined;
+  const feature = params.get("feature")?.trim() || undefined;
+  return {
+    documentId,
+    chunkId,
+    chunkIndex,
+    contentType: contentType && contentType !== "all" ? contentType : undefined,
+    feature: feature && feature !== "all" ? feature : undefined,
+  };
 }
 
 function chunkTargetKey(target: ChunkDeepLinkTarget) {
-  return [target.documentId, target.chunkId || "", typeof target.chunkIndex === "number" ? target.chunkIndex : ""].join(":");
+  return [
+    target.documentId,
+    target.chunkId || "",
+    typeof target.chunkIndex === "number" ? target.chunkIndex : "",
+    target.contentType || "",
+    target.feature || "",
+  ].join(":");
 }
 
 function documentFromDetail(detail: DocumentDetail): Document {
@@ -683,13 +699,15 @@ export default function DocumentsPage() {
         targetDoc = documentFromDetail(detail.data);
       }
 
-      setChunkPreviewFilter("all");
-      setChunkPreviewFeature("all");
+      const nextFilter = target.contentType || "all";
+      const nextFeature = target.feature || "all";
+      setChunkPreviewFilter(nextFilter);
+      setChunkPreviewFeature(nextFeature);
       setChunkPreviewQuery("");
       setChunkPreviewAppliedQuery("");
       setHighlightedChunkTarget(target);
       highlightedChunkRef.current = null;
-      await loadChunkPreview(targetDoc, "all", "all", "", {
+      await loadChunkPreview(targetDoc, nextFilter, nextFeature, "", {
         targetChunkId: target.chunkId,
         targetChunkIndex: target.chunkIndex,
         contextWindow: 6,
