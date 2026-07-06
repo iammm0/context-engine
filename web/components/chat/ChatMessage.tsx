@@ -3,6 +3,7 @@
 import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
+import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import { formatChatTimestamp } from "@/lib/timezone";
 import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
@@ -245,6 +246,7 @@ function TableSourceLocator({ sources }: { sources: TableSourceRef[] }) {
               来源 {index + 1}
             </span>
             <span className="min-w-0 break-all">{formatTableSourceRef(source, index)}</span>
+            {source.bbox ? <BboxMiniMap bbox={source.bbox} compact className="mt-1" /> : null}
           </div>
         ))}
       </div>
@@ -269,6 +271,9 @@ function OcrSourceLocator({ images }: { images: OcrImageRef[] }) {
               图片 {typeof image.image_index === "number" ? image.image_index : index + 1}
             </span>
             <span className="min-w-0 break-all">{formatOcrImageRef(image, index)}</span>
+            {image.bbox ? (
+              <BboxMiniMap bbox={image.bbox} frameWidth={image.width} frameHeight={image.height} compact className="mt-1" />
+            ) : null}
           </div>
         ))}
       </div>

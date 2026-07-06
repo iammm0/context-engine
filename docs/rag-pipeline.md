@@ -133,7 +133,9 @@ For table and OCR chunks, preview responses include a compact `artifact`:
 The document chunk inspector and chat evidence cards render these table/OCR refs
 as source locator blocks, so reviewers can inspect page, table/image index,
 parser target, dimensions, confidence, and bbox metadata without opening raw
-chunk JSON.
+chunk JSON. When bbox metadata is available, clients also render a compact bbox
+minimap as a page/image-region hint; this is a lightweight locator preview and
+can later be replaced by full PDF or image page rendering.
 
 Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these

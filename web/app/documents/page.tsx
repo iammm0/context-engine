@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DocumentUpload from "@/components/document/DocumentUpload";
 import Layout from "@/components/ui/Layout";
+import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
@@ -294,6 +295,7 @@ function TableSourceLocator({ sources }: { sources: TableSourceRef[] }) {
               来源 {index + 1}
             </span>
             <span className="min-w-0 break-all">{formatTableSourceRef(source, index)}</span>
+            {source.bbox ? <BboxMiniMap bbox={source.bbox} className="mt-1" /> : null}
           </div>
         ))}
       </div>
@@ -318,6 +320,9 @@ function OcrSourceLocator({ images }: { images: OcrImageRef[] }) {
               图片 {typeof image.image_index === "number" ? image.image_index : index + 1}
             </span>
             <span className="min-w-0 break-all">{formatOcrImageRef(image, index)}</span>
+            {image.bbox ? (
+              <BboxMiniMap bbox={image.bbox} frameWidth={image.width} frameHeight={image.height} className="mt-1" />
+            ) : null}
           </div>
         ))}
       </div>
