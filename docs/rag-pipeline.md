@@ -136,7 +136,9 @@ locator, opening the chunk inspector around the cited chunk for source review.
 Assistant messages can include `citation_quality` with citation coverage,
 valid/invalid citation ids, duplicate citations, unused evidence ids, and the
 highest-scored evidence that was not referenced. The UI displays this as a
-compact citation audit line next to any non-blocking `citation_warnings`.
+compact citation audit line next to any non-blocking `citation_warnings`, and
+renders unreferenced high-score evidence as locator cards that can highlight the
+current evidence entry or open the exact document chunk.
 Assistant messages can also include `evidence_quality`, a runtime diagnostic for
 retrieved structured evidence. It reports artifact coverage, structured artifact
 coverage, table structure/source gaps, OCR source gaps, low-confidence OCR image
@@ -159,7 +161,10 @@ formula/code evidence exposes a compact content preview.
 Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
-`unreferenced_top_evidence_ids`.
+`unreferenced_top_evidence_ids`. The structured `unreferenced_top_evidence`
+field carries compact locator data such as `document_id`, `chunk_id`,
+`chunk_index`, page range, content type, score, and preview text so clients can
+jump from a citation audit warning to the exact missing source.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
 `structured_artifact_coverage`, table/OCR completeness counters, warnings, and

@@ -200,6 +200,24 @@ export interface EvidenceQuality {
   recommendations?: string[];
 }
 
+export interface CitationEvidenceRef {
+  id: string;
+  score?: number;
+  document_id?: string;
+  file_id?: string;
+  conversation_id?: string;
+  chunk_id?: string;
+  chunk_index?: number;
+  document_title?: string;
+  section_path?: string[];
+  page?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  content_type?: string;
+  retrieval_type?: string;
+  preview?: string;
+}
+
 export interface CitationQuality {
   status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string;
   evidence_count: number;
@@ -209,6 +227,7 @@ export interface CitationQuality {
   duplicate_citation_ids: string[];
   unused_evidence_ids: string[];
   unreferenced_top_evidence_ids: string[];
+  unreferenced_top_evidence?: CitationEvidenceRef[];
   coverage?: number | null;
   warnings?: string[];
 }

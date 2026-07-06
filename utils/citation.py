@@ -147,6 +147,28 @@ def _evidence_items(evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> List[E
     return items
 
 
+def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
+    metadata = item.metadata or {}
+    artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else {}
+    return {
+        "id": item.id,
+        "score": item.score,
+        "document_id": item.document_id,
+        "file_id": item.file_id,
+        "conversation_id": item.conversation_id,
+        "chunk_id": item.chunk_id,
+        "chunk_index": item.chunk_index,
+        "document_title": item.document_title,
+        "section_path": item.section_path,
+        "page": item.page,
+        "page_start": metadata.get("page_start"),
+        "page_end": metadata.get("page_end"),
+        "content_type": metadata.get("content_type") or artifact.get("type"),
+        "retrieval_type": item.retrieval_type,
+        "preview": metadata.get("preview") or _compact_text(item.text, 160),
+    }
+
+
 def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> Dict[str, Any]:
     """Build structured citation coverage diagnostics for generated answers."""
     items = _evidence_items(evidence)
@@ -160,7 +182,8 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     duplicate_ids = [cid for cid, count in mention_counts.items() if count > 1]
     unused_ids = [eid for eid in evidence_ids if eid not in set(valid_ids)]
     top_evidence = sorted(items, key=lambda item: item.score, reverse=True)[:3]
-    unreferenced_top_ids = [item.id for item in top_evidence if item.id and item.id not in set(valid_ids)]
+    unreferenced_top = [item for item in top_evidence if item.id and item.id not in set(valid_ids)]
+    unreferenced_top_ids = [item.id for item in unreferenced_top]
     coverage = (len(valid_ids) / len(evidence_ids)) if evidence_ids else None
 
     warnings: List[str] = []
@@ -191,6 +214,7 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "duplicate_citation_ids": duplicate_ids,
         "unused_evidence_ids": unused_ids,
         "unreferenced_top_evidence_ids": unreferenced_top_ids,
+        "unreferenced_top_evidence": [_evidence_locator(item) for item in unreferenced_top],
         "coverage": round(coverage, 4) if coverage is not None else None,
         "warnings": warnings,
     }

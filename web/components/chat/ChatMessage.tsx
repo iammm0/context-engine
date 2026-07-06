@@ -4,7 +4,7 @@ import RAGEvaluationPanel from "@/components/chat/RAGEvaluationPanel";
 import FormattedMessage from "@/components/message/FormattedMessage";
 import ThinkingDots from "@/components/message/ThinkingDots";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationQuality, EvidenceArtifact, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -34,6 +34,20 @@ function formatSourceLocation(source: SourceInfo) {
 function formatEvidenceLocation(item: EvidenceItem) {
   const pageStart = item.metadata?.page_start ?? item.page ?? null;
   const pageEnd = item.metadata?.page_end ?? item.page ?? null;
+  const pages =
+    pageStart && pageEnd && pageStart !== pageEnd
+      ? `第 ${pageStart}-${pageEnd} 页`
+      : pageStart
+        ? `第 ${pageStart} 页`
+        : "";
+  const section = item.section_path?.length ? item.section_path.join(" / ") : "";
+  const chunk = typeof item.chunk_index === "number" ? `chunk ${item.chunk_index}` : "";
+  return [pages, section, chunk].filter(Boolean).join(" · ");
+}
+
+function formatCitationEvidenceLocation(item: CitationEvidenceRef) {
+  const pageStart = item.page_start ?? item.page ?? null;
+  const pageEnd = item.page_end ?? item.page ?? null;
   const pages =
     pageStart && pageEnd && pageStart !== pageEnd
       ? `第 ${pageStart}-${pageEnd} 页`
@@ -111,6 +125,14 @@ function buildSourceChunkHref(source: SourceInfo) {
 }
 
 function buildEvidenceChunkHref(item: EvidenceItem) {
+  if (!item.document_id) return "";
+  const params = new URLSearchParams({ document_id: item.document_id });
+  if (item.chunk_id) params.set("chunk_id", item.chunk_id);
+  if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
+  return `/documents?${params.toString()}`;
+}
+
+function buildCitationEvidenceChunkHref(item: CitationEvidenceRef) {
   if (!item.document_id) return "";
   const params = new URLSearchParams({ document_id: item.document_id });
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
@@ -574,6 +596,67 @@ function ChatMessageImpl({
             {formatCitationQuality(message.citation_quality)}
           </div>
         )}
+
+        {!isUser && message.citation_quality?.unreferenced_top_evidence?.length ? (
+          <div className="mt-2 w-full rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            <div className="mb-1 font-medium">未引用高分证据</div>
+            <div className="space-y-1">
+              {message.citation_quality.unreferenced_top_evidence.slice(0, 3).map((item) => {
+                const chunkHref = buildCitationEvidenceChunkHref(item);
+                const location = formatCitationEvidenceLocation(item);
+                const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
+                return (
+                  <div
+                    key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}`}
+                    className={`rounded border px-2 py-1 ${
+                      item.id === activeCitationId
+                        ? "border-amber-500 bg-white dark:border-amber-400 dark:bg-amber-950/50"
+                        : "border-amber-200/80 bg-white/70 dark:border-amber-800/50 dark:bg-amber-950/20"
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="rounded bg-amber-700 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-amber-200 dark:text-amber-950">
+                        {item.id}
+                      </span>
+                      {typeLabel && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/50 dark:text-amber-100">
+                          {typeLabel}
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {item.document_title || item.document_id || item.chunk_id || "证据"}
+                      </span>
+                      {typeof item.score === "number" && (
+                        <span className="shrink-0 text-amber-700/80 dark:text-amber-200/80">{item.score.toFixed(3)}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-amber-800/80 dark:text-amber-100/80">
+                      {location && <span>{location}</span>}
+                      {item.retrieval_type && <span>{item.retrieval_type}</span>}
+                      <button
+                        type="button"
+                        onClick={() => handleCitationClick(item.id)}
+                        className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100"
+                      >
+                        定位证据
+                      </button>
+                      {chunkHref && (
+                        <Link href={chunkHref} className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
+                          查看切块
+                        </Link>
+                      )}
+                    </div>
+                    {item.preview && (
+                      <div className="mt-0.5 line-clamp-2 text-[11px] text-amber-900/70 dark:text-amber-100/70">
+                        {item.preview}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {!isUser && formatEvidenceQuality(message.evidence_quality) && (
           <div

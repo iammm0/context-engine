@@ -93,6 +93,13 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["duplicate_citation_ids"] == ["S1"]
     assert diagnostics["unused_evidence_ids"] == ["S2"]
     assert diagnostics["unreferenced_top_evidence_ids"] == ["S2"]
+    assert diagnostics["unreferenced_top_evidence"][0]["id"] == "S2"
+    assert diagnostics["unreferenced_top_evidence"][0]["document_id"] == "doc1"
+    assert diagnostics["unreferenced_top_evidence"][0]["chunk_id"] == "chunk2"
+    assert diagnostics["unreferenced_top_evidence"][0]["chunk_index"] == 1
+    assert diagnostics["unreferenced_top_evidence"][0]["page_start"] == 3
+    assert diagnostics["unreferenced_top_evidence"][0]["content_type"] == "image_ocr"
+    assert diagnostics["unreferenced_top_evidence"][0]["preview"]
     assert diagnostics["coverage"] == 0.5
     assert any("重复引用" in warning for warning in diagnostics["warnings"])
 
