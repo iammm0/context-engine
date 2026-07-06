@@ -40,10 +40,14 @@ def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
         bits.append(f"confidence {_format_number(confidence)}%")
     if image.get("line_count") is not None:
         bits.append(f"{image.get('line_count')} lines")
+    if image.get("text_length") is not None:
+        bits.append(f"{image.get('text_length')} chars")
     if image.get("width") is not None and image.get("height") is not None:
         bits.append(f"{image.get('width')}x{image.get('height')}")
     if image.get("target"):
         bits.append(str(image.get("target")))
+    if image.get("bbox"):
+        bits.append(f"bbox {_compact_text(image.get('bbox'), 120)}")
     if image.get("low_confidence") is True:
         bits.append("low confidence")
     if image.get("text_preview"):
@@ -123,6 +127,20 @@ def _format_artifact_context(artifact: Any) -> str:
         return f"结构化证据: {artifact_type}; 内容: {_compact_text(artifact.get('text'))}"
 
     return ""
+
+
+def _format_artifact_quality_context(artifact_quality: Any) -> str:
+    if not isinstance(artifact_quality, dict):
+        return ""
+    if artifact_quality.get("status") not in {"warn", "fail"}:
+        return ""
+    warnings = artifact_quality.get("warnings")
+    if not isinstance(warnings, list):
+        return ""
+    compact_warnings = [_compact_text(item, 120) for item in warnings if str(item).strip()]
+    if not compact_warnings:
+        return ""
+    return f"artifact质量: {'; '.join(compact_warnings[:4])}"
 
 
 def extract_citation_ids(text: str) -> List[str]:
@@ -247,8 +265,10 @@ def format_evidence_context(evidence: Iterable[EvidenceItem | Dict[str, Any]]) -
             location_bits.append(f"chunk {item.chunk_index}")
         location = f" ({'; '.join(location_bits)})" if location_bits else ""
         content_type = item.metadata.get("content_type") or "text"
+        artifact_quality_context = _format_artifact_quality_context(item.metadata.get("artifact_quality"))
         artifact_context = _format_artifact_context(item.metadata.get("artifact"))
-        body = f"{artifact_context}\n{item.text}" if artifact_context else item.text
+        body_parts = [artifact_quality_context, artifact_context, item.text]
+        body = "\n".join(part for part in body_parts if part)
         parts.append(
             f"[{item.id}] 来源: {title}{location}\n"
             f"证据类型: {content_type}; 检索类型: {item.retrieval_type}; 分数: {item.score:.4f}\n"

@@ -56,15 +56,21 @@ def test_evidence_format_and_citation_validation():
                         {
                             "page": 3,
                             "image_index": 2,
-                            "confidence": 0.88,
+                            "confidence": 0.42,
                             "line_count": 4,
+                            "text_length": 12,
                             "text_preview": "图中包含召回率 0.92",
-                            "low_confidence": False,
+                            "low_confidence": True,
                             "width": 640,
                             "height": 320,
                             "target": "media/image2.png",
+                            "bbox": [10, 20, 300, 180],
                         }
                     ],
+                },
+                "artifact_quality": {
+                    "status": "warn",
+                    "warnings": ["1 个 OCR 图片来源置信度偏低"],
                 },
             },
         )
@@ -80,7 +86,11 @@ def test_evidence_format_and_citation_validation():
     assert "table sources: pages 1-2, table 2, caption 指标表, type markdown" in context
     assert "样例行: recall | 0.9" in context
     assert "结构化证据: image_ocr" in context
-    assert "图片来源: page 3, image 2, confidence 88%, 4 lines, 640x320, media/image2.png, text 图中包含召回率 0.92" in context
+    assert "artifact质量: 1 个 OCR 图片来源置信度偏低" in context
+    assert (
+        "图片来源: page 3, image 2, confidence 42%, 4 lines, 12 chars, 640x320, "
+        "media/image2.png, bbox [10, 20, 300, 180], low confidence, text 图中包含召回率 0.92"
+    ) in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
     assert validate_citations("Answer [S1]", evidence) == []
     assert validate_citations("Answer [S3]", evidence)

@@ -184,8 +184,12 @@ When available, compact table/OCR/formula/code `artifact` data is carried in
 preview as the document chunk inspector. The generation context also includes a
 short artifact summary before the raw chunk text: table evidence exposes column
 names, sample rows, and table source refs; OCR evidence exposes image source
-refs, confidence, low-confidence flags, and per-image OCR text previews; and
-formula/code evidence exposes a compact content preview.
+refs, confidence, text length, bbox, low-confidence flags, and per-image OCR
+text previews; and formula/code evidence exposes a compact content preview.
+When `metadata.artifact_quality` carries warnings, the generation context also
+includes a compact artifact-quality line before the evidence text, so the model
+can treat low-confidence OCR, missing table sources, or incomplete artifact
+previews as weaker evidence.
 Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
