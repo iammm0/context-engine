@@ -8,7 +8,7 @@ import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type SourceLocatorSummary, type TableSourceRef } from "@/lib/api";
+import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type SourceLocatorAnchor, type SourceLocatorSummary, type TableSourceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -211,6 +211,64 @@ function formatSourceLocatorSummary(locator?: SourceLocatorSummary | null) {
   if (locator.has_bbox) bits.push("bbox");
   bits.push(`${locator.anchor_count} anchors`);
   return bits.join(" · ");
+}
+
+const sourceLocatorAnchorTypeLabel: Record<string, string> = {
+  page_range: "页码",
+  char_range: "字符",
+  table: "表格",
+  image: "图片",
+  section: "章节",
+};
+
+function formatSourceLocatorAnchor(anchor: SourceLocatorAnchor, index: number) {
+  const bits: string[] = [];
+  const type = anchor.type ? sourceLocatorAnchorTypeLabel[anchor.type] || anchor.type : `锚点 ${index + 1}`;
+  bits.push(type);
+  if (typeof anchor.page_start === "number" && typeof anchor.page_end === "number" && anchor.page_end !== anchor.page_start) {
+    bits.push(`第 ${anchor.page_start}-${anchor.page_end} 页`);
+  } else if (typeof anchor.page === "number") {
+    bits.push(`第 ${anchor.page} 页`);
+  } else if (typeof anchor.page_start === "number") {
+    bits.push(`第 ${anchor.page_start} 页`);
+  }
+  if (typeof anchor.char_start === "number" && typeof anchor.char_end === "number") {
+    bits.push(`字符 ${anchor.char_start}-${anchor.char_end}`);
+  }
+  if (typeof anchor.table_index === "number") bits.push(`表格 ${anchor.table_index}`);
+  if (typeof anchor.image_index === "number") bits.push(`图片 ${anchor.image_index}`);
+  if (typeof anchor.confidence === "number") bits.push(formatOcrConfidence(anchor.confidence));
+  if (anchor.low_confidence) bits.push("低置信");
+  if (anchor.caption) bits.push(anchor.caption);
+  else if (anchor.title) bits.push(anchor.title);
+  if (anchor.source) bits.push(anchor.source);
+  if (anchor.target) bits.push(anchor.target);
+  if (anchor.text_preview) bits.push(anchor.text_preview);
+  return bits.filter(Boolean).join(" · ");
+}
+
+function SourceLocatorAnchorPreview({ locator }: { locator?: SourceLocatorSummary | null }) {
+  const anchors = (locator?.anchors || []).filter((anchor) => anchor && typeof anchor === "object").slice(0, 4);
+  if (!anchors.length) return null;
+  const total = typeof locator?.anchor_count === "number" ? Math.max(locator.anchor_count, anchors.length) : anchors.length;
+  const remaining = Math.max(total - anchors.length, 0);
+
+  return (
+    <div className="mt-2 rounded border border-emerald-100 bg-emerald-50/70 px-2 py-2 text-xs text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100">
+      <div className="mb-1 font-medium">定位锚点</div>
+      <div className="space-y-1">
+        {anchors.map((anchor, index) => (
+          <div key={`${anchor.type || "anchor"}-${anchor.page ?? anchor.page_start ?? "page"}-${anchor.table_index ?? anchor.image_index ?? index}`} className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+            <span className="min-w-0 flex-1 break-words">{formatSourceLocatorAnchor(anchor, index)}</span>
+            {anchor.bbox ? (
+              <BboxMiniMap bbox={anchor.bbox} frameWidth={anchor.width} frameHeight={anchor.height} compact />
+            ) : null}
+          </div>
+        ))}
+        {remaining > 0 && <div className="text-emerald-700 dark:text-emerald-200">还有 {remaining} 个锚点</div>}
+      </div>
+    </div>
+  );
 }
 
 function formatPercent(value?: number | null) {
@@ -1388,6 +1446,7 @@ export default function DocumentsPage() {
                           来源定位：{sourceLocatorSummary}
                         </div>
                       )}
+                      <SourceLocatorAnchorPreview locator={chunk.source_locator} />
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
                         {chunk.preview}
                       </div>

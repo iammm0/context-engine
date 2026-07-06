@@ -162,8 +162,10 @@ can later be replaced by full PDF or image page rendering.
 Every preview also carries `source_locator`, a normalized locator summary built
 from page/character anchors plus table/OCR artifact anchors. The document
 chunk inspector and chat source cards render this summary as a compact
-"source location" line, and retrieval payloads keep it so citation diagnostics
-can expose the same locator for unused high-score evidence.
+"source location" line, and they also render the first locator anchors with
+page/character/table/image details plus bbox minimaps when available.
+Retrieval payloads keep the same locator so citation diagnostics can expose it
+for unused high-score evidence.
 
 Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these
