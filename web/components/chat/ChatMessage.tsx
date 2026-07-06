@@ -6,7 +6,7 @@ import ThinkingDots from "@/components/message/ThinkingDots";
 import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import { buildDocumentPreviewUrl } from "@/lib/api";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, SourceLocatorSummary, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -59,6 +59,24 @@ function formatCitationEvidenceLocation(item: CitationEvidenceRef) {
   const section = item.section_path?.length ? item.section_path.join(" / ") : "";
   const chunk = typeof item.chunk_index === "number" ? `chunk ${item.chunk_index}` : "";
   return [pages, section, chunk].filter(Boolean).join(" · ");
+}
+
+function formatSourceLocatorSummary(locator?: SourceLocatorSummary | null) {
+  if (!locator || !locator.anchor_count) return "";
+  const bits: string[] = [];
+  if (typeof locator.page_start === "number" && typeof locator.page_end === "number" && locator.page_end !== locator.page_start) {
+    bits.push(`第 ${locator.page_start}-${locator.page_end} 页`);
+  } else if (typeof locator.page_start === "number") {
+    bits.push(`第 ${locator.page_start} 页`);
+  }
+  if (typeof locator.char_start === "number" && typeof locator.char_end === "number") {
+    bits.push(`字符 ${locator.char_start}-${locator.char_end}`);
+  }
+  if (locator.has_table_source) bits.push("表格来源");
+  if (locator.has_image_source) bits.push("图片来源");
+  if (locator.has_bbox) bits.push("bbox");
+  bits.push(`${locator.anchor_count} anchors`);
+  return bits.join(" · ");
 }
 
 function getEvidenceType(item: EvidenceItem) {
@@ -573,6 +591,7 @@ function ChatMessageImpl({
               {message.sources.slice(0, 10).map((source) => {
                 const chunkHref = buildSourceChunkHref(source);
                 const previewHref = buildDocumentPreviewUrl(source.document_id, source.page_start || source.page || null);
+                const sourceLocatorSummary = formatSourceLocatorSummary(source.source_locator);
                 const useBadge = citationUseBadge(getCitationUseState(source.evidence_id));
                 return (
                   <li
@@ -619,6 +638,11 @@ function ChatMessageImpl({
                         </a>
                       )}
                     </div>
+                    {sourceLocatorSummary && (
+                      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        来源定位：{sourceLocatorSummary}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -637,6 +661,7 @@ function ChatMessageImpl({
               {message.evidence.slice(0, 8).map((item) => {
                 const chunkHref = buildEvidenceChunkHref(item);
                 const previewHref = buildDocumentPreviewUrl(item.document_id, item.metadata?.page_start || item.page || null);
+                const sourceLocatorSummary = formatSourceLocatorSummary(item.metadata?.source_locator);
                 const useBadge = citationUseBadge(getCitationUseState(item.id));
                 return (
                   <li
@@ -683,6 +708,11 @@ function ChatMessageImpl({
                         </a>
                       )}
                     </div>
+                    {sourceLocatorSummary && (
+                      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        来源定位：{sourceLocatorSummary}
+                      </div>
+                    )}
                     <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                       {item.metadata?.preview || item.text}
                     </div>
@@ -721,6 +751,7 @@ function ChatMessageImpl({
                 const chunkHref = buildCitationEvidenceChunkHref(item);
                 const previewHref = buildDocumentPreviewUrl(item.document_id, item.page_start || item.page || null);
                 const location = formatCitationEvidenceLocation(item);
+                const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator);
                 const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
                 return (
                   <div
@@ -768,6 +799,11 @@ function ChatMessageImpl({
                         </a>
                       )}
                     </div>
+                    {sourceLocatorSummary && (
+                      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        来源定位：{sourceLocatorSummary}
+                      </div>
+                    )}
                     {item.preview && (
                       <div className="mt-0.5 line-clamp-2 text-[11px] text-amber-900/70 dark:text-amber-100/70">
                         {item.preview}

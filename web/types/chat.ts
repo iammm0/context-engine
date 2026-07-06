@@ -95,7 +95,50 @@ export interface SourceInfo {
   page_end?: number | null;
   content_type?: string;
   artifact?: EvidenceArtifact | null;
+  source_locator?: SourceLocatorSummary | null;
   section_path?: string[];
+}
+
+export interface SourceLocatorAnchor {
+  type?: string;
+  page?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  table_index?: number | null;
+  image_index?: number | null;
+  bbox?: unknown;
+  width?: number | null;
+  height?: number | null;
+  confidence?: number | null;
+  low_confidence?: boolean | null;
+  text_preview?: string | null;
+  source?: string | null;
+  target?: string | null;
+  caption?: string | null;
+  title?: string | null;
+  row_count?: number | null;
+  column_count?: number | null;
+  [key: string]: unknown;
+}
+
+export interface SourceLocatorSummary {
+  source_type?: string;
+  document_id?: string;
+  chunk_index?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  section_path?: string[];
+  anchor_count?: number;
+  anchors?: SourceLocatorAnchor[];
+  has_page?: boolean;
+  has_char_range?: boolean;
+  has_bbox?: boolean;
+  has_table_source?: boolean;
+  has_image_source?: boolean;
 }
 
 export interface EvidenceArtifact {
@@ -159,6 +202,7 @@ export interface EvidenceItem {
     preview?: string;
     artifact?: EvidenceArtifact | null;
     artifact_quality?: EvidenceArtifactQuality | null;
+    source_locator?: SourceLocatorSummary | null;
     [key: string]: unknown;
   };
 }
@@ -217,6 +261,7 @@ export interface CitationEvidenceRef {
   content_type?: string;
   retrieval_type?: string;
   preview?: string;
+  source_locator?: SourceLocatorSummary | null;
 }
 
 export interface CitationQuality {

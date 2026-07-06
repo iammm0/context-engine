@@ -93,6 +93,45 @@ def test_table_artifact_uses_metadata_when_chunk_text_is_not_markdown_table():
     ]
 
 
+def test_source_locator_summarizes_table_pages_and_bbox():
+    chunks = [
+        {
+            "text": "table summary",
+            "metadata": {
+                "content_type": "table",
+                "tables": [
+                    {
+                        "markdown": "| metric | value |\n| --- | --- |\n| recall | 0.9 |",
+                        "page": 5,
+                        "caption": "metrics",
+                        "bbox": [12, 24, 360, 220],
+                    }
+                ],
+            },
+        }
+    ]
+
+    enriched = enrich_chunks_for_visualization(chunks, "table summary", {})
+    meta = enriched[0]["metadata"]
+    preview = build_chunk_preview(enriched[0], include_text=False)
+
+    assert meta["page_start"] == 5
+    assert meta["page_end"] == 5
+    assert meta["features"]["has_source_locator"] is True
+    assert meta["features"]["has_table_source_locator"] is True
+    assert meta["features"]["has_bbox_locator"] is True
+    assert meta["source_locator"]["source_type"] == "table"
+    assert meta["source_locator"]["page_start"] == 5
+    assert meta["source_locator"]["has_table_source"] is True
+    assert meta["source_locator"]["has_bbox"] is True
+    assert any(
+        anchor["type"] == "table" and anchor["bbox"] == [12, 24, 360, 220]
+        for anchor in meta["source_locator"]["anchors"]
+    )
+    assert preview["source_locator"]["has_bbox"] is True
+    assert filter_chunks_for_preview(enriched, feature="bbox_locator") == enriched
+
+
 def test_table_artifact_uses_metadata_data_when_markdown_is_missing():
     chunks = [
         {
@@ -220,6 +259,47 @@ def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
     assert artifact["images"][0]["bbox"] == [10, 20, 300, 180]
 
 
+def test_source_locator_summarizes_ocr_image_refs_and_bbox():
+    chunk_text = "[image text page=7 image=3]\nOCR result"
+    image_ocr = {
+        "image_count": 1,
+        "ocr_text_length": len("OCR result"),
+        "images": [
+            {
+                "page": 7,
+                "image_index": 3,
+                "confidence": 0.77,
+                "line_count": 2,
+                "text_length": len("OCR result"),
+                "text_preview": "OCR result",
+                "width": 800,
+                "height": 600,
+                "bbox": [20, 30, 420, 260],
+            }
+        ],
+    }
+
+    enriched = enrich_chunks_for_visualization(
+        [{"text": chunk_text, "metadata": {"content_type": "image_ocr", "image_ocr": image_ocr}}],
+        chunk_text,
+        {"image_ocr": image_ocr},
+    )
+
+    meta = enriched[0]["metadata"]
+    locator = meta["source_locator"]
+    assert locator["source_type"] == "image_ocr"
+    assert locator["page_start"] == 7
+    assert locator["has_image_source"] is True
+    assert locator["has_bbox"] is True
+    assert meta["features"]["has_ocr_source_locator"] is True
+    assert meta["features"]["has_bbox_locator"] is True
+    assert any(
+        anchor["type"] == "image" and anchor["image_index"] == 3 and anchor["bbox"] == [20, 30, 420, 260]
+        for anchor in locator["anchors"]
+    )
+    assert filter_chunks_for_preview(enriched, feature="ocr_source_locator") == enriched
+
+
 def test_ocr_artifact_marks_low_confidence_image_refs_without_markers():
     chunk_text = "[图片文字]\n模糊图中可能包含召回率"
     image_ocr = {
@@ -306,6 +386,40 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
     assert payload["artifact"]["sources"] == [{"table_index": 1, "page": 2, "caption": "指标表"}]
     assert "pages" not in payload
     assert "tables" not in payload
+
+
+def test_retrieval_payload_metadata_keeps_source_locator_for_evidence_cards():
+    metadata = {
+        "content_type": "image_ocr",
+        "page_start": 7,
+        "page_end": 7,
+        "source_locator": {
+            "source_type": "image_ocr",
+            "page_start": 7,
+            "page_end": 7,
+            "anchor_count": 3,
+            "has_image_source": True,
+            "has_bbox": True,
+            "anchors": [
+                {"type": "page_range", "page_start": 7, "page_end": 7},
+                {"type": "image", "page": 7, "image_index": 3, "bbox": [20, 30, 420, 260]},
+            ],
+        },
+        "artifact": {
+            "type": "image_ocr",
+            "text": "OCR result",
+            "images": [{"page": 7, "image_index": 3, "bbox": [20, 30, 420, 260]}],
+        },
+        "pages": [{"page": 7, "text": "heavy"}],
+    }
+
+    payload = build_retrieval_payload_metadata(metadata)
+
+    assert payload["source_locator"]["source_type"] == "image_ocr"
+    assert payload["source_locator"]["has_image_source"] is True
+    assert payload["source_locator"]["has_bbox"] is True
+    assert payload["source_locator"]["anchors"][1]["bbox"] == [20, 30, 420, 260]
+    assert "pages" not in payload
 
 
 def test_filter_chunks_for_preview_by_content_type_and_feature():

@@ -8,7 +8,7 @@ import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type TableSourceRef } from "@/lib/api";
+import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type SourceLocatorSummary, type TableSourceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -35,6 +35,10 @@ const chunkFeatureFilterBaseOptions: ChunkFilterOption[] = [
   { value: "table_missing_source", label: "表格缺来源" },
   { value: "ocr_missing_source", label: "OCR缺来源" },
   { value: "ocr_low_confidence", label: "OCR低置信" },
+  { value: "source_locator", label: "可定位" },
+  { value: "bbox_locator", label: "bbox定位" },
+  { value: "table_source_locator", label: "表格定位" },
+  { value: "ocr_source_locator", label: "OCR定位" },
   { value: "missing_anchor", label: "缺定位" },
   { value: "size_issue", label: "尺寸异常" },
 ];
@@ -51,6 +55,10 @@ const featureFlagLabel: Record<string, string> = {
   table_missing_source: "表格缺来源",
   ocr_missing_source: "OCR缺来源",
   ocr_low_confidence: "OCR低置信",
+  source_locator: "可定位",
+  bbox_locator: "bbox定位",
+  table_source_locator: "表格定位",
+  ocr_source_locator: "OCR定位",
   missing_anchor: "缺定位",
   location_issue: "定位问题",
   short_chunk: "过短",
@@ -159,6 +167,10 @@ function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null): Chu
     table_missing_source: quality?.table_artifact_missing_source_count,
     ocr_missing_source: quality?.ocr_artifact_missing_source_count,
     ocr_low_confidence: quality?.ocr_artifact_low_confidence_source_count,
+    source_locator: quality?.source_locator_count,
+    bbox_locator: quality?.bbox_locator_count,
+    table_source_locator: quality?.table_source_locator_count,
+    ocr_source_locator: quality?.ocr_source_locator_count,
     missing_anchor: quality?.chunk_missing_anchor_count,
     size_issue: (quality?.chunk_short_count || 0) + (quality?.chunk_large_count || 0),
   };
@@ -177,6 +189,24 @@ function formatChunkLocation(chunk: DocumentChunkPreview) {
         : "";
   const section = chunk.section_path?.length ? chunk.section_path.join(" / ") : "";
   return [pages, section].filter(Boolean).join(" · ") || "未定位";
+}
+
+function formatSourceLocatorSummary(locator?: SourceLocatorSummary | null) {
+  if (!locator || !locator.anchor_count) return "";
+  const bits: string[] = [];
+  if (typeof locator.page_start === "number" && typeof locator.page_end === "number" && locator.page_end !== locator.page_start) {
+    bits.push(`第 ${locator.page_start}-${locator.page_end} 页`);
+  } else if (typeof locator.page_start === "number") {
+    bits.push(`第 ${locator.page_start} 页`);
+  }
+  if (typeof locator.char_start === "number" && typeof locator.char_end === "number") {
+    bits.push(`字符 ${locator.char_start}-${locator.char_end}`);
+  }
+  if (locator.has_table_source) bits.push("表格来源");
+  if (locator.has_image_source) bits.push("图片来源");
+  if (locator.has_bbox) bits.push("bbox");
+  bits.push(`${locator.anchor_count} anchors`);
+  return bits.join(" · ");
 }
 
 function formatPercent(value?: number | null) {
@@ -1292,6 +1322,7 @@ export default function DocumentsPage() {
                 {chunkPreview.map((chunk) => {
                   const typeLabel = contentTypeLabel[chunk.content_type] || chunk.content_type || "文本";
                   const previewHref = buildDocumentPreviewUrl(chunk.document_id || chunkPanelDoc.id, chunk.page_start || chunk.page || null);
+                  const sourceLocatorSummary = formatSourceLocatorSummary(chunk.source_locator);
                   const featureFlags = Object.entries(chunk.features || {})
                     .filter(([, enabled]) => enabled)
                     .map(([key]) => {
@@ -1340,6 +1371,11 @@ export default function DocumentsPage() {
                         )}
                       </div>
                       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">{formatChunkLocation(chunk)}</div>
+                      {sourceLocatorSummary && (
+                        <div className="mt-2 rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                          来源定位：{sourceLocatorSummary}
+                        </div>
+                      )}
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
                         {chunk.preview}
                       </div>

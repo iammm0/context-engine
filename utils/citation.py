@@ -143,6 +143,34 @@ def _format_artifact_quality_context(artifact_quality: Any) -> str:
     return f"artifact质量: {'; '.join(compact_warnings[:4])}"
 
 
+def _format_source_locator_context(source_locator: Any) -> str:
+    if not isinstance(source_locator, dict):
+        return ""
+    bits: List[str] = []
+    page_start = source_locator.get("page_start")
+    page_end = source_locator.get("page_end")
+    if page_start is not None and page_end is not None and page_end != page_start:
+        bits.append(f"pages {page_start}-{page_end}")
+    elif page_start is not None:
+        bits.append(f"page {page_start}")
+    char_start = source_locator.get("char_start")
+    char_end = source_locator.get("char_end")
+    if char_start is not None and char_end is not None:
+        bits.append(f"chars {char_start}-{char_end}")
+    if source_locator.get("has_table_source"):
+        bits.append("table source refs")
+    if source_locator.get("has_image_source"):
+        bits.append("image source refs")
+    if source_locator.get("has_bbox"):
+        bits.append("bbox")
+    anchor_count = source_locator.get("anchor_count")
+    if anchor_count is not None:
+        bits.append(f"{anchor_count} anchors")
+    if not bits:
+        return ""
+    return f"source locator: {'; '.join(bits)}"
+
+
 def extract_citation_ids(text: str) -> List[str]:
     """Extract evidence ids such as S1 or S23 from generated text."""
     if not text:
@@ -184,6 +212,7 @@ def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
         "content_type": metadata.get("content_type") or artifact.get("type"),
         "retrieval_type": item.retrieval_type,
         "preview": metadata.get("preview") or _compact_text(item.text, 160),
+        "source_locator": metadata.get("source_locator"),
     }
 
 
@@ -265,9 +294,10 @@ def format_evidence_context(evidence: Iterable[EvidenceItem | Dict[str, Any]]) -
             location_bits.append(f"chunk {item.chunk_index}")
         location = f" ({'; '.join(location_bits)})" if location_bits else ""
         content_type = item.metadata.get("content_type") or "text"
+        source_locator_context = _format_source_locator_context(item.metadata.get("source_locator"))
         artifact_quality_context = _format_artifact_quality_context(item.metadata.get("artifact_quality"))
         artifact_context = _format_artifact_context(item.metadata.get("artifact"))
-        body_parts = [artifact_quality_context, artifact_context, item.text]
+        body_parts = [source_locator_context, artifact_quality_context, artifact_context, item.text]
         body = "\n".join(part for part in body_parts if part)
         parts.append(
             f"[{item.id}] 来源: {title}{location}\n"

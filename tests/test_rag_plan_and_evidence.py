@@ -68,6 +68,18 @@ def test_evidence_format_and_citation_validation():
                         }
                     ],
                 },
+                "source_locator": {
+                    "source_type": "image_ocr",
+                    "page_start": 3,
+                    "page_end": 3,
+                    "anchor_count": 3,
+                    "has_image_source": True,
+                    "has_bbox": True,
+                    "anchors": [
+                        {"type": "page_range", "page_start": 3, "page_end": 3},
+                        {"type": "image", "page": 3, "image_index": 2, "bbox": [10, 20, 300, 180]},
+                    ],
+                },
                 "artifact_quality": {
                     "status": "warn",
                     "warnings": ["1 个 OCR 图片来源置信度偏低"],
@@ -77,6 +89,7 @@ def test_evidence_format_and_citation_validation():
     ]
 
     context = format_evidence_context(evidence)
+    assert "source locator: page 3; image source refs; bbox; 3 anchors" in context
     assert "[S1]" in context
     assert "Demo" in context
     assert "证据类型: table" in context
@@ -109,6 +122,8 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["unreferenced_top_evidence"][0]["chunk_index"] == 1
     assert diagnostics["unreferenced_top_evidence"][0]["page_start"] == 3
     assert diagnostics["unreferenced_top_evidence"][0]["content_type"] == "image_ocr"
+    assert diagnostics["unreferenced_top_evidence"][0]["source_locator"]["has_image_source"] is True
+    assert diagnostics["unreferenced_top_evidence"][0]["source_locator"]["has_bbox"] is True
     assert diagnostics["unreferenced_top_evidence"][0]["preview"]
     assert diagnostics["coverage"] == 0.5
     assert any("重复引用" in warning for warning in diagnostics["warnings"])

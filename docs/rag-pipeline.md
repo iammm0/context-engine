@@ -29,11 +29,18 @@ enriched with compact metadata for preview, citation, and debugging:
   parser page spans.
 - `char_start`, `char_end`: character offsets in the synthesized document text.
 - `preview`: normalized short text used by chunk visualization UIs.
+- `source_locator`: a compact, normalized source locator summary shared by
+  chunk previews, retrieval payloads, citation diagnostics, and chat source
+  cards. It records page range, character range, table/image source anchors,
+  bbox availability, and anchor counts without requiring clients to inspect
+  table/OCR artifact internals first.
 - `features`: booleans such as `has_table`, `has_image_ocr`, `has_formula`,
   `has_code`, `has_missing_anchor`, `has_location_issue`, `has_short_chunk`,
   `has_large_chunk`, `has_size_issue`, `has_table_missing_structure`,
   `has_table_missing_source`, `has_ocr_missing_source`, and
-  `has_ocr_low_confidence`.
+  `has_ocr_low_confidence`. Locator-oriented flags include
+  `has_source_locator`, `has_bbox_locator`, `has_table_source_locator`, and
+  `has_ocr_source_locator`.
 - `image_ocr`: normalized OCR metadata for parsed images. PDF images, standalone
   image files, and Word embedded images use the same compact shape when OCR is
   enabled.
@@ -93,7 +100,9 @@ Query parameters:
   character, or image-source anchors. Use `size_issue`, `short_chunk`, or
   `large_chunk` to inspect chunks whose token sizes are likely to hurt recall
   or citation quality. Use `table_missing_structure`, `table_missing_source`,
-  `ocr_missing_source`, or `ocr_low_confidence` for finer artifact triage.
+  `ocr_missing_source`, or `ocr_low_confidence` for finer artifact triage. Use
+  `source_locator`, `bbox_locator`, `table_source_locator`, or
+  `ocr_source_locator` to inspect chunks with normalized source anchors.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When
@@ -143,6 +152,11 @@ parser target, dimensions, confidence, and bbox metadata without opening raw
 chunk JSON. When bbox metadata is available, clients also render a compact bbox
 minimap as a page/image-region hint; this is a lightweight locator preview and
 can later be replaced by full PDF or image page rendering.
+Every preview also carries `source_locator`, a normalized locator summary built
+from page/character anchors plus table/OCR artifact anchors. The document
+chunk inspector and chat source cards render this summary as a compact
+"source location" line, and retrieval payloads keep it so citation diagnostics
+can expose the same locator for unused high-score evidence.
 
 Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these

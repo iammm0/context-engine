@@ -97,8 +97,51 @@ export type DocumentChunkPreview = {
   features?: Record<string, boolean>;
   artifact?: ChunkPreviewArtifact | null;
   artifact_quality?: EvidenceArtifactQuality | null;
+  source_locator?: SourceLocatorSummary | null;
   chunker_type?: string | null;
   parse_summary?: ParseQualitySummary | Record<string, unknown>;
+};
+
+export type SourceLocatorAnchor = {
+  type?: string;
+  page?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  table_index?: number | null;
+  image_index?: number | null;
+  bbox?: unknown;
+  width?: number | null;
+  height?: number | null;
+  confidence?: number | null;
+  low_confidence?: boolean | null;
+  text_preview?: string | null;
+  source?: string | null;
+  target?: string | null;
+  caption?: string | null;
+  title?: string | null;
+  row_count?: number | null;
+  column_count?: number | null;
+  [key: string]: unknown;
+};
+
+export type SourceLocatorSummary = {
+  source_type?: string;
+  document_id?: string;
+  chunk_index?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  section_path?: string[];
+  anchor_count?: number;
+  anchors?: SourceLocatorAnchor[];
+  has_page?: boolean;
+  has_char_range?: boolean;
+  has_bbox?: boolean;
+  has_table_source?: boolean;
+  has_image_source?: boolean;
 };
 
 export type ChunkPreviewArtifact = {
@@ -182,6 +225,11 @@ export type ParseQualitySummary = {
   chunk_anchor_count?: number;
   chunk_missing_anchor_count?: number;
   chunk_anchor_coverage?: number | null;
+  source_locator_count?: number;
+  source_locator_coverage?: number | null;
+  bbox_locator_count?: number;
+  table_source_locator_count?: number;
+  ocr_source_locator_count?: number;
   chunk_token_min?: number;
   chunk_token_max?: number;
   chunk_token_avg?: number;

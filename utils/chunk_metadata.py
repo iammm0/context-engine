@@ -134,6 +134,11 @@ def _chunk_token_count(chunk: Dict[str, Any]) -> Optional[int]:
 def _chunk_has_anchor(chunk: Dict[str, Any]) -> bool:
     metadata = chunk.get("metadata") or {}
     visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
+    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else None
+    if not source_locator and isinstance(visual.get("source_locator"), dict):
+        source_locator = visual.get("source_locator")
+    if isinstance(source_locator, dict) and int(source_locator.get("anchor_count") or 0) > 0:
+        return True
     for source in (metadata, visual):
         if source.get("page") is not None or source.get("page_start") is not None or source.get("page_end") is not None:
             return True
@@ -150,10 +155,33 @@ def _chunk_has_anchor(chunk: Dict[str, Any]) -> bool:
 def _summarize_chunk_quality(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     token_counts = [count for chunk in chunks if (count := _chunk_token_count(chunk)) is not None]
     anchored_count = sum(1 for chunk in chunks if _chunk_has_anchor(chunk))
+    locator_count = 0
+    bbox_locator_count = 0
+    table_source_locator_count = 0
+    ocr_source_locator_count = 0
+    for chunk in chunks:
+        metadata = chunk.get("metadata") or {}
+        visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
+        source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
+        if not isinstance(source_locator, dict):
+            continue
+        if int(source_locator.get("anchor_count") or 0) > 0:
+            locator_count += 1
+        if source_locator.get("has_bbox"):
+            bbox_locator_count += 1
+        if source_locator.get("has_table_source"):
+            table_source_locator_count += 1
+        if source_locator.get("has_image_source"):
+            ocr_source_locator_count += 1
     summary: Dict[str, Any] = {
         "chunk_anchor_count": anchored_count,
         "chunk_missing_anchor_count": max(len(chunks) - anchored_count, 0),
         "chunk_anchor_coverage": (anchored_count / len(chunks)) if chunks else None,
+        "source_locator_count": locator_count,
+        "source_locator_coverage": (locator_count / len(chunks)) if chunks else None,
+        "bbox_locator_count": bbox_locator_count,
+        "table_source_locator_count": table_source_locator_count,
+        "ocr_source_locator_count": ocr_source_locator_count,
     }
     if token_counts:
         summary.update(
@@ -943,6 +971,144 @@ def _with_table_sources(artifact: Optional[Dict[str, Any]], sources: List[Dict[s
     return artifact
 
 
+def _artifact_pages(artifact: Optional[Dict[str, Any]]) -> List[int]:
+    if not isinstance(artifact, dict):
+        return []
+    pages: List[int] = []
+    artifact_type = str(artifact.get("type") or "").lower()
+    if artifact_type == "table":
+        for source in artifact.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            page = _safe_int(source.get("page"))
+            page_end = _safe_int(source.get("page_end"))
+            if page is not None:
+                pages.append(page)
+            if page_end is not None:
+                pages.append(page_end)
+    if artifact_type in {"image_ocr", "ocr"}:
+        for image in artifact.get("images") or []:
+            if not isinstance(image, dict):
+                continue
+            page = _safe_int(image.get("page"))
+            if page is not None:
+                pages.append(page)
+    return pages
+
+
+def _copy_locator_fields(source: Dict[str, Any], keys: Tuple[str, ...]) -> Dict[str, Any]:
+    return {key: source.get(key) for key in keys if source.get(key) is not None and source.get(key) != ""}
+
+
+def _build_source_locator(
+    *,
+    content_type: str,
+    page: Any = None,
+    page_start: Any = None,
+    page_end: Any = None,
+    char_start: Any = None,
+    char_end: Any = None,
+    section_path: Optional[List[str]] = None,
+    artifact: Optional[Dict[str, Any]] = None,
+    document_id: Optional[str] = None,
+    chunk_index: Optional[int] = None,
+    max_anchors: int = 8,
+) -> Dict[str, Any]:
+    normalized_type = str(content_type or "text").strip().lower()
+    start_page = _first_int(page_start, page)
+    end_page = _first_int(page_end, start_page)
+    start_char = _safe_int(char_start)
+    end_char = _safe_int(char_end)
+    anchors: List[Dict[str, Any]] = []
+
+    if start_page is not None:
+        page_anchor: Dict[str, Any] = {"type": "page_range", "page_start": start_page}
+        if end_page is not None:
+            page_anchor["page_end"] = end_page
+        anchors.append(page_anchor)
+
+    if start_char is not None and end_char is not None:
+        anchors.append({"type": "char_range", "char_start": start_char, "char_end": end_char})
+
+    artifact_type = str((artifact or {}).get("type") or normalized_type).strip().lower()
+    if artifact_type == "table" and isinstance(artifact, dict):
+        for source in artifact.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            anchor = {"type": "table"}
+            anchor.update(
+                _copy_locator_fields(
+                    source,
+                    (
+                        "table_index",
+                        "page",
+                        "page_end",
+                        "caption",
+                        "title",
+                        "source",
+                        "target",
+                        "bbox",
+                        "row_count",
+                        "column_count",
+                    ),
+                )
+            )
+            anchors.append(anchor)
+
+    if artifact_type in {"image_ocr", "ocr"} and isinstance(artifact, dict):
+        for image in artifact.get("images") or []:
+            if not isinstance(image, dict):
+                continue
+            anchor = {"type": "image"}
+            anchor.update(
+                _copy_locator_fields(
+                    image,
+                    (
+                        "page",
+                        "image_index",
+                        "target",
+                        "bbox",
+                        "width",
+                        "height",
+                        "confidence",
+                        "low_confidence",
+                        "text_preview",
+                    ),
+                )
+            )
+            anchors.append(anchor)
+
+    anchors = anchors[:max_anchors]
+    has_bbox = any(isinstance(anchor, dict) and anchor.get("bbox") is not None for anchor in anchors)
+    has_table_source = any(isinstance(anchor, dict) and anchor.get("type") == "table" for anchor in anchors)
+    has_image_source = any(isinstance(anchor, dict) and anchor.get("type") == "image" for anchor in anchors)
+    locator: Dict[str, Any] = {
+        "source_type": normalized_type,
+        "anchor_count": len(anchors),
+        "anchors": anchors,
+        "has_page": start_page is not None,
+        "has_char_range": start_char is not None and end_char is not None,
+        "has_bbox": has_bbox,
+        "has_table_source": has_table_source,
+        "has_image_source": has_image_source,
+    }
+    if document_id:
+        locator["document_id"] = document_id
+    if chunk_index is not None:
+        locator["chunk_index"] = chunk_index
+    if start_page is not None:
+        locator["page_start"] = start_page
+    if end_page is not None:
+        locator["page_end"] = end_page
+    if start_char is not None:
+        locator["char_start"] = start_char
+    if end_char is not None:
+        locator["char_end"] = end_char
+    if section_path:
+        locator["section_path"] = [str(part)[:200] for part in section_path[:8] if str(part).strip()]
+    return locator
+
+
 def _table_data_to_artifact(data: Any, *, markdown: str = "", max_rows: int = 12, max_cols: int = 8) -> Optional[Dict[str, Any]]:
     if not isinstance(data, list) or not data:
         return None
@@ -1085,6 +1251,21 @@ def _features_with_artifact_issue_flags(
     return merged
 
 
+def _features_with_source_locator_flags(features: Dict[str, bool], source_locator: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+    merged = dict(features or {})
+    if not isinstance(source_locator, dict):
+        return merged
+    if int(source_locator.get("anchor_count") or 0) > 0:
+        merged["has_source_locator"] = True
+    if source_locator.get("has_bbox"):
+        merged["has_bbox_locator"] = True
+    if source_locator.get("has_table_source"):
+        merged["has_table_source_locator"] = True
+    if source_locator.get("has_image_source"):
+        merged["has_ocr_source_locator"] = True
+    return merged
+
+
 def _features_with_anchor_flags(features: Dict[str, bool], chunk: Dict[str, Any]) -> Dict[str, bool]:
     merged = dict(features or {})
     if not _chunk_has_anchor(chunk):
@@ -1126,14 +1307,29 @@ def _features_for_filtering(
         or _build_chunk_artifact_quality(str(content_type), artifact)
     )
     artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else None
+    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
+    if not isinstance(source_locator, dict):
+        source_locator = _build_source_locator(
+            content_type=str(content_type),
+            page=metadata.get("page") if metadata.get("page") is not None else visual.get("page"),
+            page_start=metadata.get("page_start") if metadata.get("page_start") is not None else visual.get("page_start"),
+            page_end=metadata.get("page_end") if metadata.get("page_end") is not None else visual.get("page_end"),
+            char_start=metadata.get("char_start") if metadata.get("char_start") is not None else visual.get("char_start"),
+            char_end=metadata.get("char_end") if metadata.get("char_end") is not None else visual.get("char_end"),
+            section_path=metadata.get("section_path") if isinstance(metadata.get("section_path"), list) else visual.get("section_path"),
+            artifact=artifact,
+            document_id=chunk.get("document_id") or metadata.get("document_id"),
+            chunk_index=chunk.get("chunk_index") if isinstance(chunk.get("chunk_index"), int) else metadata.get("chunk_index"),
+        )
     merged = _features_with_artifact_issue_flags(
         {**inferred, **visual_features, **stored_features},
         str(content_type),
         artifact,
         artifact_quality,
     )
+    merged = _features_with_source_locator_flags(merged, source_locator)
     anchor_probe = dict(chunk)
-    anchor_probe["metadata"] = {**metadata, "visual": visual}
+    anchor_probe["metadata"] = {**metadata, "visual": visual, "source_locator": source_locator}
     merged = _features_with_anchor_flags(merged, anchor_probe)
     return _features_with_size_flags(merged, anchor_probe)
 
@@ -1172,15 +1368,24 @@ def enrich_chunks_for_visualization(
         artifact = _build_chunk_artifact(text, content_type, original_meta)
         artifact_quality = _build_chunk_artifact_quality(content_type, artifact)
         features = _features_with_artifact_issue_flags(features, content_type, artifact, artifact_quality)
-        if (page_start is None or page_end is None) and artifact and artifact.get("type") == "image_ocr":
-            ocr_pages = [
-                _safe_int(image.get("page"))
-                for image in artifact.get("images", [])
-                if isinstance(image, dict) and _safe_int(image.get("page")) is not None
-            ]
-            if ocr_pages:
-                page_start = min(ocr_pages)
-                page_end = max(ocr_pages)
+        if (page_start is None or page_end is None) and artifact:
+            artifact_pages = _artifact_pages(artifact)
+            if artifact_pages:
+                page_start = min(artifact_pages)
+                page_end = max(artifact_pages)
+        source_locator = _build_source_locator(
+            content_type=content_type,
+            page=page_start if page_start == page_end else None,
+            page_start=page_start,
+            page_end=page_end,
+            char_start=start,
+            char_end=end,
+            section_path=section_path,
+            artifact=artifact,
+            document_id=document_id,
+            chunk_index=index,
+        )
+        features = _features_with_source_locator_flags(features, source_locator)
         features = _features_with_anchor_flags(
             features,
             {
@@ -1191,6 +1396,7 @@ def enrich_chunks_for_visualization(
                     "char_start": start,
                     "char_end": end,
                     "artifact": artifact,
+                    "source_locator": source_locator,
                 }
             },
         )
@@ -1206,6 +1412,7 @@ def enrich_chunks_for_visualization(
             "features": features,
             "artifact": artifact,
             "artifact_quality": artifact_quality,
+            "source_locator": source_locator,
         }
 
         meta.update(
@@ -1222,6 +1429,7 @@ def enrich_chunks_for_visualization(
                 "features": features,
                 "artifact": artifact,
                 "artifact_quality": artifact_quality,
+                "source_locator": source_locator,
                 "visual": visual,
                 "parse_summary": parse_summary,
             }
@@ -1254,6 +1462,24 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         or visual.get("artifact_quality")
         or _build_chunk_artifact_quality(str(content_type), artifact)
     )
+    source_locator = metadata.get("source_locator") if isinstance(metadata.get("source_locator"), dict) else visual.get("source_locator")
+    page_start = metadata.get("page_start") if metadata.get("page_start") is not None else visual.get("page_start")
+    page_end = metadata.get("page_end") if metadata.get("page_end") is not None else visual.get("page_end")
+    char_start = metadata.get("char_start") if metadata.get("char_start") is not None else visual.get("char_start")
+    char_end = metadata.get("char_end") if metadata.get("char_end") is not None else visual.get("char_end")
+    if not isinstance(source_locator, dict):
+        source_locator = _build_source_locator(
+            content_type=str(content_type),
+            page=metadata.get("page"),
+            page_start=page_start,
+            page_end=page_end,
+            char_start=char_start,
+            char_end=char_end,
+            section_path=[str(part) for part in section_path],
+            artifact=artifact if isinstance(artifact, dict) else None,
+            document_id=chunk.get("document_id") or metadata.get("document_id"),
+            chunk_index=chunk.get("chunk_index") if isinstance(chunk.get("chunk_index"), int) else metadata.get("chunk_index"),
+        )
     features = _features_for_filtering(chunk, metadata, visual)
 
     item = {
@@ -1264,14 +1490,15 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         "content_type": content_type,
         "section_path": [str(part) for part in section_path],
         "page": metadata.get("page"),
-        "page_start": metadata.get("page_start") if metadata.get("page_start") is not None else visual.get("page_start"),
-        "page_end": metadata.get("page_end") if metadata.get("page_end") is not None else visual.get("page_end"),
-        "char_start": metadata.get("char_start") if metadata.get("char_start") is not None else visual.get("char_start"),
-        "char_end": metadata.get("char_end") if metadata.get("char_end") is not None else visual.get("char_end"),
+        "page_start": page_start,
+        "page_end": page_end,
+        "char_start": char_start,
+        "char_end": char_end,
         "token_count": metadata.get("token_count"),
         "features": features,
         "artifact": artifact,
         "artifact_quality": artifact_quality,
+        "source_locator": source_locator,
         "chunker_type": metadata.get("chunker_type"),
         "parse_summary": metadata.get("parse_summary") or {},
     }
@@ -1301,6 +1528,7 @@ def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]
         "char_end": meta.get("char_end"),
         "preview": meta.get("preview"),
         "artifact": meta.get("artifact"),
+        "source_locator": meta.get("source_locator"),
         "features": meta.get("features") or {},
         "parse_summary": meta.get("parse_summary") or {},
         "file_type": meta.get("file_type"),
