@@ -193,6 +193,58 @@ def _evidence_items(evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> List[E
     return items
 
 
+def build_citation_policy_context(
+    evidence: Iterable[Dict[str, Any] | EvidenceItem],
+    evidence_quality: Dict[str, Any] | None = None,
+) -> str:
+    """Build a compact instruction block that tells the model how to cite evidence."""
+    items = _evidence_items(evidence)
+    if not items:
+        return (
+            "引用规则:\n"
+            "- 当前没有可用证据；如果资料中找不到支持信息，请明确说明“资料中未找到”。\n"
+            "- 不要编造 [S1] 这类证据编号。\n"
+        )
+
+    evidence_ids = [item.id for item in items if item.id]
+    structured_ids = [
+        item.id
+        for item in items
+        if str((item.metadata or {}).get("content_type") or "").lower() in {"table", "image_ocr", "ocr", "formula", "code"}
+    ]
+    weak_ids = [
+        item.id
+        for item in items
+        if isinstance((item.metadata or {}).get("artifact_quality"), dict)
+        and (item.metadata or {}).get("artifact_quality", {}).get("status") in {"warn", "fail"}
+    ]
+    locator_ids = [
+        item.id
+        for item in items
+        if isinstance((item.metadata or {}).get("source_locator"), dict)
+        and int((item.metadata or {}).get("source_locator", {}).get("anchor_count") or 0) > 0
+    ]
+
+    lines = [
+        "引用规则:",
+        f"- 只能使用以下证据编号: {', '.join(evidence_ids)}。",
+        "- 每个关键事实、数据、结论或对表格/OCR内容的转述后，都要紧跟至少一个证据编号，如 [S1]。",
+        "- 不要编造不存在的证据编号；如果证据不足，请写明“资料中未找到”。",
+        "- 如果多个证据支持同一结论，可以合并引用，如 [S1][S3]。",
+    ]
+    if structured_ids:
+        lines.append(f"- 表格、图片/OCR、公式或代码证据包括: {', '.join(structured_ids)}；引用这些内容时要保留对应证据编号。")
+    if locator_ids:
+        lines.append(f"- 带原文定位的证据包括: {', '.join(locator_ids)}；优先使用这些证据支撑可核验结论。")
+    if weak_ids:
+        lines.append(f"- 以下证据存在解析质量提醒，引用时要谨慎表述: {', '.join(weak_ids)}。")
+    if isinstance(evidence_quality, dict) and evidence_quality.get("status") in {"warn", "no_evidence"}:
+        warnings = evidence_quality.get("warnings")
+        if isinstance(warnings, list) and warnings:
+            lines.append(f"- 证据质量提醒: {'; '.join(_compact_text(item, 120) for item in warnings[:3])}。")
+    return "\n".join(lines) + "\n\n"
+
+
 def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
     metadata = item.metadata or {}
     artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else {}
@@ -234,26 +286,39 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     coverage = (len(valid_ids) / len(evidence_ids)) if evidence_ids else None
 
     warnings: List[str] = []
+    recommendations: List[str] = []
     if invalid_ids:
         warnings.append(f"回答引用了不存在的证据编号: {', '.join(invalid_ids)}")
+        recommendations.append("删除或替换不存在的证据编号，只使用检索结果中提供的 [Sx]。")
     if evidence_ids and not used_ids:
         warnings.append("回答未引用任何证据编号，建议使用 [S1] 这类引用标注关键信息来源。")
+        recommendations.append("为每个关键事实补充至少一个证据编号。")
     if duplicate_ids:
         warnings.append(f"回答重复引用了证据编号: {', '.join(duplicate_ids)}")
+        recommendations.append("合并重复引用，保留必要的证据编号即可。")
+    if unreferenced_top_ids:
+        recommendations.append(f"复核未引用的高分证据: {', '.join(unreferenced_top_ids)}。")
 
     if not evidence_ids:
         status = "no_evidence"
+        risk_level = "high"
+        recommendations.append("未检索到可引用证据，应提示用户资料中未找到或扩大检索范围。")
     elif invalid_ids:
         status = "invalid"
+        risk_level = "high"
     elif not valid_ids:
         status = "missing"
+        risk_level = "high"
     elif coverage == 1:
         status = "complete"
+        risk_level = "low" if not duplicate_ids else "medium"
     else:
         status = "partial"
+        risk_level = "medium"
 
     return {
         "status": status,
+        "risk_level": risk_level,
         "evidence_count": len(evidence_ids),
         "used_citation_ids": used_ids,
         "valid_citation_ids": valid_ids,
@@ -264,6 +329,7 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "unreferenced_top_evidence": [_evidence_locator(item) for item in unreferenced_top],
         "coverage": round(coverage, 4) if coverage is not None else None,
         "warnings": warnings,
+        "recommendations": recommendations,
     }
 
 

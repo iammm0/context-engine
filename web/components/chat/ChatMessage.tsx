@@ -86,6 +86,11 @@ function getEvidenceType(item: EvidenceItem) {
 function formatCitationQuality(quality?: CitationQuality | null) {
   if (!quality || typeof quality.evidence_count !== "number" || quality.evidence_count <= 0) return "";
   const bits = [];
+  if (quality.risk_level === "high") {
+    bits.push("引用风险高");
+  } else if (quality.risk_level === "medium") {
+    bits.push("引用需复核");
+  }
   if (typeof quality.coverage === "number") {
     bits.push(`引用覆盖 ${Math.round(quality.coverage * 100)}%`);
   }
@@ -102,6 +107,11 @@ function formatCitationQuality(quality?: CitationQuality | null) {
     bits.push(`未引用高分证据 ${quality.unreferenced_top_evidence_ids.join(", ")}`);
   }
   return bits.join(" · ");
+}
+
+function formatCitationRecommendations(quality?: CitationQuality | null) {
+  if (!quality?.recommendations?.length) return "";
+  return quality.recommendations.slice(0, 3).join("；");
 }
 
 function formatEvidenceQuality(quality?: EvidenceQuality | null) {
@@ -740,6 +750,11 @@ function ChatMessageImpl({
         {!isUser && formatCitationQuality(message.citation_quality) && (
           <div className="mt-1 w-full text-xs text-gray-500 dark:text-gray-400">
             {formatCitationQuality(message.citation_quality)}
+          </div>
+        )}
+        {!isUser && formatCitationRecommendations(message.citation_quality) && (
+          <div className="mt-1 w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            {formatCitationRecommendations(message.citation_quality)}
           </div>
         )}
 

@@ -4,7 +4,7 @@ from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
 from services.model_selector import model_selector
 from utils.logger import logger
-from utils.citation import build_citation_diagnostics
+from utils.citation import build_citation_diagnostics, build_citation_policy_context
 
 
 class GeneralAssistantAgent(BaseAgent):
@@ -134,10 +134,7 @@ class GeneralAssistantAgent(BaseAgent):
             full_response = ""
             evidence_instruction = ""
             if rag_context:
-                evidence_instruction = (
-                    "请优先依据以下证据回答，并在关键事实后使用 [S1]、[S2] 这类证据编号。"
-                    "如果资料中找不到支持信息，请明确说明“资料中未找到”。\n\n"
-                )
+                evidence_instruction = build_citation_policy_context(evidence, evidence_quality)
             # 注意：OllamaService.generate 会自动构建包含 context 的 prompt
             async for chunk in self.ollama_service.generate(
                 prompt=task,

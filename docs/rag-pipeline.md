@@ -12,7 +12,9 @@ retrieval pipeline is now centered on chunk-level evidence.
    optional graph expansion.
 5. Fuse candidates with Reciprocal Rank Fusion by default.
 6. Convert final chunks into `EvidenceItem[]`.
-7. Format evidence as `[S1] ...` context for generation.
+7. Format evidence as `[S1] ...` context for generation, preceded by a
+   citation policy that lists valid evidence ids and reminds the model how to
+   cite structured or lower-confidence evidence.
 8. Validate generated citations as warnings and structured citation quality
    diagnostics, without blocking the response.
 
@@ -176,6 +178,10 @@ retrieval type, and score so generated citations such as `[S1]` are easier to
 trace back to source chunks. In the chat UI, inline citations such as `[S1]`
 are rendered as citation chips when matching evidence is available; selecting a
 chip opens the evidence list and highlights the corresponding source chunk.
+Before generation, the evidence context starts with a citation policy block:
+it enumerates the valid evidence ids, asks the model to cite key facts and
+table/OCR claims with `[Sx]`, tells it not to invent evidence ids, and calls
+out structured, source-located, or lower-confidence evidence.
 Evidence and source cards also link to `/documents` with the document and chunk
 locator, opening the chunk inspector around the cited chunk for source review.
 Those deep links can also carry `content_type` and `feature`, so table/OCR
@@ -186,13 +192,15 @@ Source and evidence cards also expose an original-file preview link backed by
 `/api/documents/{doc_id}/preview`, with `#page=N` for page-aware PDF viewers
 when a page locator is available.
 Assistant messages can include `citation_quality` with citation coverage,
-valid/invalid citation ids, duplicate citations, unused evidence ids, and the
-highest-scored evidence that was not referenced. The UI displays this as a
-compact citation audit line next to any non-blocking `citation_warnings`, and
-renders unreferenced high-score evidence as locator cards that can highlight the
-current evidence entry or open the exact document chunk. Source and evidence
-cards also mark whether each evidence id was cited or left unused, making
-coverage gaps visible without reading the raw answer text.
+valid/invalid citation ids, duplicate citations, unused evidence ids, risk
+level, recommendations, and the highest-scored evidence that was not
+referenced. The UI displays this as a compact citation audit line next to any
+non-blocking `citation_warnings`, renders actionable recommendations when the
+answer needs citation repair, and renders unreferenced high-score evidence as
+locator cards that can highlight the current evidence entry or open the exact
+document chunk. Source and evidence cards also mark whether each evidence id
+was cited or left unused, making coverage gaps visible without reading the raw
+answer text.
 Assistant messages can also include `evidence_quality`, a runtime diagnostic for
 retrieved structured evidence. It reports artifact coverage, structured artifact
 coverage, table structure/source gaps, OCR source gaps, low-confidence OCR image
@@ -219,10 +227,13 @@ previews as weaker evidence.
 Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
-`unreferenced_top_evidence_ids`. The structured `unreferenced_top_evidence`
-field carries compact locator data such as `document_id`, `chunk_id`,
-`chunk_index`, page range, content type, score, and preview text so clients can
-jump from a citation audit warning to the exact missing source.
+`unreferenced_top_evidence_ids`. Citation quality also includes `risk_level`
+and `recommendations`, so clients can distinguish complete citation coverage
+from missing, invalid, or partially covered answers and show concrete repair
+guidance. The structured `unreferenced_top_evidence` field carries compact
+locator data such as `document_id`, `chunk_id`, `chunk_index`, page range,
+content type, score, preview text, and `source_locator` so clients can jump
+from a citation audit warning to the exact missing source.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
 `structured_artifact_coverage`, table/OCR completeness counters, warnings, and

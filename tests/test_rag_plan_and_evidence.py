@@ -7,7 +7,7 @@ if ROOT_DIR not in sys.path:
 
 from models.rag import EvidenceItem
 from services.query_planner import query_planner
-from utils.citation import build_citation_diagnostics, extract_citation_ids, format_evidence_context, validate_citations
+from utils.citation import build_citation_diagnostics, build_citation_policy_context, extract_citation_ids, format_evidence_context, validate_citations
 
 
 def test_evidence_format_and_citation_validation():
@@ -127,6 +127,16 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["unreferenced_top_evidence"][0]["preview"]
     assert diagnostics["coverage"] == 0.5
     assert any("重复引用" in warning for warning in diagnostics["warnings"])
+    assert diagnostics["risk_level"] == "medium"
+    assert any("未引用的高分证据: S2" in item for item in diagnostics["recommendations"])
+
+    policy = build_citation_policy_context(evidence, {"status": "warn", "warnings": ["OCR证据需要复核"]})
+    assert "只能使用以下证据编号: S1, S2" in policy
+    assert "每个关键事实、数据、结论或对表格/OCR内容的转述后" in policy
+    assert "表格、图片/OCR、公式或代码证据包括: S1, S2" in policy
+    assert "带原文定位的证据包括: S2" in policy
+    assert "以下证据存在解析质量提醒，引用时要谨慎表述: S2" in policy
+    assert "证据质量提醒: OCR证据需要复核" in policy
 
 
 def test_query_planner_rewrites_only_complex_queries():
@@ -141,6 +151,37 @@ def test_query_planner_rewrites_only_complex_queries():
     assert complex_plan.need_rewrite is True
     assert complex_plan.final_k >= 20
     assert len(complex_plan.rewritten_queries) >= 2
+
+
+def test_citation_diagnostics_marks_high_risk_invalid_and_no_evidence():
+    evidence = [
+        EvidenceItem(
+            id="S1",
+            text="Supported fact.",
+            document_id="doc1",
+            chunk_id="chunk1",
+            score=0.9,
+            retrieval_type="vector",
+            metadata={"preview": "Supported fact."},
+        )
+    ]
+
+    invalid = build_citation_diagnostics("Answer cites missing [S9].", evidence)
+    assert invalid["status"] == "invalid"
+    assert invalid["risk_level"] == "high"
+    assert invalid["invalid_citation_ids"] == ["S9"]
+    assert any("不存在的证据编号" in item for item in invalid["recommendations"])
+
+    missing = build_citation_diagnostics("Answer has no evidence citation.", evidence)
+    assert missing["status"] == "missing"
+    assert missing["risk_level"] == "high"
+    assert any("关键事实补充至少一个证据编号" in item for item in missing["recommendations"])
+
+    no_evidence = build_citation_diagnostics("Answer without retrieved evidence.", [])
+    assert no_evidence["status"] == "no_evidence"
+    assert no_evidence["risk_level"] == "high"
+    assert any("未检索到可引用证据" in item for item in no_evidence["recommendations"])
+    assert "当前没有可用证据" in build_citation_policy_context([])
 
 
 def test_rrf_merge_prefers_cross_modal_hits():

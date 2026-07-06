@@ -266,6 +266,7 @@ export interface CitationEvidenceRef {
 
 export interface CitationQuality {
   status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string;
+  risk_level?: "low" | "medium" | "high" | string;
   evidence_count: number;
   used_citation_ids: string[];
   valid_citation_ids: string[];
@@ -276,6 +277,7 @@ export interface CitationQuality {
   unreferenced_top_evidence?: CitationEvidenceRef[];
   coverage?: number | null;
   warnings?: string[];
+  recommendations?: string[];
 }
 
 export interface ChatRequest {
