@@ -133,6 +133,7 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["cited_missing_source_locator_ids"] == ["S1"]
     assert diagnostics["cited_artifact_warning_ids"] == []
     assert diagnostics["cited_low_confidence_ocr_ids"] == []
+    assert diagnostics["cited_quality_note_ids"] == []
     assert diagnostics["cited_risky_evidence"][0]["id"] == "S1"
     assert diagnostics["cited_risky_evidence"][0]["chunk_id"] == "chunk1"
     assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["missing_source_locator"]
@@ -150,13 +151,15 @@ def test_evidence_format_and_citation_validation():
     assert ocr_diagnostics["cited_missing_source_locator_ids"] == []
     assert ocr_diagnostics["cited_artifact_warning_ids"] == ["S2"]
     assert ocr_diagnostics["cited_low_confidence_ocr_ids"] == ["S2"]
+    assert ocr_diagnostics["cited_quality_note_ids"] == ["S2"]
     assert ocr_diagnostics["cited_risky_evidence"][0]["id"] == "S2"
-    assert ocr_diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["artifact_warning", "low_confidence_ocr"]
+    assert ocr_diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["artifact_warning", "low_confidence_ocr", "quality_note"]
     assert ocr_diagnostics["cited_risky_evidence"][0]["source_locator"]["has_image_source"] is True
     assert ocr_diagnostics["cited_risky_evidence"][0]["artifact_quality"]["status"] == "warn"
     assert ocr_diagnostics["cited_risky_evidence"][0]["quality_notes"] == ["OCR 图片来源置信度偏低，引用前需要人工复核。"]
     assert any("解析质量提醒" in warning for warning in ocr_diagnostics["warnings"])
     assert any("低置信 OCR" in warning for warning in ocr_diagnostics["warnings"])
+    assert any("带质量提示" in warning for warning in ocr_diagnostics["warnings"])
 
     policy = build_citation_policy_context(evidence, {"status": "warn", "warnings": ["OCR证据需要复核"]})
     assert "只能使用以下证据编号: S1, S2" in policy
@@ -165,6 +168,32 @@ def test_evidence_format_and_citation_validation():
     assert "带原文定位的证据包括: S2" in policy
     assert "以下证据存在解析质量提醒，引用时要谨慎表述: S2" in policy
     assert "证据质量提醒: OCR证据需要复核" in policy
+
+
+def test_citation_diagnostics_flags_cited_quality_notes():
+    evidence = [
+        EvidenceItem(
+            id="S1",
+            text="A supported but short chunk.",
+            document_id="doc1",
+            chunk_id="chunk1",
+            chunk_index=0,
+            document_title="Demo",
+            score=0.7,
+            retrieval_type="vector",
+            metadata={"content_type": "text", "quality_notes": ["chunk 过短，可能导致上下文不足。"]},
+        )
+    ]
+
+    diagnostics = build_citation_diagnostics("Answer [S1].", evidence)
+
+    assert diagnostics["status"] == "complete"
+    assert diagnostics["risk_level"] == "medium"
+    assert diagnostics["cited_quality_note_ids"] == ["S1"]
+    assert diagnostics["cited_risky_evidence"][0]["id"] == "S1"
+    assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["quality_note"]
+    assert diagnostics["cited_risky_evidence"][0]["quality_notes"] == ["chunk 过短，可能导致上下文不足。"]
+    assert any("带质量提示" in warning for warning in diagnostics["warnings"])
 
 
 def test_query_planner_rewrites_only_complex_queries():

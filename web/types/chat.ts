@@ -292,6 +292,7 @@ export interface CitationQuality {
   cited_missing_source_locator_ids?: string[];
   cited_artifact_warning_ids?: string[];
   cited_low_confidence_ocr_ids?: string[];
+  cited_quality_note_ids?: string[];
   cited_risky_evidence?: CitationEvidenceRef[];
   unused_evidence_ids: string[];
   unreferenced_top_evidence_ids: string[];

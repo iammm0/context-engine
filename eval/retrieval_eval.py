@@ -508,6 +508,7 @@ def summarize_citation_quality(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         "cited_missing_source_locator_count": 0,
         "cited_artifact_warning_count": 0,
         "cited_low_confidence_ocr_count": 0,
+        "cited_quality_note_count": 0,
         "warning_count": 0,
     }
     if not items:
@@ -528,6 +529,7 @@ def summarize_citation_quality(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         summary["cited_missing_source_locator_count"] += len(item.get("cited_missing_source_locator_ids") or [])
         summary["cited_artifact_warning_count"] += len(item.get("cited_artifact_warning_ids") or [])
         summary["cited_low_confidence_ocr_count"] += len(item.get("cited_low_confidence_ocr_ids") or [])
+        summary["cited_quality_note_count"] += len(item.get("cited_quality_note_ids") or [])
         summary["warning_count"] += len(item.get("warnings") or [])
     if coverage_values:
         summary["avg_coverage"] = round(sum(coverage_values) / len(coverage_values), 4)
@@ -712,6 +714,7 @@ def _to_markdown(result: Dict[str, Any]) -> str:
             "cited_missing_source_locator_count",
             "cited_artifact_warning_count",
             "cited_low_confidence_ocr_count",
+            "cited_quality_note_count",
             "warning_count",
         ]:
             lines.append(f"| {key} | {_format_metric_value(citation_quality.get(key))} |")

@@ -240,6 +240,17 @@ def _artifact_quality(item: EvidenceItem) -> Dict[str, Any]:
     return quality if isinstance(quality, dict) else {}
 
 
+def _quality_notes(item: EvidenceItem) -> List[str]:
+    notes = (item.metadata or {}).get("quality_notes")
+    if not isinstance(notes, list):
+        return []
+    return [str(note).strip() for note in notes if str(note).strip()]
+
+
+def _has_quality_notes(item: EvidenceItem) -> bool:
+    return bool(_quality_notes(item))
+
+
 def _artifact_quality_warns(item: EvidenceItem) -> bool:
     return str(_artifact_quality(item).get("status") or "").lower() in {"warn", "fail"}
 
@@ -262,6 +273,8 @@ def _cited_risk_reasons(item: EvidenceItem) -> List[str]:
         reasons.append("artifact_warning")
     if _has_low_confidence_ocr(item):
         reasons.append("low_confidence_ocr")
+    if _has_quality_notes(item):
+        reasons.append("quality_note")
     return reasons
 
 
@@ -287,8 +300,11 @@ def build_citation_policy_context(
     weak_ids = [
         item.id
         for item in items
-        if isinstance((item.metadata or {}).get("artifact_quality"), dict)
-        and (item.metadata or {}).get("artifact_quality", {}).get("status") in {"warn", "fail"}
+        if (
+            isinstance((item.metadata or {}).get("artifact_quality"), dict)
+            and (item.metadata or {}).get("artifact_quality", {}).get("status") in {"warn", "fail"}
+        )
+        or _has_quality_notes(item)
     ]
     locator_ids = [
         item.id
@@ -338,7 +354,7 @@ def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
         "preview": metadata.get("preview") or _compact_text(item.text, 160),
         "source_locator": metadata.get("source_locator"),
         "artifact_quality": metadata.get("artifact_quality"),
-        "quality_notes": metadata.get("quality_notes") or [],
+        "quality_notes": _quality_notes(item),
     }
 
 
@@ -367,6 +383,9 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     ]
     cited_low_confidence_ocr_ids = [
         item.id for item in cited_items if item.id and _has_low_confidence_ocr(item)
+    ]
+    cited_quality_note_ids = [
+        item.id for item in cited_items if item.id and _has_quality_notes(item)
     ]
     cited_risky_evidence = []
     for item in cited_items:
@@ -398,6 +417,9 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     if cited_low_confidence_ocr_ids:
         warnings.append(f"回答引用了低置信 OCR 证据: {', '.join(cited_low_confidence_ocr_ids)}")
         recommendations.append("低置信 OCR 引用需要人工复核图片文字，避免把识别不确定内容写成确定结论。")
+    if cited_quality_note_ids:
+        warnings.append(f"回答引用了带质量提示的证据: {', '.join(cited_quality_note_ids)}")
+        recommendations.append("复核带质量提示的引用，必要时改用定位更完整或解析质量更高的证据。")
     if unreferenced_top_ids:
         recommendations.append(f"复核未引用的高分证据: {', '.join(unreferenced_top_ids)}。")
 
@@ -415,7 +437,13 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         status = "complete"
         risk_level = (
             "medium"
-            if duplicate_ids or cited_missing_source_locator_ids or cited_artifact_warning_ids or cited_low_confidence_ocr_ids
+            if (
+                duplicate_ids
+                or cited_missing_source_locator_ids
+                or cited_artifact_warning_ids
+                or cited_low_confidence_ocr_ids
+                or cited_quality_note_ids
+            )
             else "low"
         )
     else:
@@ -434,6 +462,7 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "cited_missing_source_locator_ids": cited_missing_source_locator_ids,
         "cited_artifact_warning_ids": cited_artifact_warning_ids,
         "cited_low_confidence_ocr_ids": cited_low_confidence_ocr_ids,
+        "cited_quality_note_ids": cited_quality_note_ids,
         "cited_risky_evidence": cited_risky_evidence,
         "unused_evidence_ids": unused_ids,
         "unreferenced_top_evidence_ids": unreferenced_top_ids,

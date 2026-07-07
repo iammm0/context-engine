@@ -49,8 +49,8 @@ object. Generated answers are checked with the same diagnostics used by the
 chat pipeline, including valid/invalid citation ids, duplicate citations,
 unused evidence ids, coverage, status, risk level, cited structured evidence
 counts, cited evidence missing `source_locator`, cited artifact warnings,
-cited low-confidence OCR evidence, `cited_risky_evidence` locator details, and
-warnings.
+cited low-confidence OCR evidence, cited `quality_notes`,
+`cited_risky_evidence` locator details, and warnings.
 
 ## Dataset Format
 
@@ -94,6 +94,7 @@ section includes source locator coverage rows such as
 that retrieves the right chunk but cannot reliably jump back to the original
 page, table, OCR image, or bbox. The `Citation Quality` section also includes
 `risk_level_counts`, `cited_missing_source_locator_count`,
-`cited_artifact_warning_count`, and `cited_low_confidence_ocr_count`, so answer
-evaluation can catch cases where generated text cites evidence ids but cites
-evidence that still needs source or OCR review.
+`cited_artifact_warning_count`, `cited_low_confidence_ocr_count`, and
+`cited_quality_note_count`, so answer evaluation can catch cases where
+generated text cites evidence ids but cites evidence that still needs source,
+OCR, or chunk-quality review.

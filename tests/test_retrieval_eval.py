@@ -239,6 +239,7 @@ def test_results_to_evidence_items_supports_citation_quality():
     assert summary["cited_missing_source_locator_count"] == 0
     assert summary["cited_artifact_warning_count"] == 0
     assert summary["cited_low_confidence_ocr_count"] == 0
+    assert summary["cited_quality_note_count"] == 0
 
 
 def test_summarize_citation_quality_counts_cited_evidence_risks():
@@ -254,6 +255,7 @@ def test_summarize_citation_quality_counts_cited_evidence_risks():
                 "cited_missing_source_locator_ids": ["S1"],
                 "cited_artifact_warning_ids": ["S2"],
                 "cited_low_confidence_ocr_ids": ["S2"],
+                "cited_quality_note_ids": ["S2"],
                 "warnings": ["回答引用的结构化证据缺少统一来源定位: S1", "回答引用了低置信 OCR 证据: S2"],
             }
         ]
@@ -268,6 +270,7 @@ def test_summarize_citation_quality_counts_cited_evidence_risks():
     assert summary["cited_missing_source_locator_count"] == 1
     assert summary["cited_artifact_warning_count"] == 1
     assert summary["cited_low_confidence_ocr_count"] == 1
+    assert summary["cited_quality_note_count"] == 1
     assert summary["warning_count"] == 2
 
 
@@ -304,6 +307,7 @@ def test_to_markdown_includes_artifact_and_citation_quality_sections():
                     "cited_missing_source_locator_count": 1,
                     "cited_artifact_warning_count": 1,
                     "cited_low_confidence_ocr_count": 1,
+                    "cited_quality_note_count": 1,
                     "warning_count": 0,
                 },
             },
@@ -320,3 +324,4 @@ def test_to_markdown_includes_artifact_and_citation_quality_sections():
     assert '| risk_level_counts | {"medium": 1} |' in markdown
     assert "| cited_missing_source_locator_count | 1 |" in markdown
     assert "| cited_low_confidence_ocr_count | 1 |" in markdown
+    assert "| cited_quality_note_count | 1 |" in markdown

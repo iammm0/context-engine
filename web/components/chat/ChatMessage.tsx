@@ -91,6 +91,7 @@ const citationRiskReasonLabel: Record<string, string> = {
   missing_source_locator: "缺来源定位",
   artifact_warning: "解析需复核",
   low_confidence_ocr: "低置信OCR",
+  quality_note: "质量提示",
 };
 
 function formatSourceLocatorAnchor(anchor: SourceLocatorAnchor, index: number) {
@@ -175,6 +176,9 @@ function formatCitationQuality(quality?: CitationQuality | null) {
   }
   if (quality.cited_low_confidence_ocr_ids?.length) {
     bits.push(`低置信引用 ${quality.cited_low_confidence_ocr_ids.join(", ")}`);
+  }
+  if (quality.cited_quality_note_ids?.length) {
+    bits.push(`质量提示引用 ${quality.cited_quality_note_ids.join(", ")}`);
   }
   if (quality.unreferenced_top_evidence_ids?.length) {
     bits.push(`未引用高分证据 ${quality.unreferenced_top_evidence_ids.join(", ")}`);
