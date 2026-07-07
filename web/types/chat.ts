@@ -280,6 +280,27 @@ export interface CitationEvidenceRef {
   risk_reasons?: string[];
 }
 
+export interface CitationEvidenceAudit {
+  id: string;
+  content_type?: string;
+  document_id?: string;
+  chunk_id?: string;
+  chunk_index?: number;
+  page?: number | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  score?: number;
+  retrieval_type?: string;
+  has_source_locator?: boolean;
+  source_anchor_count?: number;
+  has_table_source?: boolean;
+  has_image_source?: boolean;
+  has_bbox?: boolean;
+  artifact_quality_status?: string | null;
+  risk_reasons?: string[];
+  quality_notes?: string[];
+}
+
 export interface CitationQuality {
   status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string;
   risk_level?: "low" | "medium" | "high" | string;
@@ -293,6 +314,7 @@ export interface CitationQuality {
   cited_artifact_warning_ids?: string[];
   cited_low_confidence_ocr_ids?: string[];
   cited_quality_note_ids?: string[];
+  evidence_citation_audit?: CitationEvidenceAudit[];
   cited_risky_evidence?: CitationEvidenceRef[];
   unused_evidence_ids: string[];
   unreferenced_top_evidence_ids: string[];

@@ -278,6 +278,80 @@ def _cited_risk_reasons(item: EvidenceItem) -> List[str]:
     return reasons
 
 
+def _locator_bool(locator: Any, key: str) -> bool:
+    return bool(locator.get(key)) if isinstance(locator, dict) else False
+
+
+def _evidence_citation_audit(item: EvidenceItem) -> Dict[str, Any]:
+    metadata = item.metadata or {}
+    locator = metadata.get("source_locator")
+    artifact_quality = _artifact_quality(item)
+    anchor_count = _source_locator_anchor_count(locator)
+    return {
+        "id": item.id,
+        "content_type": _evidence_content_type(item),
+        "document_id": item.document_id,
+        "chunk_id": item.chunk_id,
+        "chunk_index": item.chunk_index,
+        "page": item.page,
+        "page_start": metadata.get("page_start"),
+        "page_end": metadata.get("page_end"),
+        "score": item.score,
+        "retrieval_type": item.retrieval_type,
+        "has_source_locator": anchor_count > 0,
+        "source_anchor_count": anchor_count,
+        "has_table_source": _locator_bool(locator, "has_table_source"),
+        "has_image_source": _locator_bool(locator, "has_image_source"),
+        "has_bbox": _locator_bool(locator, "has_bbox"),
+        "artifact_quality_status": artifact_quality.get("status"),
+        "risk_reasons": _cited_risk_reasons(item),
+        "quality_notes": _quality_notes(item)[:4],
+    }
+
+
+def _format_citation_audit_line(item: EvidenceItem) -> str:
+    audit = _evidence_citation_audit(item)
+    bits = [
+        f"{audit['id']}: type={audit['content_type']}",
+        f"score={_format_number(audit['score'])}",
+    ]
+    if audit.get("retrieval_type"):
+        bits.append(f"retrieval={audit['retrieval_type']}")
+    if audit.get("chunk_index") is not None:
+        bits.append(f"chunk={audit['chunk_index']}")
+    page_start = audit.get("page_start")
+    page_end = audit.get("page_end")
+    if page_start is not None and page_end is not None and page_end != page_start:
+        bits.append(f"pages={page_start}-{page_end}")
+    elif page_start is not None:
+        bits.append(f"page={page_start}")
+    elif audit.get("page") is not None:
+        bits.append(f"page={audit['page']}")
+
+    if audit["has_source_locator"]:
+        bits.append(f"locator={audit['source_anchor_count']} anchors")
+    else:
+        bits.append("locator=missing")
+    locator_flags = [
+        flag
+        for flag, enabled in [
+            ("table_source", audit.get("has_table_source")),
+            ("image_source", audit.get("has_image_source")),
+            ("bbox", audit.get("has_bbox")),
+        ]
+        if enabled
+    ]
+    if locator_flags:
+        bits.append(f"locator_flags={','.join(locator_flags)}")
+    if audit.get("artifact_quality_status"):
+        bits.append(f"artifact_quality={audit['artifact_quality_status']}")
+    if audit["risk_reasons"]:
+        bits.append(f"risk={','.join(audit['risk_reasons'])}")
+    if audit["quality_notes"]:
+        bits.append(f"notes={_compact_text('; '.join(audit['quality_notes']), 160)}")
+    return "; ".join(bits)
+
+
 def build_citation_policy_context(
     evidence: Iterable[Dict[str, Any] | EvidenceItem],
     evidence_quality: Dict[str, Any] | None = None,
@@ -326,6 +400,12 @@ def build_citation_policy_context(
         lines.append(f"- 带原文定位的证据包括: {', '.join(locator_ids)}；优先使用这些证据支撑可核验结论。")
     if weak_ids:
         lines.append(f"- 以下证据存在解析质量提醒，引用时要谨慎表述: {', '.join(weak_ids)}。")
+    audit_lines = [_format_citation_audit_line(item) for item in items if item.id]
+    if audit_lines:
+        lines.append("- 证据引用审计清单 / Citation audit ledger (check type/locator/risk before citing):")
+        lines.extend(f"  - {line}" for line in audit_lines[:12])
+        if len(audit_lines) > 12:
+            lines.append(f"  - ... {len(audit_lines) - 12} more evidence items")
     if isinstance(evidence_quality, dict) and evidence_quality.get("status") in {"warn", "no_evidence"}:
         warnings = evidence_quality.get("warnings")
         if isinstance(warnings, list) and warnings:
@@ -463,6 +543,7 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "cited_artifact_warning_ids": cited_artifact_warning_ids,
         "cited_low_confidence_ocr_ids": cited_low_confidence_ocr_ids,
         "cited_quality_note_ids": cited_quality_note_ids,
+        "evidence_citation_audit": [_evidence_citation_audit(item) for item in items],
         "cited_risky_evidence": cited_risky_evidence,
         "unused_evidence_ids": unused_ids,
         "unreferenced_top_evidence_ids": unreferenced_top_ids,

@@ -134,6 +134,15 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["cited_artifact_warning_ids"] == []
     assert diagnostics["cited_low_confidence_ocr_ids"] == []
     assert diagnostics["cited_quality_note_ids"] == []
+    assert diagnostics["evidence_citation_audit"][0]["id"] == "S1"
+    assert diagnostics["evidence_citation_audit"][0]["content_type"] == "table"
+    assert diagnostics["evidence_citation_audit"][0]["has_source_locator"] is False
+    assert diagnostics["evidence_citation_audit"][0]["risk_reasons"] == ["missing_source_locator"]
+    assert diagnostics["evidence_citation_audit"][1]["id"] == "S2"
+    assert diagnostics["evidence_citation_audit"][1]["source_anchor_count"] == 3
+    assert diagnostics["evidence_citation_audit"][1]["has_image_source"] is True
+    assert diagnostics["evidence_citation_audit"][1]["has_bbox"] is True
+    assert diagnostics["evidence_citation_audit"][1]["risk_reasons"] == ["artifact_warning", "low_confidence_ocr", "quality_note"]
     assert diagnostics["cited_risky_evidence"][0]["id"] == "S1"
     assert diagnostics["cited_risky_evidence"][0]["chunk_id"] == "chunk1"
     assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["missing_source_locator"]
@@ -194,6 +203,68 @@ def test_citation_diagnostics_flags_cited_quality_notes():
     assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["quality_note"]
     assert diagnostics["cited_risky_evidence"][0]["quality_notes"] == ["chunk 过短，可能导致上下文不足。"]
     assert any("带质量提示" in warning for warning in diagnostics["warnings"])
+
+
+def test_citation_policy_includes_per_evidence_audit_ledger():
+    evidence = [
+        EvidenceItem(
+            id="S1",
+            text="Table fact.",
+            document_id="doc1",
+            chunk_id="chunk1",
+            chunk_index=2,
+            document_title="Demo",
+            score=0.91,
+            retrieval_type="vector",
+            metadata={"content_type": "table", "page_start": 4, "page_end": 4},
+        ),
+        EvidenceItem(
+            id="S2",
+            text="OCR fact.",
+            document_id="doc1",
+            chunk_id="chunk2",
+            chunk_index=3,
+            document_title="Demo",
+            score=0.82,
+            retrieval_type="vector",
+            metadata={
+                "content_type": "image_ocr",
+                "page_start": 5,
+                "page_end": 5,
+                "source_locator": {
+                    "anchor_count": 2,
+                    "has_image_source": True,
+                    "has_bbox": True,
+                },
+                "artifact_quality": {
+                    "status": "warn",
+                    "ocr_low_confidence_source_count": 1,
+                    "warnings": ["low OCR confidence"],
+                },
+                "quality_notes": ["manual OCR review required"],
+            },
+        ),
+    ]
+
+    policy = build_citation_policy_context(evidence)
+    diagnostics = build_citation_diagnostics("Use [S2].", evidence)
+
+    assert "Citation audit ledger" in policy
+    assert "S1: type=table" in policy
+    assert "chunk=2" in policy
+    assert "page=4" in policy
+    assert "locator=missing" in policy
+    assert "risk=missing_source_locator" in policy
+    assert "S2: type=image_ocr" in policy
+    assert "locator=2 anchors" in policy
+    assert "locator_flags=image_source,bbox" in policy
+    assert "artifact_quality=warn" in policy
+    assert "risk=artifact_warning,low_confidence_ocr,quality_note" in policy
+    assert "notes=manual OCR review required" in policy
+    assert diagnostics["evidence_citation_audit"][0]["risk_reasons"] == ["missing_source_locator"]
+    assert diagnostics["evidence_citation_audit"][1]["has_image_source"] is True
+    assert diagnostics["evidence_citation_audit"][1]["has_bbox"] is True
+    assert diagnostics["evidence_citation_audit"][1]["artifact_quality_status"] == "warn"
 
 
 def test_query_planner_rewrites_only_complex_queries():

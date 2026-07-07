@@ -212,7 +212,11 @@ chip opens the evidence list and highlights the corresponding source chunk.
 Before generation, the evidence context starts with a citation policy block:
 it enumerates the valid evidence ids, asks the model to cite key facts and
 table/OCR claims with `[Sx]`, tells it not to invent evidence ids, and calls
-out structured, source-located, or lower-confidence evidence.
+out structured, source-located, or lower-confidence evidence. The policy also
+includes a compact citation audit ledger for each evidence id, recording its
+content type, score, retrieval type, chunk/page locator, source-anchor status,
+locator flags, artifact-quality status, risk reasons, and quality notes before
+the model writes the answer.
 Evidence and source cards also link to `/documents` with the document and chunk
 locator, opening the chunk inspector around the cited chunk for source review.
 Those deep links can also carry `content_type` and `feature`, so table/OCR
@@ -282,7 +286,10 @@ concrete repair guidance. Additional fields include
 `cited_artifact_warning_ids`, `cited_low_confidence_ocr_ids`, and
 `cited_quality_note_ids`, which let the chat UI and evaluation report
 distinguish "all evidence ids were cited" from "the cited evidence still needs
-source, OCR, or chunk-quality review." The structured
+source, OCR, or chunk-quality review." `evidence_citation_audit` carries the
+same per-evidence type/locator/risk ledger that was shown to the model, so
+stored assistant messages can be inspected later without reconstructing the
+prompt. The structured
 `cited_risky_evidence` field carries the same locator data plus `risk_reasons`
 for cited evidence that needs review, so clients can jump directly from a
 warning to the referenced chunk. The structured `unreferenced_top_evidence`
