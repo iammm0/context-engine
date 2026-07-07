@@ -49,7 +49,8 @@ object. Generated answers are checked with the same diagnostics used by the
 chat pipeline, including valid/invalid citation ids, duplicate citations,
 unused evidence ids, coverage, status, risk level, cited structured evidence
 counts, cited evidence missing `source_locator`, cited artifact warnings,
-cited low-confidence OCR evidence, and warnings.
+cited low-confidence OCR evidence, `cited_risky_evidence` locator details, and
+warnings.
 
 ## Dataset Format
 
@@ -80,7 +81,9 @@ The JSON result now includes an `items` array with per-query diagnostics:
 - `artifact_quality`: per-query gold coverage, artifact coverage, table/OCR
   completeness, source locator coverage, and missing required artifact types
 - `citation_quality`: optional per-query citation diagnostics when an answer or
-  precomputed citation quality object is available
+  precomputed citation quality object is available, including cited risky
+  evidence locators when a generated answer cites low-quality or hard-to-source
+  evidence
 
 The aggregate values are also written under `metrics.artifact` and
 `metrics.citation_quality`, and the Markdown report renders separate

@@ -245,6 +245,17 @@ def _has_low_confidence_ocr(item: EvidenceItem) -> bool:
     return any(isinstance(image, dict) and image.get("low_confidence") is True for image in images)
 
 
+def _cited_risk_reasons(item: EvidenceItem) -> List[str]:
+    reasons: List[str] = []
+    if _evidence_content_type(item) in STRUCTURED_CITATION_TYPES and not _has_source_locator(item):
+        reasons.append("missing_source_locator")
+    if _artifact_quality_warns(item):
+        reasons.append("artifact_warning")
+    if _has_low_confidence_ocr(item):
+        reasons.append("low_confidence_ocr")
+    return reasons
+
+
 def build_citation_policy_context(
     evidence: Iterable[Dict[str, Any] | EvidenceItem],
     evidence_quality: Dict[str, Any] | None = None,
@@ -317,6 +328,7 @@ def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
         "retrieval_type": item.retrieval_type,
         "preview": metadata.get("preview") or _compact_text(item.text, 160),
         "source_locator": metadata.get("source_locator"),
+        "artifact_quality": metadata.get("artifact_quality"),
     }
 
 
@@ -346,6 +358,11 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     cited_low_confidence_ocr_ids = [
         item.id for item in cited_items if item.id and _has_low_confidence_ocr(item)
     ]
+    cited_risky_evidence = []
+    for item in cited_items:
+        risk_reasons = _cited_risk_reasons(item)
+        if risk_reasons:
+            cited_risky_evidence.append({**_evidence_locator(item), "risk_reasons": risk_reasons})
     top_evidence = sorted(items, key=lambda item: item.score, reverse=True)[:3]
     unreferenced_top = [item for item in top_evidence if item.id and item.id not in set(valid_ids)]
     unreferenced_top_ids = [item.id for item in unreferenced_top]
@@ -407,6 +424,7 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "cited_missing_source_locator_ids": cited_missing_source_locator_ids,
         "cited_artifact_warning_ids": cited_artifact_warning_ids,
         "cited_low_confidence_ocr_ids": cited_low_confidence_ocr_ids,
+        "cited_risky_evidence": cited_risky_evidence,
         "unused_evidence_ids": unused_ids,
         "unreferenced_top_evidence_ids": unreferenced_top_ids,
         "unreferenced_top_evidence": [_evidence_locator(item) for item in unreferenced_top],

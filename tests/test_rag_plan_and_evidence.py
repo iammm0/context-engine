@@ -130,6 +130,10 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["cited_missing_source_locator_ids"] == ["S1"]
     assert diagnostics["cited_artifact_warning_ids"] == []
     assert diagnostics["cited_low_confidence_ocr_ids"] == []
+    assert diagnostics["cited_risky_evidence"][0]["id"] == "S1"
+    assert diagnostics["cited_risky_evidence"][0]["chunk_id"] == "chunk1"
+    assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["missing_source_locator"]
+    assert diagnostics["cited_risky_evidence"][0]["content_type"] == "table"
     assert any("重复引用" in warning for warning in diagnostics["warnings"])
     assert any("缺少统一来源定位" in warning for warning in diagnostics["warnings"])
     assert diagnostics["risk_level"] == "medium"
@@ -143,6 +147,10 @@ def test_evidence_format_and_citation_validation():
     assert ocr_diagnostics["cited_missing_source_locator_ids"] == []
     assert ocr_diagnostics["cited_artifact_warning_ids"] == ["S2"]
     assert ocr_diagnostics["cited_low_confidence_ocr_ids"] == ["S2"]
+    assert ocr_diagnostics["cited_risky_evidence"][0]["id"] == "S2"
+    assert ocr_diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["artifact_warning", "low_confidence_ocr"]
+    assert ocr_diagnostics["cited_risky_evidence"][0]["source_locator"]["has_image_source"] is True
+    assert ocr_diagnostics["cited_risky_evidence"][0]["artifact_quality"]["status"] == "warn"
     assert any("解析质量提醒" in warning for warning in ocr_diagnostics["warnings"])
     assert any("低置信 OCR" in warning for warning in ocr_diagnostics["warnings"])
 

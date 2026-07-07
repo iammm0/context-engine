@@ -87,6 +87,12 @@ const sourceLocatorAnchorTypeLabel: Record<string, string> = {
   section: "章节",
 };
 
+const citationRiskReasonLabel: Record<string, string> = {
+  missing_source_locator: "缺来源定位",
+  artifact_warning: "解析需复核",
+  low_confidence_ocr: "低置信OCR",
+};
+
 function formatSourceLocatorAnchor(anchor: SourceLocatorAnchor, index: number) {
   const bits: string[] = [];
   const type = anchor.type ? sourceLocatorAnchorTypeLabel[anchor.type] || anchor.type : `锚点 ${index + 1}`;
@@ -233,6 +239,17 @@ function artifactIssueFeature(quality?: EvidenceArtifactQuality | null) {
   return "artifact_issue";
 }
 
+function citationEvidenceIssueFeature(item: CitationEvidenceRef) {
+  const reasons = item.risk_reasons || [];
+  if (reasons.includes("missing_source_locator")) return "structured_missing_source_locator";
+  if (reasons.includes("low_confidence_ocr")) return "ocr_low_confidence";
+  return artifactIssueFeature(item.artifact_quality);
+}
+
+function formatCitationEvidenceRiskReasons(item: CitationEvidenceRef) {
+  return (item.risk_reasons || []).map((reason) => citationRiskReasonLabel[reason] || reason).filter(Boolean);
+}
+
 function appendChunkInspectorContext(params: URLSearchParams, contentType?: string | null, feature?: string | null) {
   const normalizedType = contentType?.trim();
   const normalizedFeature = feature?.trim();
@@ -289,7 +306,7 @@ function buildCitationEvidenceChunkHref(item: CitationEvidenceRef) {
   const params = new URLSearchParams({ document_id: item.document_id });
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
-  appendChunkInspectorContext(params, item.content_type || null, null);
+  appendChunkInspectorContext(params, item.content_type || null, citationEvidenceIssueFeature(item));
   appendEvidenceDeepLinkContext(params, item.id);
   return `/documents?${params.toString()}`;
 }
@@ -846,6 +863,90 @@ function ChatMessageImpl({
             {formatCitationRecommendations(message.citation_quality)}
           </div>
         )}
+
+        {!isUser && message.citation_quality?.cited_risky_evidence?.length ? (
+          <div className="mt-2 w-full rounded border border-rose-200 bg-rose-50/70 px-2 py-1.5 text-xs text-rose-900 dark:border-rose-800/60 dark:bg-rose-950/30 dark:text-rose-100">
+            <div className="mb-1 font-medium">已引用需复核证据</div>
+            <div className="space-y-1">
+              {message.citation_quality.cited_risky_evidence.slice(0, 4).map((item) => {
+                const chunkHref = buildCitationEvidenceChunkHref(item);
+                const previewHref = buildDocumentPreviewUrl(item.document_id, item.page_start || item.page || null);
+                const location = formatCitationEvidenceLocation(item);
+                const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator);
+                const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
+                const riskLabels = formatCitationEvidenceRiskReasons(item);
+                return (
+                  <div
+                    key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-risky`}
+                    className={`rounded border px-2 py-1 ${
+                      item.id === activeCitationId
+                        ? "border-rose-500 bg-white dark:border-rose-400 dark:bg-rose-950/50"
+                        : "border-rose-200/80 bg-white/70 dark:border-rose-800/50 dark:bg-rose-950/20"
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="rounded bg-rose-700 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-rose-200 dark:text-rose-950">
+                        {item.id}
+                      </span>
+                      {typeLabel && (
+                        <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-800 dark:bg-rose-900/50 dark:text-rose-100">
+                          {typeLabel}
+                        </span>
+                      )}
+                      {riskLabels.map((label) => (
+                        <span key={`${item.id}-${label}`} className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/50 dark:text-amber-100">
+                          {label}
+                        </span>
+                      ))}
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {item.document_title || item.document_id || item.chunk_id || "证据"}
+                      </span>
+                      {typeof item.score === "number" && (
+                        <span className="shrink-0 text-rose-700/80 dark:text-rose-200/80">{item.score.toFixed(3)}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-rose-800/80 dark:text-rose-100/80">
+                      {location && <span>{location}</span>}
+                      {item.retrieval_type && <span>{item.retrieval_type}</span>}
+                      <button
+                        type="button"
+                        onClick={() => handleCitationClick(item.id)}
+                        className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100"
+                      >
+                        定位证据
+                      </button>
+                      {chunkHref && (
+                        <Link href={chunkHref} className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
+                          查看切块
+                        </Link>
+                      )}
+                      {previewHref && (
+                        <a href={previewHref} target="_blank" rel="noreferrer" className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
+                          打开原文
+                        </a>
+                      )}
+                    </div>
+                    {sourceLocatorSummary ? (
+                      <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        来源定位：{sourceLocatorSummary}
+                      </div>
+                    ) : (
+                      <div className="mt-1 rounded border border-rose-200 bg-rose-100/70 px-2 py-0.5 text-[11px] text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/50 dark:text-rose-100">
+                        缺少统一来源定位
+                      </div>
+                    )}
+                    <SourceLocatorAnchorPreview locator={item.source_locator} />
+                    {item.preview && (
+                      <div className="mt-0.5 line-clamp-2 text-[11px] text-rose-900/70 dark:text-rose-100/70">
+                        {item.preview}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {!isUser && message.citation_quality?.unreferenced_top_evidence?.length ? (
           <div className="mt-2 w-full rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
