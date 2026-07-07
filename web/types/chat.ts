@@ -95,7 +95,9 @@ export interface SourceInfo {
   page_end?: number | null;
   content_type?: string;
   artifact?: EvidenceArtifact | null;
+  artifact_quality?: EvidenceArtifactQuality | null;
   source_locator?: SourceLocatorSummary | null;
+  quality_notes?: string[];
   section_path?: string[];
 }
 
@@ -203,6 +205,7 @@ export interface EvidenceItem {
     artifact?: EvidenceArtifact | null;
     artifact_quality?: EvidenceArtifactQuality | null;
     source_locator?: SourceLocatorSummary | null;
+    quality_notes?: string[];
     [key: string]: unknown;
   };
 }
@@ -273,6 +276,7 @@ export interface CitationEvidenceRef {
   preview?: string;
   source_locator?: SourceLocatorSummary | null;
   artifact_quality?: EvidenceArtifactQuality | null;
+  quality_notes?: string[];
   risk_reasons?: string[];
 }
 

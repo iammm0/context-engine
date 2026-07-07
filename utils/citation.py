@@ -158,6 +158,15 @@ def _format_artifact_quality_context(artifact_quality: Any) -> str:
     return f"artifact质量: {'; '.join(compact_warnings[:4])}"
 
 
+def _format_quality_notes_context(quality_notes: Any) -> str:
+    if not isinstance(quality_notes, list):
+        return ""
+    compact_notes = [_compact_text(item, 120) for item in quality_notes if str(item).strip()]
+    if not compact_notes:
+        return ""
+    return f"质量提示: {'; '.join(compact_notes[:4])}"
+
+
 def _format_source_locator_context(source_locator: Any) -> str:
     if not isinstance(source_locator, dict):
         return ""
@@ -329,6 +338,7 @@ def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
         "preview": metadata.get("preview") or _compact_text(item.text, 160),
         "source_locator": metadata.get("source_locator"),
         "artifact_quality": metadata.get("artifact_quality"),
+        "quality_notes": metadata.get("quality_notes") or [],
     }
 
 
@@ -463,8 +473,9 @@ def format_evidence_context(evidence: Iterable[EvidenceItem | Dict[str, Any]]) -
         content_type = item.metadata.get("content_type") or "text"
         source_locator_context = _format_source_locator_context(item.metadata.get("source_locator"))
         artifact_quality_context = _format_artifact_quality_context(item.metadata.get("artifact_quality"))
+        quality_notes_context = _format_quality_notes_context(item.metadata.get("quality_notes"))
         artifact_context = _format_artifact_context(item.metadata.get("artifact"))
-        body_parts = [source_locator_context, artifact_quality_context, artifact_context, item.text]
+        body_parts = [source_locator_context, artifact_quality_context, quality_notes_context, artifact_context, item.text]
         body = "\n".join(part for part in body_parts if part)
         parts.append(
             f"[{item.id}] 来源: {title}{location}\n"

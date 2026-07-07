@@ -230,6 +230,41 @@ function formatArtifactQualityWarnings(item: EvidenceItem) {
   return quality.warnings.join(" · ");
 }
 
+function qualityNotesFromSource(source: SourceInfo) {
+  const notes = (source.quality_notes || []).map((note) => String(note).trim()).filter(Boolean);
+  if (notes.length) return notes;
+  const quality = source.artifact_quality;
+  return quality?.status === "warn" && quality.warnings?.length ? quality.warnings : [];
+}
+
+function qualityNotesFromEvidence(item: EvidenceItem) {
+  const notes = (item.metadata?.quality_notes || []).map((note) => String(note).trim()).filter(Boolean);
+  if (notes.length) return notes;
+  const warnings = formatArtifactQualityWarnings(item);
+  return warnings ? [warnings] : [];
+}
+
+function qualityNotesFromCitationEvidence(item: CitationEvidenceRef) {
+  const notes = (item.quality_notes || []).map((note) => String(note).trim()).filter(Boolean);
+  const quality = item.artifact_quality;
+  if (!notes.length && quality?.status === "warn" && quality.warnings?.length) return quality.warnings;
+  return notes;
+}
+
+function QualityNoteList({ notes }: { notes: string[] }) {
+  if (!notes.length) return null;
+  return (
+    <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+      <div className="font-medium">质量提示</div>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+        {notes.slice(0, 4).map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function artifactIssueFeature(quality?: EvidenceArtifactQuality | null) {
   if (!quality || quality.status !== "warn") return "";
   if (quality.table_missing_structure) return "table_missing_structure";
@@ -707,6 +742,7 @@ function ChatMessageImpl({
                 const previewHref = buildDocumentPreviewUrl(source.document_id, source.page_start || source.page || null);
                 const sourceLocatorSummary = formatSourceLocatorSummary(source.source_locator);
                 const useBadge = citationUseBadge(getCitationUseState(source.evidence_id));
+                const qualityNotes = qualityNotesFromSource(source);
                 return (
                   <li
                     key={`${source.chunk_id || source.document_id || source.file_id || source.evidence_id || source.document_title || source.score}`}
@@ -758,6 +794,7 @@ function ChatMessageImpl({
                       </div>
                     )}
                     <SourceLocatorAnchorPreview locator={source.source_locator} />
+                    <QualityNoteList notes={qualityNotes} />
                   </li>
                 );
               })}
@@ -778,6 +815,7 @@ function ChatMessageImpl({
                 const previewHref = buildDocumentPreviewUrl(item.document_id, item.metadata?.page_start || item.page || null);
                 const sourceLocatorSummary = formatSourceLocatorSummary(item.metadata?.source_locator);
                 const useBadge = citationUseBadge(getCitationUseState(item.id));
+                const qualityNotes = qualityNotesFromEvidence(item);
                 return (
                   <li
                     key={item.id}
@@ -832,11 +870,7 @@ function ChatMessageImpl({
                     <div className="line-clamp-2 text-gray-500 dark:text-gray-400">
                       {item.metadata?.preview || item.text}
                     </div>
-                    {formatArtifactQualityWarnings(item) && (
-                      <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-                        {formatArtifactQualityWarnings(item)}
-                      </div>
-                    )}
+                    <QualityNoteList notes={qualityNotes} />
                     <EvidenceArtifactPreview artifact={item.metadata?.artifact} />
                   </li>
                 );
@@ -875,6 +909,7 @@ function ChatMessageImpl({
                 const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator);
                 const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
                 const riskLabels = formatCitationEvidenceRiskReasons(item);
+                const qualityNotes = qualityNotesFromCitationEvidence(item);
                 return (
                   <div
                     key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-risky`}
@@ -941,6 +976,7 @@ function ChatMessageImpl({
                         {item.preview}
                       </div>
                     )}
+                    <QualityNoteList notes={qualityNotes} />
                   </div>
                 );
               })}
@@ -958,6 +994,7 @@ function ChatMessageImpl({
                 const location = formatCitationEvidenceLocation(item);
                 const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator);
                 const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
+                const qualityNotes = qualityNotesFromCitationEvidence(item);
                 return (
                   <div
                     key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}`}
@@ -1015,6 +1052,7 @@ function ChatMessageImpl({
                         {item.preview}
                       </div>
                     )}
+                    <QualityNoteList notes={qualityNotes} />
                   </div>
                 );
               })}

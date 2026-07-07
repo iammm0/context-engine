@@ -84,6 +84,7 @@ def test_evidence_format_and_citation_validation():
                     "status": "warn",
                     "warnings": ["1 个 OCR 图片来源置信度偏低"],
                 },
+                "quality_notes": ["OCR 图片来源置信度偏低，引用前需要人工复核。"],
             },
         )
     ]
@@ -100,6 +101,7 @@ def test_evidence_format_and_citation_validation():
     assert "样例行: recall | 0.9" in context
     assert "结构化证据: image_ocr" in context
     assert "artifact质量: 1 个 OCR 图片来源置信度偏低" in context
+    assert "质量提示: OCR 图片来源置信度偏低，引用前需要人工复核。" in context
     assert (
         "图片来源: page 3, image 2, confidence 42%, 4 lines, 12 chars, 640x320, "
         "media/image2.png, bbox [10, 20, 300, 180], low confidence, text 图中包含召回率 0.92"
@@ -124,6 +126,7 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["unreferenced_top_evidence"][0]["content_type"] == "image_ocr"
     assert diagnostics["unreferenced_top_evidence"][0]["source_locator"]["has_image_source"] is True
     assert diagnostics["unreferenced_top_evidence"][0]["source_locator"]["has_bbox"] is True
+    assert diagnostics["unreferenced_top_evidence"][0]["quality_notes"] == ["OCR 图片来源置信度偏低，引用前需要人工复核。"]
     assert diagnostics["unreferenced_top_evidence"][0]["preview"]
     assert diagnostics["coverage"] == 0.5
     assert diagnostics["cited_structured_evidence_count"] == 1
@@ -151,6 +154,7 @@ def test_evidence_format_and_citation_validation():
     assert ocr_diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["artifact_warning", "low_confidence_ocr"]
     assert ocr_diagnostics["cited_risky_evidence"][0]["source_locator"]["has_image_source"] is True
     assert ocr_diagnostics["cited_risky_evidence"][0]["artifact_quality"]["status"] == "warn"
+    assert ocr_diagnostics["cited_risky_evidence"][0]["quality_notes"] == ["OCR 图片来源置信度偏低，引用前需要人工复核。"]
     assert any("解析质量提醒" in warning for warning in ocr_diagnostics["warnings"])
     assert any("低置信 OCR" in warning for warning in ocr_diagnostics["warnings"])
 

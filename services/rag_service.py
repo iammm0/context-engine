@@ -314,7 +314,9 @@ class RAGService:
                         "page_end": metadata.get("page_end"),
                         "content_type": metadata.get("content_type"),
                         "artifact": metadata.get("artifact"),
+                        "artifact_quality": metadata.get("artifact_quality"),
                         "source_locator": metadata.get("source_locator"),
+                        "quality_notes": metadata.get("quality_notes"),
                         "section_path": section_path,
                         "is_conversation_attachment": True
                     }
@@ -337,7 +339,9 @@ class RAGService:
                         "page_end": metadata.get("page_end"),
                         "content_type": metadata.get("content_type"),
                         "artifact": metadata.get("artifact"),
+                        "artifact_quality": metadata.get("artifact_quality"),
                         "source_locator": metadata.get("source_locator"),
+                        "quality_notes": metadata.get("quality_notes"),
                         "section_path": section_path,
                         "is_conversation_attachment": False
                     }

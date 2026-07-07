@@ -258,7 +258,11 @@ text previews; and formula/code evidence exposes a compact content preview.
 When `metadata.artifact_quality` carries warnings, the generation context also
 includes a compact artifact-quality line before the evidence text, so the model
 can treat low-confidence OCR, missing table sources, or incomplete artifact
-previews as weaker evidence.
+previews as weaker evidence. Retrieval payloads also preserve
+`metadata.quality_notes`, and the generation context includes a compact quality
+note line when present. Chat source, evidence, cited-risk, and unreferenced
+evidence cards render these notes so users can see the same human-readable
+chunk quality explanation outside the document inspector.
 Generated answers are checked against the available `EvidenceItem` ids to build
 `citation_quality.status`, `coverage`, `valid_citation_ids`,
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
@@ -276,11 +280,11 @@ warning to the referenced chunk. The structured `unreferenced_top_evidence`
 field carries compact locator data such as
 `document_id`, `chunk_id`, `chunk_index`, page range, content type, score,
 preview text, and `source_locator` so clients can jump from a citation audit
-warning to the exact missing source. Chat source, evidence, and
+warning to the exact missing source. Chat source, evidence, cited-risk, and
 unreferenced-evidence cards render `source_locator.anchors` when available,
-including table/image/page/character anchor details and compact bbox mini maps,
-so users can inspect source location even when the artifact preview is
-incomplete.
+including table/image/page/character anchor details, compact bbox mini maps, and
+`quality_notes` when present, so users can inspect source location and quality
+context even when the artifact preview is incomplete.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
 `structured_artifact_coverage`, `source_locator_coverage`,
@@ -292,8 +296,8 @@ original-file locator is incomplete.
 Each structured evidence item can also carry `metadata.artifact_quality` with
 per-item warnings such as missing table structure, missing table source refs,
 missing OCR image refs, or low-confidence OCR refs. Evidence cards render these
-warnings next to the affected source, so reviewers can jump from a global
-quality warning to the exact problematic chunk.
+warnings and `metadata.quality_notes` next to the affected source, so reviewers
+can jump from a global quality warning to the exact problematic chunk.
 
 ## Compatibility
 

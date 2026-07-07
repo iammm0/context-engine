@@ -375,6 +375,11 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
             "column_count": 2,
             "sources": [{"table_index": 1, "page": 2, "caption": "指标表"}],
         },
+        "artifact_quality": {
+            "status": "warn",
+            "warnings": ["表格证据缺少页码或表格来源"],
+        },
+        "quality_notes": ["表格预览缺少页码、表格索引或 bbox 来源。"],
         "pages": [{"page": 1, "text": "heavy"}],
         "tables": [{"markdown": "heavy"}],
     }
@@ -387,6 +392,8 @@ def test_retrieval_payload_metadata_keeps_compact_artifact_for_evidence_cards():
     assert payload["artifact"]["headers"] == ["指标", "数值"]
     assert payload["artifact"]["rows"] == [["recall", "0.9"]]
     assert payload["artifact"]["sources"] == [{"table_index": 1, "page": 2, "caption": "指标表"}]
+    assert payload["artifact_quality"]["status"] == "warn"
+    assert payload["quality_notes"] == ["表格预览缺少页码、表格索引或 bbox 来源。"]
     assert "pages" not in payload
     assert "tables" not in payload
 

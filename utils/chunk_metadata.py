@@ -1644,6 +1644,15 @@ def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]
         section_path = [str(s)[:200] for s in section_path[:12]]
     elif section_path is not None:
         section_path = [str(section_path)[:200]]
+    quality_notes = meta.get("quality_notes")
+    if isinstance(quality_notes, list):
+        quality_notes = [str(note)[:240] for note in quality_notes[:8] if str(note).strip()]
+    elif quality_notes:
+        quality_notes = [str(quality_notes)[:240]]
+    else:
+        quality_notes = []
+    artifact_quality = meta.get("artifact_quality")
+    artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else None
 
     return {
         "content_type": meta.get("content_type", "text"),
@@ -1657,7 +1666,9 @@ def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]
         "char_end": meta.get("char_end"),
         "preview": meta.get("preview"),
         "artifact": meta.get("artifact"),
+        "artifact_quality": artifact_quality,
         "source_locator": meta.get("source_locator"),
+        "quality_notes": quality_notes,
         "features": meta.get("features") or {},
         "parse_summary": meta.get("parse_summary") or {},
         "file_type": meta.get("file_type"),
