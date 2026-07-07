@@ -10,6 +10,7 @@ from models.rag import EvidenceItem
 
 
 _CITATION_RE = re.compile(r"\bS\d+\b")
+STRUCTURED_CITATION_TYPES = {"table", "image_ocr", "ocr", "formula", "code"}
 
 
 def _compact_text(value: Any, max_chars: int = 240) -> str:
@@ -25,6 +26,20 @@ def _format_number(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     return str(value) if value is not None else ""
+
+
+def _safe_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.lstrip("-").isdigit():
+            return int(text)
+    return 0
 
 
 def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
@@ -193,6 +208,43 @@ def _evidence_items(evidence: Iterable[Dict[str, Any] | EvidenceItem]) -> List[E
     return items
 
 
+def _evidence_content_type(item: EvidenceItem) -> str:
+    metadata = item.metadata or {}
+    artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else {}
+    return str(metadata.get("content_type") or artifact.get("type") or "text").strip().lower()
+
+
+def _source_locator_anchor_count(locator: Any) -> int:
+    if not isinstance(locator, dict):
+        return 0
+    anchors = locator.get("anchors")
+    anchor_list_count = len(anchors) if isinstance(anchors, list) else 0
+    return max(_safe_int(locator.get("anchor_count")), anchor_list_count, 0)
+
+
+def _has_source_locator(item: EvidenceItem) -> bool:
+    return _source_locator_anchor_count((item.metadata or {}).get("source_locator")) > 0
+
+
+def _artifact_quality(item: EvidenceItem) -> Dict[str, Any]:
+    quality = (item.metadata or {}).get("artifact_quality")
+    return quality if isinstance(quality, dict) else {}
+
+
+def _artifact_quality_warns(item: EvidenceItem) -> bool:
+    return str(_artifact_quality(item).get("status") or "").lower() in {"warn", "fail"}
+
+
+def _has_low_confidence_ocr(item: EvidenceItem) -> bool:
+    quality = _artifact_quality(item)
+    if _safe_int(quality.get("ocr_low_confidence_source_count")) > 0:
+        return True
+    artifact = (item.metadata or {}).get("artifact")
+    images = artifact.get("images") if isinstance(artifact, dict) else None
+    images = images if isinstance(images, list) else []
+    return any(isinstance(image, dict) and image.get("low_confidence") is True for image in images)
+
+
 def build_citation_policy_context(
     evidence: Iterable[Dict[str, Any] | EvidenceItem],
     evidence_quality: Dict[str, Any] | None = None,
@@ -280,6 +332,20 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     invalid_ids = [cid for cid in used_ids if cid not in evidence_id_set]
     duplicate_ids = [cid for cid, count in mention_counts.items() if count > 1]
     unused_ids = [eid for eid in evidence_ids if eid not in set(valid_ids)]
+    item_by_id = {item.id: item for item in items if item.id}
+    cited_items = [item_by_id[cid] for cid in valid_ids if cid in item_by_id]
+    cited_structured_items = [
+        item for item in cited_items if _evidence_content_type(item) in STRUCTURED_CITATION_TYPES
+    ]
+    cited_missing_source_locator_ids = [
+        item.id for item in cited_structured_items if item.id and not _has_source_locator(item)
+    ]
+    cited_artifact_warning_ids = [
+        item.id for item in cited_items if item.id and _artifact_quality_warns(item)
+    ]
+    cited_low_confidence_ocr_ids = [
+        item.id for item in cited_items if item.id and _has_low_confidence_ocr(item)
+    ]
     top_evidence = sorted(items, key=lambda item: item.score, reverse=True)[:3]
     unreferenced_top = [item for item in top_evidence if item.id and item.id not in set(valid_ids)]
     unreferenced_top_ids = [item.id for item in unreferenced_top]
@@ -296,6 +362,15 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
     if duplicate_ids:
         warnings.append(f"回答重复引用了证据编号: {', '.join(duplicate_ids)}")
         recommendations.append("合并重复引用，保留必要的证据编号即可。")
+    if cited_missing_source_locator_ids:
+        warnings.append(f"回答引用的结构化证据缺少统一来源定位: {', '.join(cited_missing_source_locator_ids)}")
+        recommendations.append("复核缺少 source_locator 的结构化引用，必要时重新解析或改用可回源证据。")
+    if cited_artifact_warning_ids:
+        warnings.append(f"回答引用了存在解析质量提醒的证据: {', '.join(cited_artifact_warning_ids)}")
+        recommendations.append("对带解析质量提醒的引用保持保守表述，并优先复核对应原文或 artifact。")
+    if cited_low_confidence_ocr_ids:
+        warnings.append(f"回答引用了低置信 OCR 证据: {', '.join(cited_low_confidence_ocr_ids)}")
+        recommendations.append("低置信 OCR 引用需要人工复核图片文字，避免把识别不确定内容写成确定结论。")
     if unreferenced_top_ids:
         recommendations.append(f"复核未引用的高分证据: {', '.join(unreferenced_top_ids)}。")
 
@@ -311,7 +386,11 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         risk_level = "high"
     elif coverage == 1:
         status = "complete"
-        risk_level = "low" if not duplicate_ids else "medium"
+        risk_level = (
+            "medium"
+            if duplicate_ids or cited_missing_source_locator_ids or cited_artifact_warning_ids or cited_low_confidence_ocr_ids
+            else "low"
+        )
     else:
         status = "partial"
         risk_level = "medium"
@@ -324,6 +403,10 @@ def build_citation_diagnostics(answer: str, evidence: Iterable[Dict[str, Any] | 
         "valid_citation_ids": valid_ids,
         "invalid_citation_ids": invalid_ids,
         "duplicate_citation_ids": duplicate_ids,
+        "cited_structured_evidence_count": len(cited_structured_items),
+        "cited_missing_source_locator_ids": cited_missing_source_locator_ids,
+        "cited_artifact_warning_ids": cited_artifact_warning_ids,
+        "cited_low_confidence_ocr_ids": cited_low_confidence_ocr_ids,
         "unused_evidence_ids": unused_ids,
         "unreferenced_top_evidence_ids": unreferenced_top_ids,
         "unreferenced_top_evidence": [_evidence_locator(item) for item in unreferenced_top],

@@ -105,7 +105,7 @@ def test_evidence_format_and_citation_validation():
         "media/image2.png, bbox [10, 20, 300, 180], low confidence, text 图中包含召回率 0.92"
     ) in context
     assert extract_citation_ids("Answer [S1] and [S2]") == ["S1", "S2"]
-    assert validate_citations("Answer [S1]", evidence) == []
+    assert any("缺少统一来源定位" in warning for warning in validate_citations("Answer [S1]", evidence))
     assert validate_citations("Answer [S3]", evidence)
     diagnostics = build_citation_diagnostics("Answer [S1] and repeat [S1]", evidence)
     assert diagnostics["status"] == "partial"
@@ -126,9 +126,25 @@ def test_evidence_format_and_citation_validation():
     assert diagnostics["unreferenced_top_evidence"][0]["source_locator"]["has_bbox"] is True
     assert diagnostics["unreferenced_top_evidence"][0]["preview"]
     assert diagnostics["coverage"] == 0.5
+    assert diagnostics["cited_structured_evidence_count"] == 1
+    assert diagnostics["cited_missing_source_locator_ids"] == ["S1"]
+    assert diagnostics["cited_artifact_warning_ids"] == []
+    assert diagnostics["cited_low_confidence_ocr_ids"] == []
     assert any("重复引用" in warning for warning in diagnostics["warnings"])
+    assert any("缺少统一来源定位" in warning for warning in diagnostics["warnings"])
     assert diagnostics["risk_level"] == "medium"
     assert any("未引用的高分证据: S2" in item for item in diagnostics["recommendations"])
+
+    ocr_diagnostics = build_citation_diagnostics("Use OCR [S2].", [evidence[1]])
+    assert ocr_diagnostics["status"] == "complete"
+    assert ocr_diagnostics["risk_level"] == "medium"
+    assert ocr_diagnostics["coverage"] == 1
+    assert ocr_diagnostics["cited_structured_evidence_count"] == 1
+    assert ocr_diagnostics["cited_missing_source_locator_ids"] == []
+    assert ocr_diagnostics["cited_artifact_warning_ids"] == ["S2"]
+    assert ocr_diagnostics["cited_low_confidence_ocr_ids"] == ["S2"]
+    assert any("解析质量提醒" in warning for warning in ocr_diagnostics["warnings"])
+    assert any("低置信 OCR" in warning for warning in ocr_diagnostics["warnings"])
 
     policy = build_citation_policy_context(evidence, {"status": "warn", "warnings": ["OCR证据需要复核"]})
     assert "只能使用以下证据编号: S1, S2" in policy

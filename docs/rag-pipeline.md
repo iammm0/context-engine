@@ -207,13 +207,16 @@ when a page locator is available.
 Assistant messages can include `citation_quality` with citation coverage,
 valid/invalid citation ids, duplicate citations, unused evidence ids, risk
 level, recommendations, and the highest-scored evidence that was not
-referenced. The UI displays this as a compact citation audit line next to any
-non-blocking `citation_warnings`, renders actionable recommendations when the
-answer needs citation repair, and renders unreferenced high-score evidence as
-locator cards that can highlight the current evidence entry or open the exact
-document chunk. Source and evidence cards also mark whether each evidence id
-was cited or left unused, making coverage gaps visible without reading the raw
-answer text.
+referenced. Citation quality also audits the cited evidence itself: it counts
+structured cited evidence, flags cited table/OCR/formula/code evidence that is
+missing a normalized `source_locator`, and reports cited evidence ids with
+`artifact_quality` warnings or low-confidence OCR sources. The UI displays this
+as a compact citation audit line next to any non-blocking `citation_warnings`,
+renders actionable recommendations when the answer needs citation repair, and
+renders unreferenced high-score evidence as locator cards that can highlight
+the current evidence entry or open the exact document chunk. Source and
+evidence cards also mark whether each evidence id was cited or left unused,
+making coverage gaps visible without reading the raw answer text.
 Assistant messages can also include `evidence_quality`, a runtime diagnostic for
 retrieved structured evidence. It reports artifact coverage, structured artifact
 coverage, source locator coverage, missing locator counts, table/OCR/bbox
@@ -243,15 +246,20 @@ Generated answers are checked against the available `EvidenceItem` ids to build
 `invalid_citation_ids`, `duplicate_citation_ids`, `unused_evidence_ids`, and
 `unreferenced_top_evidence_ids`. Citation quality also includes `risk_level`
 and `recommendations`, so clients can distinguish complete citation coverage
-from missing, invalid, or partially covered answers and show concrete repair
-guidance. The structured `unreferenced_top_evidence` field carries compact
-locator data such as `document_id`, `chunk_id`, `chunk_index`, page range,
-content type, score, preview text, and `source_locator` so clients can jump
-from a citation audit warning to the exact missing source. Chat source,
-evidence, and unreferenced-evidence cards render `source_locator.anchors` when
-available, including table/image/page/character anchor details and compact bbox
-mini maps, so users can inspect source location even when the artifact preview
-is incomplete.
+from missing, invalid, partially covered, or source-risky answers and show
+concrete repair guidance. Additional fields include
+`cited_structured_evidence_count`, `cited_missing_source_locator_ids`,
+`cited_artifact_warning_ids`, and `cited_low_confidence_ocr_ids`, which let the
+chat UI and evaluation report distinguish "all evidence ids were cited" from
+"the cited evidence still needs source or OCR review." The structured
+`unreferenced_top_evidence` field carries compact locator data such as
+`document_id`, `chunk_id`, `chunk_index`, page range, content type, score,
+preview text, and `source_locator` so clients can jump from a citation audit
+warning to the exact missing source. Chat source, evidence, and
+unreferenced-evidence cards render `source_locator.anchors` when available,
+including table/image/page/character anchor details and compact bbox mini maps,
+so users can inspect source location even when the artifact preview is
+incomplete.
 The same evidence list is checked before generation to build
 `evidence_quality.status`, `risk_level`, `artifact_coverage`,
 `structured_artifact_coverage`, `source_locator_coverage`,

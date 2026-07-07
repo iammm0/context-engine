@@ -282,6 +282,10 @@ export interface CitationQuality {
   valid_citation_ids: string[];
   invalid_citation_ids: string[];
   duplicate_citation_ids: string[];
+  cited_structured_evidence_count?: number;
+  cited_missing_source_locator_ids?: string[];
+  cited_artifact_warning_ids?: string[];
+  cited_low_confidence_ocr_ids?: string[];
   unused_evidence_ids: string[];
   unreferenced_top_evidence_ids: string[];
   unreferenced_top_evidence?: CitationEvidenceRef[];

@@ -232,8 +232,43 @@ def test_results_to_evidence_items_supports_citation_quality():
     summary = summarize_citation_quality([citation_quality])
     assert summary["evaluated_count"] == 1
     assert summary["status_counts"] == {"invalid": 1}
+    assert summary["risk_level_counts"] == {"high": 1}
     assert summary["avg_coverage"] == 0.5
     assert summary["invalid_citation_count"] == 1
+    assert summary["cited_structured_evidence_count"] == 0
+    assert summary["cited_missing_source_locator_count"] == 0
+    assert summary["cited_artifact_warning_count"] == 0
+    assert summary["cited_low_confidence_ocr_count"] == 0
+
+
+def test_summarize_citation_quality_counts_cited_evidence_risks():
+    summary = summarize_citation_quality(
+        [
+            {
+                "status": "complete",
+                "risk_level": "medium",
+                "coverage": 1.0,
+                "invalid_citation_ids": [],
+                "duplicate_citation_ids": ["S1"],
+                "cited_structured_evidence_count": 2,
+                "cited_missing_source_locator_ids": ["S1"],
+                "cited_artifact_warning_ids": ["S2"],
+                "cited_low_confidence_ocr_ids": ["S2"],
+                "warnings": ["回答引用的结构化证据缺少统一来源定位: S1", "回答引用了低置信 OCR 证据: S2"],
+            }
+        ]
+    )
+
+    assert summary["evaluated_count"] == 1
+    assert summary["status_counts"] == {"complete": 1}
+    assert summary["risk_level_counts"] == {"medium": 1}
+    assert summary["avg_coverage"] == 1.0
+    assert summary["duplicate_citation_count"] == 1
+    assert summary["cited_structured_evidence_count"] == 2
+    assert summary["cited_missing_source_locator_count"] == 1
+    assert summary["cited_artifact_warning_count"] == 1
+    assert summary["cited_low_confidence_ocr_count"] == 1
+    assert summary["warning_count"] == 2
 
 
 def test_to_markdown_includes_artifact_and_citation_quality_sections():
@@ -261,9 +296,14 @@ def test_to_markdown_includes_artifact_and_citation_quality_sections():
                 "citation_quality": {
                     "evaluated_count": 1,
                     "status_counts": {"complete": 1},
+                    "risk_level_counts": {"medium": 1},
                     "avg_coverage": 1,
                     "invalid_citation_count": 0,
                     "duplicate_citation_count": 0,
+                    "cited_structured_evidence_count": 2,
+                    "cited_missing_source_locator_count": 1,
+                    "cited_artifact_warning_count": 1,
+                    "cited_low_confidence_ocr_count": 1,
                     "warning_count": 0,
                 },
             },
@@ -277,3 +317,6 @@ def test_to_markdown_includes_artifact_and_citation_quality_sections():
     assert "| missing_required_artifact_types | image_ocr |" in markdown
     assert "## Citation Quality" in markdown
     assert '| status_counts | {"complete": 1} |' in markdown
+    assert '| risk_level_counts | {"medium": 1} |' in markdown
+    assert "| cited_missing_source_locator_count | 1 |" in markdown
+    assert "| cited_low_confidence_ocr_count | 1 |" in markdown

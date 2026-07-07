@@ -500,9 +500,14 @@ def summarize_citation_quality(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     summary: Dict[str, Any] = {
         "evaluated_count": len(items),
         "status_counts": {},
+        "risk_level_counts": {},
         "avg_coverage": None,
         "invalid_citation_count": 0,
         "duplicate_citation_count": 0,
+        "cited_structured_evidence_count": 0,
+        "cited_missing_source_locator_count": 0,
+        "cited_artifact_warning_count": 0,
+        "cited_low_confidence_ocr_count": 0,
         "warning_count": 0,
     }
     if not items:
@@ -512,11 +517,17 @@ def summarize_citation_quality(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     for item in items:
         status = str(item.get("status") or "unknown")
         summary["status_counts"][status] = summary["status_counts"].get(status, 0) + 1
+        risk_level = str(item.get("risk_level") or "unknown")
+        summary["risk_level_counts"][risk_level] = summary["risk_level_counts"].get(risk_level, 0) + 1
         coverage = item.get("coverage")
         if isinstance(coverage, (int, float)):
             coverage_values.append(float(coverage))
         summary["invalid_citation_count"] += len(item.get("invalid_citation_ids") or [])
         summary["duplicate_citation_count"] += len(item.get("duplicate_citation_ids") or [])
+        summary["cited_structured_evidence_count"] += int(item.get("cited_structured_evidence_count") or 0)
+        summary["cited_missing_source_locator_count"] += len(item.get("cited_missing_source_locator_ids") or [])
+        summary["cited_artifact_warning_count"] += len(item.get("cited_artifact_warning_ids") or [])
+        summary["cited_low_confidence_ocr_count"] += len(item.get("cited_low_confidence_ocr_ids") or [])
         summary["warning_count"] += len(item.get("warnings") or [])
     if coverage_values:
         summary["avg_coverage"] = round(sum(coverage_values) / len(coverage_values), 4)
@@ -693,9 +704,14 @@ def _to_markdown(result: Dict[str, Any]) -> str:
         for key in [
             "evaluated_count",
             "status_counts",
+            "risk_level_counts",
             "avg_coverage",
             "invalid_citation_count",
             "duplicate_citation_count",
+            "cited_structured_evidence_count",
+            "cited_missing_source_locator_count",
+            "cited_artifact_warning_count",
+            "cited_low_confidence_ocr_count",
             "warning_count",
         ]:
             lines.append(f"| {key} | {_format_metric_value(citation_quality.get(key))} |")

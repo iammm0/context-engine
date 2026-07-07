@@ -161,6 +161,15 @@ function formatCitationQuality(quality?: CitationQuality | null) {
   if (quality.duplicate_citation_ids?.length) {
     bits.push(`重复 ${quality.duplicate_citation_ids.join(", ")}`);
   }
+  if (quality.cited_missing_source_locator_ids?.length) {
+    bits.push(`引用缺定位 ${quality.cited_missing_source_locator_ids.join(", ")}`);
+  }
+  if (quality.cited_artifact_warning_ids?.length) {
+    bits.push(`引用需复核 ${quality.cited_artifact_warning_ids.join(", ")}`);
+  }
+  if (quality.cited_low_confidence_ocr_ids?.length) {
+    bits.push(`低置信引用 ${quality.cited_low_confidence_ocr_ids.join(", ")}`);
+  }
   if (quality.unreferenced_top_evidence_ids?.length) {
     bits.push(`未引用高分证据 ${quality.unreferenced_top_evidence_ids.join(", ")}`);
   }
