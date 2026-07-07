@@ -470,6 +470,8 @@ def build_parse_quality_summary(
                     "warning",
                     f"OCR 平均置信度偏低：{ocr_avg_confidence:.0%}",
                     "复核 OCR 文本，必要时更换 OCR 引擎或提高扫描分辨率。",
+                    feature_filter="ocr_low_confidence",
+                    filter_label="查看低置信OCR",
                 )
                 warnings.append(f"OCR 平均置信度偏低：{ocr_avg_confidence:.0%}")
             elif ocr_low_confidence_images > 0:
@@ -481,6 +483,8 @@ def build_parse_quality_summary(
                     "warning",
                     f"{ocr_low_confidence_images} 张图片 OCR 置信度偏低，平均置信度 {ocr_avg_confidence:.0%}",
                     "优先复核低置信度图片对应的证据引用。",
+                    feature_filter="ocr_low_confidence",
+                    filter_label="查看低置信OCR",
                 )
                 warnings.append(f"{ocr_low_confidence_images} 张图片 OCR 置信度偏低")
             else:

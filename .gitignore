@@ -120,6 +120,7 @@ desktop.ini
 # 测试 & 覆盖率
 # ======================
 .pytest_cache/
+.tmp-pytest/
 .coverage
 .coverage.*
 htmlcov/

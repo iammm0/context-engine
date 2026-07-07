@@ -594,10 +594,13 @@ export default function DocumentsPage() {
     if (!chunkPanelQuality) return [];
     return [
       { feature: "artifact_issue", label: "Artifact问题", count: chunkPanelQuality.artifact_issue_count },
+      { feature: "structured_missing_source_locator", label: "结构化缺定位", count: chunkPanelQuality.structured_missing_source_locator_count },
       { feature: "table_missing_structure", label: "表格缺结构", count: chunkPanelQuality.table_artifact_missing_structure_count },
       { feature: "table_missing_source", label: "表格缺来源", count: chunkPanelQuality.table_artifact_missing_source_count },
       { feature: "ocr_missing_source", label: "OCR缺来源", count: chunkPanelQuality.ocr_artifact_missing_source_count },
       { feature: "ocr_low_confidence", label: "OCR低置信", count: chunkPanelQuality.ocr_artifact_low_confidence_source_count },
+      { feature: "missing_anchor", label: "缺定位", count: chunkPanelQuality.chunk_missing_anchor_count },
+      { feature: "size_issue", label: "尺寸异常", count: (chunkPanelQuality.chunk_short_count || 0) + (chunkPanelQuality.chunk_large_count || 0) },
     ].filter((item): item is QualityIssueChip => typeof item.count === "number" && item.count > 0);
   }, [chunkPanelQuality]);
   const chunkPreviewHasMore = chunkPreview.length < chunkPreviewTotal;

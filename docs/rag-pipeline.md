@@ -65,6 +65,12 @@ with `id`, `label`, `status`, `severity`, `message`, and optional `action`.
 Checks can also include `content_type_filter`, `feature_filter`, and
 `filter_label` so the document chunk inspector can turn a diagnostic into a
 one-click filtered chunk view.
+The document page also promotes common issue counters into clickable quality
+chips, including artifact issues, structured chunks missing `source_locator`,
+chunks missing basic anchors, low-confidence OCR, and chunk size issues. These
+chips apply the same `feature` filters as deep links from chat citation risk
+cards, so citation warnings and parse quality warnings land on the same
+reviewable chunk subsets.
 The current checks cover text extraction, page coverage, image OCR, chunk type
 recognition, chunk anchor coverage, chunk size distribution, OCR confidence,
 structured artifact completeness, table chunk retention, and formula chunk
@@ -109,7 +115,10 @@ Query parameters:
   `source_locator`, `bbox_locator`, `table_source_locator`, or
   `ocr_source_locator` to inspect chunks with normalized source anchors. Use
   `structured_missing_source_locator` to inspect table/OCR/formula/code chunks
-  that need reindexing because their normalized locator is missing.
+  that need reindexing because their normalized locator is missing. OCR
+  confidence checks attach `feature=ocr_low_confidence` when low-confidence
+  images are detected, so reviewers can jump straight from the check card to
+  affected OCR chunks.
 - `q`: optional keyword search across chunk text, preview, section path, and
   compact artifact data such as table cells or OCR text.
 - `target_chunk_id` / `target_chunk_index`: optional evidence locator. When

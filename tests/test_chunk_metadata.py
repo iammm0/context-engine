@@ -795,6 +795,8 @@ def test_build_parse_quality_summary_scores_ocr_coverage_and_confidence():
     assert summary["risk_level"] == "medium"
     assert checks["image_ocr"]["status"] == "warn"
     assert checks["ocr_confidence"]["status"] == "warn"
+    assert checks["ocr_confidence"]["feature_filter"] == "ocr_low_confidence"
+    assert checks["ocr_confidence"]["filter_label"] == "查看低置信OCR"
     assert any("OCR 覆盖率" in warning for warning in summary["warnings"])
     assert any("OCR 置信度" in warning for warning in summary["warnings"])
 
