@@ -1636,6 +1636,72 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
     return item
 
 
+def _sorted_count_dict(counts: Dict[str, int]) -> Dict[str, int]:
+    return {key: counts[key] for key in sorted(counts)}
+
+
+def build_chunk_preview_facets(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build filter facets from the actual chunk preview payload shape."""
+    content_type_counts: Dict[str, int] = {}
+    feature_counts: Dict[str, int] = {}
+    quality_note_count = 0
+    problem_chunk_count = 0
+
+    issue_features = {
+        "artifact_issue",
+        "table_artifact_issue",
+        "ocr_artifact_issue",
+        "table_missing_structure",
+        "table_missing_source",
+        "ocr_missing_source",
+        "ocr_low_confidence",
+        "structured_missing_source_locator",
+        "source_locator_issue",
+        "missing_anchor",
+        "location_issue",
+        "short_chunk",
+        "large_chunk",
+        "size_issue",
+    }
+
+    for chunk in chunks:
+        metadata = dict(chunk.get("metadata") or {})
+        visual = metadata.get("visual") if isinstance(metadata.get("visual"), dict) else {}
+        content_type = str(metadata.get("content_type") or visual.get("content_type") or "text").strip().lower() or "text"
+        content_type_counts[content_type] = content_type_counts.get(content_type, 0) + 1
+
+        features = _features_for_filtering(chunk, metadata, visual)
+        enabled_feature_names: List[str] = []
+        for key, enabled in features.items():
+            if enabled is not True:
+                continue
+            feature = str(key)
+            if feature.startswith("has_"):
+                feature = feature[4:]
+            enabled_feature_names.append(feature)
+            feature_counts[feature] = feature_counts.get(feature, 0) + 1
+
+        artifact = metadata.get("artifact") or visual.get("artifact")
+        artifact = artifact if isinstance(artifact, dict) else None
+        artifact_quality = metadata.get("artifact_quality") or visual.get("artifact_quality")
+        artifact_quality = artifact_quality if isinstance(artifact_quality, dict) else _build_chunk_artifact_quality(content_type, artifact)
+        notes = metadata.get("quality_notes") or visual.get("quality_notes")
+        if not isinstance(notes, list):
+            notes = _chunk_quality_notes(features, artifact_quality if isinstance(artifact_quality, dict) else None)
+        has_quality_notes = any(str(note).strip() for note in notes)
+        if has_quality_notes:
+            quality_note_count += 1
+        if has_quality_notes or any(feature in issue_features for feature in enabled_feature_names):
+            problem_chunk_count += 1
+
+    return {
+        "content_type_counts": _sorted_count_dict(content_type_counts),
+        "feature_counts": _sorted_count_dict(feature_counts),
+        "quality_note_count": quality_note_count,
+        "problem_chunk_count": problem_chunk_count,
+    }
+
+
 def build_retrieval_payload_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Build compact chunk metadata safe to store in vector payloads."""
     meta = metadata or {}

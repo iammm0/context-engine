@@ -179,6 +179,11 @@ async def test_get_document_chunks_centers_target_inside_filtered_artifact_issue
     assert response.target_chunk_id == "table4"
     assert response.target_offset == 0
     assert response.filters == {"content_type": "table", "feature": "table_missing_source", "q": None}
+    assert response.facets["content_type_counts"] == {"table": 3, "text": 1}
+    assert response.facets["feature_counts"]["artifact_issue"] == 2
+    assert response.facets["feature_counts"]["table_missing_source"] == 2
+    assert response.facets["quality_note_count"] >= 2
+    assert response.facets["problem_chunk_count"] >= 2
     assert [chunk["chunk_index"] for chunk in response.chunks] == [4]
     assert response.chunks[0]["features"]["has_table_missing_source"] is True
 

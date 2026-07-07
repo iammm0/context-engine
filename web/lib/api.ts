@@ -196,6 +196,7 @@ export type DocumentChunksResponse = {
   skip: number;
   limit: number;
   parse_quality?: ParseQualitySummary | null;
+  facets?: DocumentChunkFacets | null;
   target_chunk_id?: string | null;
   target_chunk_index?: number | null;
   target_found?: boolean | null;
@@ -205,6 +206,13 @@ export type DocumentChunksResponse = {
     feature?: string | null;
     q?: string | null;
   };
+};
+
+export type DocumentChunkFacets = {
+  content_type_counts?: Record<string, number>;
+  feature_counts?: Record<string, number>;
+  quality_note_count?: number;
+  problem_chunk_count?: number;
 };
 
 export type ParseQualitySummary = {

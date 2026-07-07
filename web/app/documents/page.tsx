@@ -8,7 +8,7 @@ import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import LoadingProgress from "@/components/ui/LoadingProgress";
 import Toast, { type ToastType } from "@/components/ui/Toast";
 import type { KnowledgeSpace } from "@/lib/api";
-import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type SourceLocatorAnchor, type SourceLocatorSummary, type TableSourceRef } from "@/lib/api";
+import { apiClient, buildDocumentPreviewUrl, type Document, type DocumentChunkFacets, type DocumentChunkPreview, type DocumentDetail, type OcrImageRef, type ParseQualitySummary, type SourceLocatorAnchor, type SourceLocatorSummary, type TableSourceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/timezone";
 
 const contentTypeLabel: Record<string, string> = {
@@ -150,8 +150,8 @@ function isHighlightedChunk(chunk: DocumentChunkPreview, target: ChunkDeepLinkTa
   return typeof target.chunkIndex === "number" && chunk.chunk_index === target.chunkIndex;
 }
 
-function getChunkFilterOptions(quality?: ParseQualitySummary | null): ChunkFilterOption[] {
-  const counts = quality?.content_type_counts || {};
+function getChunkFilterOptions(quality?: ParseQualitySummary | null, facets?: DocumentChunkFacets | null): ChunkFilterOption[] {
+  const counts = facets?.content_type_counts || quality?.content_type_counts || {};
   const orderedTypes = ["text", "table", "image_ocr", "ocr", "formula", "code"];
   const options: ChunkFilterOption[] = [{ value: "all", label: "全部" }];
   const seen = new Set<string>();
@@ -173,27 +173,58 @@ function getChunkFilterOptions(quality?: ParseQualitySummary | null): ChunkFilte
   return options;
 }
 
-function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null): ChunkFilterOption[] {
+function getChunkFeatureFilterOptions(quality?: ParseQualitySummary | null, facets?: DocumentChunkFacets | null): ChunkFilterOption[] {
+  const featureCounts = facets?.feature_counts || {};
   const counts: Record<string, number | undefined> = {
-    artifact_issue: quality?.artifact_issue_count,
-    table_artifact_issue: quality?.table_artifact_issue_count,
-    ocr_artifact_issue: quality?.ocr_artifact_issue_count,
-    table_missing_structure: quality?.table_artifact_missing_structure_count,
-    table_missing_source: quality?.table_artifact_missing_source_count,
-    ocr_missing_source: quality?.ocr_artifact_missing_source_count,
-    ocr_low_confidence: quality?.ocr_artifact_low_confidence_source_count,
-    source_locator: quality?.source_locator_count,
-    bbox_locator: quality?.bbox_locator_count,
-    table_source_locator: quality?.table_source_locator_count,
-    ocr_source_locator: quality?.ocr_source_locator_count,
-    structured_missing_source_locator: quality?.structured_missing_source_locator_count,
-    missing_anchor: quality?.chunk_missing_anchor_count,
-    size_issue: (quality?.chunk_short_count || 0) + (quality?.chunk_large_count || 0),
+    artifact_issue: featureCounts.artifact_issue ?? quality?.artifact_issue_count,
+    table_artifact_issue: featureCounts.table_artifact_issue ?? quality?.table_artifact_issue_count,
+    ocr_artifact_issue: featureCounts.ocr_artifact_issue ?? quality?.ocr_artifact_issue_count,
+    table_missing_structure: featureCounts.table_missing_structure ?? quality?.table_artifact_missing_structure_count,
+    table_missing_source: featureCounts.table_missing_source ?? quality?.table_artifact_missing_source_count,
+    ocr_missing_source: featureCounts.ocr_missing_source ?? quality?.ocr_artifact_missing_source_count,
+    ocr_low_confidence: featureCounts.ocr_low_confidence ?? quality?.ocr_artifact_low_confidence_source_count,
+    source_locator: featureCounts.source_locator ?? quality?.source_locator_count,
+    bbox_locator: featureCounts.bbox_locator ?? quality?.bbox_locator_count,
+    table_source_locator: featureCounts.table_source_locator ?? quality?.table_source_locator_count,
+    ocr_source_locator: featureCounts.ocr_source_locator ?? quality?.ocr_source_locator_count,
+    structured_missing_source_locator: featureCounts.structured_missing_source_locator ?? quality?.structured_missing_source_locator_count,
+    missing_anchor: featureCounts.missing_anchor ?? quality?.chunk_missing_anchor_count,
+    size_issue: featureCounts.size_issue ?? (quality?.chunk_short_count || 0) + (quality?.chunk_large_count || 0),
   };
   return chunkFeatureFilterBaseOptions.map((option) => ({
     ...option,
     count: option.value === "all" ? undefined : counts[option.value],
   }));
+}
+
+function mergeParseQualityWithFacets(
+  quality?: ParseQualitySummary | null,
+  facets?: DocumentChunkFacets | null,
+): ParseQualitySummary | null {
+  if (!facets) return quality || null;
+  const featureCounts = facets.feature_counts || {};
+  return {
+    ...(quality || {}),
+    content_type_counts: facets.content_type_counts || quality?.content_type_counts,
+    artifact_issue_count: featureCounts.artifact_issue ?? quality?.artifact_issue_count,
+    table_artifact_issue_count: featureCounts.table_artifact_issue ?? quality?.table_artifact_issue_count,
+    ocr_artifact_issue_count: featureCounts.ocr_artifact_issue ?? quality?.ocr_artifact_issue_count,
+    table_artifact_missing_structure_count:
+      featureCounts.table_missing_structure ?? quality?.table_artifact_missing_structure_count,
+    table_artifact_missing_source_count: featureCounts.table_missing_source ?? quality?.table_artifact_missing_source_count,
+    ocr_artifact_missing_source_count: featureCounts.ocr_missing_source ?? quality?.ocr_artifact_missing_source_count,
+    ocr_artifact_low_confidence_source_count:
+      featureCounts.ocr_low_confidence ?? quality?.ocr_artifact_low_confidence_source_count,
+    source_locator_count: featureCounts.source_locator ?? quality?.source_locator_count,
+    bbox_locator_count: featureCounts.bbox_locator ?? quality?.bbox_locator_count,
+    table_source_locator_count: featureCounts.table_source_locator ?? quality?.table_source_locator_count,
+    ocr_source_locator_count: featureCounts.ocr_source_locator ?? quality?.ocr_source_locator_count,
+    structured_missing_source_locator_count:
+      featureCounts.structured_missing_source_locator ?? quality?.structured_missing_source_locator_count,
+    chunk_missing_anchor_count: featureCounts.missing_anchor ?? quality?.chunk_missing_anchor_count,
+    chunk_short_count: featureCounts.short_chunk ?? quality?.chunk_short_count,
+    chunk_large_count: featureCounts.large_chunk ?? quality?.chunk_large_count,
+  };
 }
 
 function formatChunkLocation(chunk: DocumentChunkPreview) {
@@ -725,11 +756,11 @@ export default function DocumentsPage() {
         setChunkPreview((prev) => (append ? [...prev, ...nextChunks] : nextChunks));
         setChunkPreviewTotal(result.data?.total_chunks || 0);
         setChunkPreviewAllTotal(result.data?.total_all_chunks ?? result.data?.total_chunks ?? 0);
-        setChunkPanelQuality(
+        const quality =
           result.data?.parse_quality ||
-            doc.parse_quality ||
-            ((result.data?.chunks?.[0]?.parse_summary as ParseQualitySummary | undefined) ?? null),
-        );
+          doc.parse_quality ||
+          ((result.data?.chunks?.[0]?.parse_summary as ParseQualitySummary | undefined) ?? null);
+        setChunkPanelQuality(mergeParseQualityWithFacets(quality, result.data?.facets));
         if (options?.targetChunkId || typeof options?.targetChunkIndex === "number") {
           if (result.data?.target_found === false) {
             setHighlightedChunkTarget(null);

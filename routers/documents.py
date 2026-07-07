@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 from utils.logger import logger
-from utils.chunk_metadata import build_chunk_preview, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization, filter_chunks_for_preview
+from utils.chunk_metadata import build_chunk_preview, build_chunk_preview_facets, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization, filter_chunks_for_preview
 
 router = APIRouter()
 
@@ -1137,6 +1137,7 @@ class DocumentChunksResponse(BaseModel):
     skip: int
     limit: int
     parse_quality: Optional[Dict[str, Any]] = None
+    facets: Optional[Dict[str, Any]] = None
     filters: Optional[Dict[str, Any]] = None
     target_chunk_id: Optional[str] = None
     target_chunk_index: Optional[int] = None
@@ -1314,6 +1315,7 @@ async def get_document_chunks(
         parse_quality = (doc.get("metadata") or {}).get("parse_quality")
         if not parse_quality and chunks:
             parse_quality = ((chunks[0].get("metadata") or {}).get("parse_summary") or None)
+        facets = build_chunk_preview_facets(chunks)
 
         return DocumentChunksResponse(
             document_id=doc["_id"],
@@ -1325,6 +1327,7 @@ async def get_document_chunks(
             skip=skip,
             limit=limit,
             parse_quality=parse_quality,
+            facets=facets,
             filters={
                 "content_type": content_type,
                 "feature": feature,

@@ -135,12 +135,19 @@ The response includes `total_chunks` for the current filtered result and
 `total_all_chunks` for the full document chunk count. When a target locator is
 used, the response also returns `target_found`, `target_offset`,
 `target_chunk_id`, and `target_chunk_index` so clients can highlight the exact
-source chunk.
+source chunk. The response also includes `facets`, computed from the actual
+stored chunks, with `content_type_counts`, `feature_counts`,
+`quality_note_count`, and `problem_chunk_count`. These facets let the document
+inspector show reliable type and quality-filter counts even for older documents
+whose stored `parse_quality` summary is missing or stale.
 
 The Next.js document page uses this endpoint to show chunk type, page/section
 location, feature flags, token count, parse quality, and preview text. The
 chunk inspector keeps the active `content_type`/`q` filters while using
-`skip`/`limit` to load more matching chunks for long documents. The
+`skip`/`limit` to load more matching chunks for long documents. It merges API
+facets into the parse-quality summary before rendering type and quality filter
+chips, so reviewers can jump directly into table/OCR/source-locator/size issue
+subsets based on the chunks that are actually stored. The
 document list also shows a compact parse quality line for completed documents
 when `metadata.parse_quality` is available.
 Chunk cards also link to `GET /api/documents/{doc_id}/preview`, using
