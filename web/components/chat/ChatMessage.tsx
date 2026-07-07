@@ -6,7 +6,7 @@ import ThinkingDots from "@/components/message/ThinkingDots";
 import BboxMiniMap from "@/components/ui/BboxMiniMap";
 import { buildDocumentPreviewUrl } from "@/lib/api";
 import { formatChatTimestamp } from "@/lib/timezone";
-import type { ChatMessage as MessageType, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, SourceLocatorAnchor, SourceLocatorSummary, TableSourceRef } from "@/types/chat";
+import type { ChatMessage as MessageType, CitationEvidenceAudit, CitationEvidenceRef, CitationQuality, EvidenceArtifact, EvidenceArtifactQuality, EvidenceItem, EvidenceQuality, OcrImageRef, SourceInfo, SourceLocatorAnchor, SourceLocatorSummary, TableSourceRef } from "@/types/chat";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -59,6 +59,19 @@ function formatCitationEvidenceLocation(item: CitationEvidenceRef) {
   const section = item.section_path?.length ? item.section_path.join(" / ") : "";
   const chunk = typeof item.chunk_index === "number" ? `chunk ${item.chunk_index}` : "";
   return [pages, section, chunk].filter(Boolean).join(" · ");
+}
+
+function formatCitationAuditLocation(item: CitationEvidenceAudit) {
+  const pageStart = item.page_start ?? item.page ?? null;
+  const pageEnd = item.page_end ?? item.page ?? null;
+  const pages =
+    pageStart && pageEnd && pageStart !== pageEnd
+      ? `第 ${pageStart}-${pageEnd} 页`
+      : pageStart
+        ? `第 ${pageStart} 页`
+        : "";
+  const chunk = typeof item.chunk_index === "number" ? `chunk ${item.chunk_index}` : "";
+  return [pages, chunk].filter(Boolean).join(" · ");
 }
 
 function formatSourceLocatorSummary(locator?: SourceLocatorSummary | null) {
@@ -289,6 +302,27 @@ function formatCitationEvidenceRiskReasons(item: CitationEvidenceRef) {
   return (item.risk_reasons || []).map((reason) => citationRiskReasonLabel[reason] || reason).filter(Boolean);
 }
 
+function formatCitationAuditRiskReasons(item: CitationEvidenceAudit) {
+  return (item.risk_reasons || []).map((reason) => citationRiskReasonLabel[reason] || reason).filter(Boolean);
+}
+
+function citationAuditIssueFeature(item: CitationEvidenceAudit) {
+  const reasons = item.risk_reasons || [];
+  if (reasons.includes("missing_source_locator")) return "structured_missing_source_locator";
+  if (reasons.includes("low_confidence_ocr")) return "ocr_low_confidence";
+  if (reasons.includes("artifact_warning")) return "artifact_issue";
+  return "";
+}
+
+function formatCitationAuditLocator(item: CitationEvidenceAudit) {
+  if (!item.has_source_locator) return "缺少来源定位";
+  const bits = [`${item.source_anchor_count || 0} anchors`];
+  if (item.has_table_source) bits.push("表格来源");
+  if (item.has_image_source) bits.push("图片来源");
+  if (item.has_bbox) bits.push("bbox");
+  return bits.join(" · ");
+}
+
 function appendChunkInspectorContext(params: URLSearchParams, contentType?: string | null, feature?: string | null) {
   const normalizedType = contentType?.trim();
   const normalizedFeature = feature?.trim();
@@ -346,6 +380,16 @@ function buildCitationEvidenceChunkHref(item: CitationEvidenceRef) {
   if (item.chunk_id) params.set("chunk_id", item.chunk_id);
   if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
   appendChunkInspectorContext(params, item.content_type || null, citationEvidenceIssueFeature(item));
+  appendEvidenceDeepLinkContext(params, item.id);
+  return `/documents?${params.toString()}`;
+}
+
+function buildCitationAuditChunkHref(item: CitationEvidenceAudit) {
+  if (!item.document_id) return "";
+  const params = new URLSearchParams({ document_id: item.document_id });
+  if (item.chunk_id) params.set("chunk_id", item.chunk_id);
+  if (typeof item.chunk_index === "number") params.set("chunk_index", String(item.chunk_index));
+  appendChunkInspectorContext(params, item.content_type || null, citationAuditIssueFeature(item));
   appendEvidenceDeepLinkContext(params, item.id);
   return `/documents?${params.toString()}`;
 }
@@ -901,6 +945,89 @@ function ChatMessageImpl({
             {formatCitationRecommendations(message.citation_quality)}
           </div>
         )}
+
+        {!isUser && message.citation_quality?.evidence_citation_audit?.length ? (
+          <div className="mt-2 w-full rounded border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="font-medium">证据引用审计</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                {message.citation_quality.evidence_citation_audit.length} 条
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              {message.citation_quality.evidence_citation_audit.slice(0, 6).map((item) => {
+                const chunkHref = buildCitationAuditChunkHref(item);
+                const location = formatCitationAuditLocation(item);
+                const locator = formatCitationAuditLocator(item);
+                const riskLabels = formatCitationAuditRiskReasons(item);
+                const useBadge = citationUseBadge(getCitationUseState(item.id));
+                const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : "";
+                return (
+                  <div
+                    key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-audit`}
+                    className={`rounded border px-2 py-1 ${
+                      item.id === activeCitationId
+                        ? "border-blue-400 bg-white dark:border-blue-300 dark:bg-slate-950/60"
+                        : "border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-950/30"
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-slate-100 dark:text-slate-950">
+                        {item.id}
+                      </span>
+                      {typeLabel && (
+                        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-950 dark:text-blue-200">
+                          {typeLabel}
+                        </span>
+                      )}
+                      {useBadge && (
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${useBadge.className}`}>
+                          {useBadge.label}
+                        </span>
+                      )}
+                      {riskLabels.map((label) => (
+                        <span key={`${item.id}-${label}-audit-risk`} className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/50 dark:text-amber-100">
+                          {label}
+                        </span>
+                      ))}
+                      {typeof item.score === "number" && (
+                        <span className="ml-auto shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+                          {item.score.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {location && <span>{location}</span>}
+                      {item.retrieval_type && <span>{item.retrieval_type}</span>}
+                      <span>{locator}</span>
+                      {item.artifact_quality_status && <span>artifact {item.artifact_quality_status}</span>}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => handleCitationClick(item.id)}
+                        className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100"
+                      >
+                        定位证据
+                      </button>
+                      {chunkHref && (
+                        <Link href={chunkHref} className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-200 dark:hover:text-blue-100">
+                          查看切块
+                        </Link>
+                      )}
+                    </div>
+                    {item.quality_notes?.length ? <QualityNoteList notes={item.quality_notes} /> : null}
+                  </div>
+                );
+              })}
+            </div>
+            {message.citation_quality.evidence_citation_audit.length > 6 && (
+              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                还有 {message.citation_quality.evidence_citation_audit.length - 6} 条证据可在检索证据中查看
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {!isUser && message.citation_quality?.cited_risky_evidence?.length ? (
           <div className="mt-2 w-full rounded border border-rose-200 bg-rose-50/70 px-2 py-1.5 text-xs text-rose-900 dark:border-rose-800/60 dark:bg-rose-950/30 dark:text-rose-100">

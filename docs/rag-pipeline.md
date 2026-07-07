@@ -289,7 +289,10 @@ distinguish "all evidence ids were cited" from "the cited evidence still needs
 source, OCR, or chunk-quality review." `evidence_citation_audit` carries the
 same per-evidence type/locator/risk ledger that was shown to the model, so
 stored assistant messages can be inspected later without reconstructing the
-prompt. The structured
+prompt. The chat UI renders this ledger as a compact evidence citation audit
+panel, marking used and unused evidence, content type, score, locator status,
+risk labels, quality notes, and direct links into the document chunk inspector.
+The structured
 `cited_risky_evidence` field carries the same locator data plus `risk_reasons`
 for cited evidence that needs review, so clients can jump directly from a
 warning to the referenced chunk. The structured `unreferenced_top_evidence`
