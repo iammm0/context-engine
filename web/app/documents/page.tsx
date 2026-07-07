@@ -443,6 +443,13 @@ function formatChunkArtifactQualityWarnings(chunk: DocumentChunkPreview) {
   return quality.warnings.join(" · ");
 }
 
+function getChunkQualityNotes(chunk: DocumentChunkPreview) {
+  const notes = (chunk.quality_notes || []).map((note) => String(note).trim()).filter(Boolean);
+  if (notes.length) return notes;
+  const artifactWarnings = formatChunkArtifactQualityWarnings(chunk);
+  return artifactWarnings ? [artifactWarnings] : [];
+}
+
 function ChunkArtifactPreview({ chunk }: { chunk: DocumentChunkPreview }) {
   const artifact = chunk.artifact;
   if (!artifact) return null;
@@ -1412,6 +1419,7 @@ export default function DocumentsPage() {
                   const typeLabel = contentTypeLabel[chunk.content_type] || chunk.content_type || "文本";
                   const previewHref = buildDocumentPreviewUrl(chunk.document_id || chunkPanelDoc.id, chunk.page_start || chunk.page || null);
                   const sourceLocatorSummary = formatSourceLocatorSummary(chunk.source_locator);
+                  const qualityNotes = getChunkQualityNotes(chunk);
                   const featureFlags = Object.entries(chunk.features || {})
                     .filter(([, enabled]) => enabled)
                     .map(([key]) => {
@@ -1479,9 +1487,14 @@ export default function DocumentsPage() {
                       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">
                         {chunk.preview}
                       </div>
-                      {formatChunkArtifactQualityWarnings(chunk) && (
+                      {qualityNotes.length > 0 && (
                         <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-                          {formatChunkArtifactQualityWarnings(chunk)}
+                          <div className="font-medium">质量提示</div>
+                          <ul className="mt-1 list-disc space-y-1 pl-4">
+                            {qualityNotes.map((note) => (
+                              <li key={note}>{note}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
                       <ChunkArtifactPreview chunk={chunk} />

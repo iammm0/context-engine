@@ -184,6 +184,10 @@ Structured chunk previews also include `artifact_quality` when the chunk is a
 table, OCR, formula, or code chunk. The document chunk inspector renders these
 per-chunk warnings beside the affected preview, such as missing table structure,
 missing table source refs, missing OCR image refs, or low-confidence OCR refs.
+Chunk previews also include `quality_notes`, a short human-readable list derived
+from artifact quality, source locator, anchor, and size flags. The document
+chunk inspector renders these notes directly on each chunk card so reviewers can
+see why a filtered chunk is problematic without translating raw feature flags.
 Chunks with such warnings also expose feature flags like `has_artifact_issue`,
 `has_table_artifact_issue`, `has_ocr_artifact_issue`,
 `has_table_missing_structure`, `has_table_missing_source`,

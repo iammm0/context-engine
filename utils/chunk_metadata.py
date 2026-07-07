@@ -1361,6 +1361,46 @@ def _features_with_size_flags(features: Dict[str, bool], chunk: Dict[str, Any]) 
     return merged
 
 
+def _append_quality_note(notes: List[str], text: str) -> None:
+    note = str(text or "").strip()
+    if note and note not in notes:
+        notes.append(note)
+
+
+def _chunk_quality_notes(
+    features: Dict[str, bool],
+    artifact_quality: Optional[Dict[str, Any]],
+) -> List[str]:
+    notes: List[str] = []
+    features = features or {}
+
+    if features.get("has_structured_missing_source_locator"):
+        _append_quality_note(notes, "结构化 chunk 缺少统一来源定位，建议重新解析或重建索引。")
+    elif features.get("has_missing_anchor"):
+        _append_quality_note(notes, "chunk 缺少页码、字符范围或图片来源锚点。")
+
+    if isinstance(artifact_quality, dict) and artifact_quality.get("status") in {"warn", "fail"}:
+        warnings = artifact_quality.get("warnings")
+        if isinstance(warnings, list):
+            for warning in warnings[:3]:
+                _append_quality_note(notes, str(warning))
+
+    if features.get("has_table_missing_structure"):
+        _append_quality_note(notes, "表格预览缺少表头、样例行或 Markdown 结构。")
+    if features.get("has_table_missing_source"):
+        _append_quality_note(notes, "表格预览缺少页码、表格索引或 bbox 来源。")
+    if features.get("has_ocr_missing_source"):
+        _append_quality_note(notes, "OCR 预览缺少图片页码、图片序号或来源路径。")
+    if features.get("has_ocr_low_confidence"):
+        _append_quality_note(notes, "OCR 图片来源置信度偏低，引用前需要人工复核。")
+    if features.get("has_short_chunk"):
+        _append_quality_note(notes, "chunk 过短，可能导致上下文不足。")
+    if features.get("has_large_chunk"):
+        _append_quality_note(notes, "chunk 过长，可能影响召回和引用精度。")
+
+    return notes[:6]
+
+
 def _features_for_filtering(
     chunk: Dict[str, Any],
     metadata: Dict[str, Any],
@@ -1483,6 +1523,7 @@ def enrich_chunks_for_visualization(
             },
         )
         features = _features_with_size_flags(features, {**chunk, "metadata": meta})
+        quality_notes = _chunk_quality_notes(features, artifact_quality)
         visual = {
             "preview": preview,
             "char_start": start,
@@ -1495,6 +1536,7 @@ def enrich_chunks_for_visualization(
             "artifact": artifact,
             "artifact_quality": artifact_quality,
             "source_locator": source_locator,
+            "quality_notes": quality_notes,
         }
 
         meta.update(
@@ -1512,6 +1554,7 @@ def enrich_chunks_for_visualization(
                 "artifact": artifact,
                 "artifact_quality": artifact_quality,
                 "source_locator": source_locator,
+                "quality_notes": quality_notes,
                 "visual": visual,
                 "parse_summary": parse_summary,
             }
@@ -1563,6 +1606,9 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
             chunk_index=chunk.get("chunk_index") if isinstance(chunk.get("chunk_index"), int) else metadata.get("chunk_index"),
         )
     features = _features_for_filtering(chunk, metadata, visual)
+    quality_notes = metadata.get("quality_notes") or visual.get("quality_notes")
+    if not isinstance(quality_notes, list):
+        quality_notes = _chunk_quality_notes(features, artifact_quality)
 
     item = {
         "id": str(chunk.get("_id") or chunk.get("id") or ""),
@@ -1581,6 +1627,7 @@ def build_chunk_preview(chunk: Dict[str, Any], *, include_text: bool = True) -> 
         "artifact": artifact,
         "artifact_quality": artifact_quality,
         "source_locator": source_locator,
+        "quality_notes": [str(note) for note in quality_notes if note],
         "chunker_type": metadata.get("chunker_type"),
         "parse_summary": metadata.get("parse_summary") or {},
     }

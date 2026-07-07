@@ -98,6 +98,7 @@ export type DocumentChunkPreview = {
   artifact?: ChunkPreviewArtifact | null;
   artifact_quality?: EvidenceArtifactQuality | null;
   source_locator?: SourceLocatorSummary | null;
+  quality_notes?: string[];
   chunker_type?: string | null;
   parse_summary?: ParseQualitySummary | Record<string, unknown>;
 };

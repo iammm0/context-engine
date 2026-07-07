@@ -193,6 +193,7 @@ def test_build_chunk_preview_uses_visual_metadata_without_full_text():
     assert preview["artifact"]["text"] == "A long chunk body"
     assert preview["artifact_quality"]["status"] == "warn"
     assert preview["artifact_quality"]["ocr_missing_source"] is True
+    assert "OCR 证据缺少图片来源" in preview["quality_notes"]
     assert "text" not in preview
 
 
@@ -212,6 +213,8 @@ def test_enrich_chunks_marks_artifact_issue_features():
     assert features["has_table_artifact_issue"] is True
     assert enriched[0]["metadata"]["visual"]["features"]["has_artifact_issue"] is True
     assert enriched[0]["metadata"]["artifact_quality"]["status"] == "warn"
+    assert "表格证据缺少表头、样例行或 Markdown 预览" in enriched[0]["metadata"]["quality_notes"]
+    assert enriched[0]["metadata"]["visual"]["quality_notes"] == enriched[0]["metadata"]["quality_notes"]
 
 
 def test_ocr_artifact_tracks_source_image_refs_and_derives_page_range():
