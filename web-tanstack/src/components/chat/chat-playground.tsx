@@ -22,6 +22,7 @@ import {
   ArtifactSourceLocatorPreview,
   SourceLocatorAnchorPreview,
 } from "@/components/evidence/source-locator-preview"
+import { useDeepResearchTask } from "@/components/chat/use-deep-research-task"
 import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
 import { MarkdownMessage } from "@/components/message/markdown-message"
 import { Badge } from "@/components/ui/badge"
@@ -74,20 +75,6 @@ type QueryAnalysisRun = {
   task?: TaskDispatchInfo | null
   result?: QueryAnalysisResponse | null
   error?: string | null
-}
-
-type DeepResearchTaskResult = {
-  phase?: string
-  message?: string
-  progress?: number
-  run_id?: string
-  selected_agents?: string[]
-  planning?: string
-  agent_statuses?: DeepResearchAgentStatus[]
-  agent_results?: DeepResearchAgentResult[]
-  html_content?: string
-  final_content?: string
-  message_id?: string | null
 }
 
 type CitationTargetKind = "evidence" | "audit" | "source" | "ref"
@@ -167,14 +154,6 @@ function readQueryAnalysisResult(task: TaskDispatchInfo): QueryAnalysisResponse 
 function readGeneratedTitle(task: TaskDispatchInfo): string | null {
   const title = task.result?.title
   return typeof title === "string" && title.trim() ? title.trim() : null
-}
-
-function readDeepResearchTaskResult(task: TaskDispatchInfo): DeepResearchTaskResult | null {
-  const result = task.result
-  if (!result || typeof result !== "object") {
-    return null
-  }
-  return result as DeepResearchTaskResult
 }
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -1062,15 +1041,25 @@ export function ChatPlayground() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState(() =>
     readStoredModelSelection(CHAT_EMBEDDING_MODEL_STORAGE_KEY),
   )
-  const [deepResearchGate, setDeepResearchGate] = useState<DeepResearchEvaluation | null>(null)
-  const [deepResearchStatuses, setDeepResearchStatuses] = useState<DeepResearchAgentStatus[]>([])
-  const [deepResearchResults, setDeepResearchResults] = useState<DeepResearchAgentResult[]>([])
-  const [deepResearchHtml, setDeepResearchHtml] = useState("")
   const [queryAnalysisRun, setQueryAnalysisRun] = useState<QueryAnalysisRun>({ status: "idle" })
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
     status: "Idle",
+  })
+  const {
+    applyTaskProgress: applyDeepResearchTaskProgress,
+    gate: deepResearchGate,
+    htmlContent: deepResearchHtml,
+    reset: resetDeepResearchRun,
+    results: deepResearchResults,
+    setGate: setDeepResearchGate,
+    setInitialStatuses: setDeepResearchInitialStatuses,
+    statuses: deepResearchStatuses,
+  } = useDeepResearchTask({
+    buildMarkdown: buildDeepResearchMarkdown,
+    setDraftAnswer,
+    setStreamingMeta,
   })
   const [activeCitation, setActiveCitation] = useState<{
     conversationId?: string | null
@@ -1605,44 +1594,6 @@ export function ChatPlayground() {
     },
   })
 
-  const resetDeepResearchRun = () => {
-    setDeepResearchGate(null)
-    setDeepResearchStatuses([])
-    setDeepResearchResults([])
-    setDeepResearchHtml("")
-  }
-
-  const applyDeepResearchTaskProgress = (task: TaskDispatchInfo) => {
-    const result = readDeepResearchTaskResult(task)
-    const taskLabel = taskSummary(task)
-    if (!result) {
-      setStreamingMeta({ evidence: 0, sources: 0, status: taskLabel || "Deep research task" })
-      return
-    }
-
-    setStreamingMeta({
-      evidence: 0,
-      sources: 0,
-      status: result.message || taskLabel || result.phase || "Deep research task",
-    })
-    if (result.planning && !deepResearchGate) {
-      setDraftAnswer(`## 研究规划\n\n${result.planning}`)
-    }
-    if (Array.isArray(result.agent_statuses)) {
-      setDeepResearchStatuses(result.agent_statuses)
-    }
-    if (Array.isArray(result.agent_results)) {
-      setDeepResearchResults(result.agent_results)
-      setDraftAnswer(buildDeepResearchMarkdown(result.agent_results, result.html_content))
-    }
-    if (typeof result.html_content === "string" && result.html_content.trim()) {
-      setDeepResearchHtml(result.html_content)
-    }
-    if (typeof result.final_content === "string" && result.final_content.trim()) {
-      setDraftAnswer(result.final_content)
-    }
-  }
-
   const regenerateMessageMutation = useMutation({
     mutationFn: async (message: ConversationMessage) => {
       if (!activeConversationId) {
@@ -1864,7 +1815,7 @@ export function ChatPlayground() {
       if (shouldUseDeepResearch) {
         setStreamingMeta({ evidence: 0, sources: 0, status: "Queuing deep research" })
         setDraftAnswer("深度研究任务正在投递到 Celery...")
-        setDeepResearchStatuses(
+        setDeepResearchInitialStatuses(
           DEFAULT_DEEP_RESEARCH_AGENTS.map((agentType, index) => ({
             agent_type: agentType,
             status: index === 0 ? "running" : "pending",
