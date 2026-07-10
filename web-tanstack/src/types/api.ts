@@ -12,41 +12,18 @@ export type ModelsResponse = Schemas["ModelsResponse"]
 export type ConversationSummary = Schemas["ConversationSummaryResponse"]
 export type ConversationListResponse = Schemas["ConversationListResponse"]
 
-export interface SourceInfo {
-  title?: string
-  content?: string
-  chunk_id?: string
-  chunk_index?: number
-  evidence_id?: string
-  document_id?: string
-  file_id?: string
-  conversation_id?: string
-  score?: number
-  source?: string
-  retrieval_type?: string
-  document_title?: string
-  file_type?: string
-  status?: string
-  page?: number | null
-  page_start?: number | null
-  page_end?: number | null
-  content_type?: string
+export type SourceInfo = Omit<
+  Schemas["SourceInfo"],
+  "artifact" | "artifact_quality" | "source_locator" | "quality_notes" | "section_path"
+> & {
   artifact?: EvidenceArtifact | null
   artifact_quality?: EvidenceArtifactQuality | null
   source_locator?: SourceLocatorSummary | null
-  quality_notes?: string[]
-  section_path?: string[]
+  quality_notes?: string[] | null
+  section_path?: string[] | null
 }
 
-export interface RecommendedResource {
-  resource_id?: string
-  title?: string
-  url?: string
-  description?: string
-  file_type?: string
-  file_size?: number
-  score?: number
-}
+export type RecommendedResource = Schemas["RecommendedResource"]
 
 export type ConversationMessage = Omit<
   Schemas["ConversationMessageResponse"],
@@ -281,19 +258,7 @@ export interface EvidenceQuality {
   recommendations?: string[]
 }
 
-export interface EvidenceItem {
-  id: string
-  text: string
-  document_id?: string
-  file_id?: string
-  conversation_id?: string
-  chunk_id?: string
-  chunk_index?: number
-  document_title?: string
-  section_path?: string[]
-  page?: number | null
-  page_start?: number | null
-  page_end?: number | null
+export type EvidenceItem = Omit<Schemas["EvidenceItem"], "metadata" | "score" | "retrieval_type"> & {
   score?: number
   retrieval_type?: string
   metadata?: {

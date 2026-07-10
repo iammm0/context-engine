@@ -9,6 +9,15 @@ from utils.citation import format_evidence_context
 from utils.evidence_quality import annotate_evidence_artifact_quality, build_evidence_quality_diagnostics
 
 
+def _optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
 class RAGService:
     """RAG服务封装（通过HTTP调用知识库服务）"""
 
@@ -242,6 +251,8 @@ class RAGService:
                     page = int(page) if page is not None else None
                 except Exception:
                     page = None
+                page_start = _optional_int(metadata.get("page_start")) or page
+                page_end = _optional_int(metadata.get("page_end")) or page
                 evidence_items.append(EvidenceItem(
                     id=f"S{len(evidence_items) + 1}",
                     text=text,
@@ -253,6 +264,8 @@ class RAGService:
                     document_title=document_title,
                     section_path=[str(s) for s in section_path],
                     page=page,
+                    page_start=page_start,
+                    page_end=page_end,
                     score=float(score or 0.0),
                     retrieval_type=result.get("retrieval_type") or result["payload"].get("retrieval_type") or metadata.get("retrieval_type") or "vector",
                     metadata=metadata,
@@ -287,6 +300,8 @@ class RAGService:
                                             if nb_meta.get("page") is not None and str(nb_meta.get("page")).isdigit()
                                             else None
                                         ),
+                                        page_start=_optional_int(nb_meta.get("page_start")),
+                                        page_end=_optional_int(nb_meta.get("page_end")),
                                         score=float(score or 0.0),
                                         retrieval_type="neighbor",
                                         metadata=nb_meta,
@@ -310,8 +325,8 @@ class RAGService:
                         "document_title": filename,
                         "file_type": result["payload"].get("metadata", {}).get("file_type", ""),
                         "page": page,
-                        "page_start": metadata.get("page_start"),
-                        "page_end": metadata.get("page_end"),
+                        "page_start": page_start,
+                        "page_end": page_end,
                         "content_type": metadata.get("content_type"),
                         "artifact": metadata.get("artifact"),
                         "artifact_quality": metadata.get("artifact_quality"),
@@ -335,8 +350,8 @@ class RAGService:
                         "file_type": doc_info.get("file_type", ""),
                         "status": doc_info.get("status", ""),
                         "page": page,
-                        "page_start": metadata.get("page_start"),
-                        "page_end": metadata.get("page_end"),
+                        "page_start": page_start,
+                        "page_end": page_end,
                         "content_type": metadata.get("content_type"),
                         "artifact": metadata.get("artifact"),
                         "artifact_quality": metadata.get("artifact_quality"),

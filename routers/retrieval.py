@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from models.rag import EvidenceItem, RecommendedResource, SourceInfo
 from models.task import TaskDispatchInfo
 from retrieval.rag_retriever import RAGRetriever
 from services.query_analyzer import query_analyzer
@@ -37,13 +38,13 @@ class QueryAnalysisResponse(BaseModel):
 class RetrievalResponse(BaseModel):
     """检索响应模型"""
     context: str
-    sources: List[Dict[str, Any]]
-    evidence: Optional[List[Dict[str, Any]]] = []
+    sources: List[SourceInfo]
+    evidence: Optional[List[EvidenceItem]] = []
     evidence_quality: Optional[Dict[str, Any]] = {}
     query_plan: Optional[Dict[str, Any]] = {}
     trace: Optional[Dict[str, Any]] = {}
     retrieval_count: int
-    recommended_resources: Optional[List[Dict[str, Any]]] = []
+    recommended_resources: Optional[List[RecommendedResource]] = []
 
 
 @router.post("/analyze", response_model=QueryAnalysisResponse)

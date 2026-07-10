@@ -1068,13 +1068,9 @@ export interface components {
             /** Timestamp */
             timestamp?: string | null;
             /** Sources */
-            sources?: {
-                [key: string]: unknown;
-            }[] | null;
+            sources?: components["schemas"]["SourceInfo"][] | null;
             /** Evidence */
-            evidence?: {
-                [key: string]: unknown;
-            }[] | null;
+            evidence?: components["schemas"]["EvidenceItem"][] | null;
             /** Evidence Quality */
             evidence_quality?: {
                 [key: string]: unknown;
@@ -1086,9 +1082,7 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Recommended Resources */
-            recommended_resources?: {
-                [key: string]: unknown;
-            }[] | null;
+            recommended_resources?: components["schemas"]["RecommendedResource"][] | null;
         };
         /**
          * ConversationSummaryResponse
@@ -1365,6 +1359,50 @@ export interface components {
             status: string;
             task: components["schemas"]["TaskDispatchInfo"];
         };
+        /**
+         * EvidenceItem
+         * @description Chunk-level evidence passed through retrieval, generation, and agents.
+         */
+        EvidenceItem: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** File Id */
+            file_id?: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
+            /** Chunk Index */
+            chunk_index?: number | null;
+            /** Document Title */
+            document_title?: string | null;
+            /** Section Path */
+            section_path?: string[];
+            /** Page */
+            page?: number | null;
+            /** Page Start */
+            page_start?: number | null;
+            /** Page End */
+            page_end?: number | null;
+            /**
+             * Score
+             * @default 0
+             */
+            score: number;
+            /**
+             * Retrieval Type
+             * @default vector
+             */
+            retrieval_type: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1446,13 +1484,9 @@ export interface components {
             /** Content */
             content: string;
             /** Sources */
-            sources?: {
-                [key: string]: unknown;
-            }[] | null;
+            sources?: components["schemas"]["SourceInfo"][] | null;
             /** Evidence */
-            evidence?: {
-                [key: string]: unknown;
-            }[] | null;
+            evidence?: components["schemas"]["EvidenceItem"][] | null;
             /** Evidence Quality */
             evidence_quality?: {
                 [key: string]: unknown;
@@ -1464,9 +1498,7 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Recommended Resources */
-            recommended_resources?: {
-                [key: string]: unknown;
-            }[] | null;
+            recommended_resources?: components["schemas"]["RecommendedResource"][] | null;
         };
         /**
          * MessageUpdate
@@ -1552,6 +1584,26 @@ export interface components {
             confidence: string;
         };
         /**
+         * RecommendedResource
+         * @description Recommended resource metadata returned alongside RAG responses.
+         */
+        RecommendedResource: {
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Description */
+            description?: string | null;
+            /** File Type */
+            file_type?: string | null;
+            /** File Size */
+            file_size?: number | null;
+            /** Score */
+            score?: number | null;
+        };
+        /**
          * RegenerateMessageResponse
          * @description Conversation regenerate action response.
          */
@@ -1594,16 +1646,12 @@ export interface components {
             /** Context */
             context: string;
             /** Sources */
-            sources: {
-                [key: string]: unknown;
-            }[];
+            sources: components["schemas"]["SourceInfo"][];
             /**
              * Evidence
              * @default []
              */
-            evidence: {
-                [key: string]: unknown;
-            }[] | null;
+            evidence: components["schemas"]["EvidenceItem"][] | null;
             /**
              * Evidence Quality
              * @default {}
@@ -1631,9 +1679,7 @@ export interface components {
              * Recommended Resources
              * @default []
              */
-            recommended_resources: {
-                [key: string]: unknown;
-            }[] | null;
+            recommended_resources: components["schemas"]["RecommendedResource"][] | null;
         };
         /**
          * RootResponse
@@ -1675,6 +1721,66 @@ export interface components {
             params?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * SourceInfo
+         * @description Document or attachment source surfaced with retrieved evidence.
+         */
+        SourceInfo: {
+            /** Title */
+            title?: string | null;
+            /** Content */
+            content?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
+            /** Chunk Index */
+            chunk_index?: number | null;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Document Id */
+            document_id?: string | null;
+            /** File Id */
+            file_id?: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Score */
+            score?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Retrieval Type */
+            retrieval_type?: string | null;
+            /** Document Title */
+            document_title?: string | null;
+            /** File Type */
+            file_type?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Page */
+            page?: number | null;
+            /** Page Start */
+            page_start?: number | null;
+            /** Page End */
+            page_end?: number | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Artifact */
+            artifact?: {
+                [key: string]: unknown;
+            } | null;
+            /** Artifact Quality */
+            artifact_quality?: {
+                [key: string]: unknown;
+            } | null;
+            /** Source Locator */
+            source_locator?: {
+                [key: string]: unknown;
+            } | null;
+            /** Quality Notes */
+            quality_notes?: string[] | null;
+            /** Section Path */
+            section_path?: string[] | null;
+            /** Is Conversation Attachment */
+            is_conversation_attachment?: boolean | null;
         };
         /** TaskDispatchInfo */
         TaskDispatchInfo: {
