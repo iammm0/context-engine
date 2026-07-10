@@ -2408,13 +2408,21 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Inline document preview file. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/pdf": string;
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/gif": string;
+                    "text/plain": string;
+                    "text/markdown": string;
+                    "application/msword": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "application/octet-stream": string;
                 };
             };
             /** @description Validation Error */

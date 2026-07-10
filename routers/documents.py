@@ -814,7 +814,28 @@ async def update_document(
         )
 
 
-@router.get("/{doc_id}/preview")
+@router.get(
+    "/{doc_id}/preview",
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "Inline document preview file.",
+            "content": {
+                "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+                "image/png": {"schema": {"type": "string", "format": "binary"}},
+                "image/gif": {"schema": {"type": "string", "format": "binary"}},
+                "text/plain": {"schema": {"type": "string"}},
+                "text/markdown": {"schema": {"type": "string"}},
+                "application/msword": {"schema": {"type": "string", "format": "binary"}},
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                    "schema": {"type": "string", "format": "binary"}
+                },
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        }
+    },
+)
 async def preview_document(
     doc_id: str,
 ):
