@@ -4,6 +4,7 @@ import {
   BrainCircuit,
   Check,
   Cpu,
+  ExternalLink,
   FileSearch,
   Paperclip,
   Pencil,
@@ -49,6 +50,7 @@ import type {
   EvidenceItem,
   EvidenceQuality,
   QueryAnalysisResponse,
+  RecommendedResource,
   SourceInfo,
   TaskDispatchInfo,
 } from "@/types/api"
@@ -629,6 +631,51 @@ function ReferenceSourceList({
   )
 }
 
+function RecommendedResourceList({ resources }: { resources?: RecommendedResource[] | null }) {
+  if (!resources?.length) {
+    return null
+  }
+
+  return (
+    <details className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-950" open>
+      <summary className="cursor-pointer font-medium">推荐资源 · {resources.length} 条</summary>
+      <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+        {resources.slice(0, 6).map((resource, index) => {
+          const title = resource.title?.trim() || resource.url?.trim() || `推荐资源 ${index + 1}`
+          const description = resource.description?.trim()
+          const url = resource.url?.trim()
+
+          return (
+            <div
+              className="rounded-md border border-violet-100 bg-white/85 px-2 py-1.5"
+              key={`${title}-${url || index}`}
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                <DiagnosticBadge tone="slate">{index + 1}</DiagnosticBadge>
+                {url ? (
+                  <a
+                    className="inline-flex min-w-0 flex-1 items-center gap-1 font-medium text-violet-900 hover:text-violet-700 hover:underline"
+                    href={url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <span className="truncate">{title}</span>
+                    <ExternalLink className="size-3 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+                )}
+              </div>
+              {description ? <div className="mt-0.5 line-clamp-2 text-[11px] text-violet-900/75">{description}</div> : null}
+              {url ? <div className="mt-0.5 truncate text-[11px] text-violet-700/70">{url}</div> : null}
+            </div>
+          )
+        })}
+      </div>
+    </details>
+  )
+}
+
 function MessageDiagnostics({
   activeCitationId,
   message,
@@ -649,6 +696,7 @@ function MessageDiagnostics({
   const hasDiagnostics = Boolean(
     message.sources?.length ||
       message.evidence?.length ||
+      message.recommended_resources?.length ||
       message.evidence_quality ||
       message.citation_quality ||
       message.citation_warnings?.length,
@@ -664,6 +712,9 @@ function MessageDiagnostics({
         {message.sources?.length ? <DiagnosticBadge tone="sky">{message.sources.length} sources</DiagnosticBadge> : null}
         {message.evidence?.length ? (
           <DiagnosticBadge tone="emerald">{message.evidence.length} evidence</DiagnosticBadge>
+        ) : null}
+        {message.recommended_resources?.length ? (
+          <DiagnosticBadge tone="slate">{message.recommended_resources.length} recommended</DiagnosticBadge>
         ) : null}
         {message.citation_quality?.risk_level ? (
           <DiagnosticBadge tone={message.citation_quality.risk_level === "high" ? "rose" : "amber"}>
@@ -699,6 +750,8 @@ function MessageDiagnostics({
         registerCitationTarget={registerCitationTarget}
         sources={message.sources}
       />
+
+      <RecommendedResourceList resources={message.recommended_resources} />
 
       {message.citation_quality?.evidence_citation_audit?.length ? (
         <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800" open>
