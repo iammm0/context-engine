@@ -1,7 +1,8 @@
 # context-engine TanStack Frontend
 
-这是一套并列于现有 `web/` Next.js 前端的新实现，目录为 `web-tanstack/`。  
-目标是基于你指定的技术栈，落一套可运行、可继续扩展、并且已经接上现有 FastAPI 后端的 TanStack 系列前端骨架。
+`web-tanstack/` 是 `context-engine` 后续主前端。旧 `web/` Next.js 前端仅作为历史兼容和功能平移参照保留，新功能优先在这里实现和验证。
+
+目标是基于 Vite + TanStack 系列维护一套可运行、可继续扩展、并且与现有 FastAPI 后端 OpenAPI 契约同步的主前端。
 
 ## 技术栈
 
@@ -15,9 +16,6 @@
 - Tailwind CSS v4
 - shadcn/ui
 - Zustand
-- Monaco Editor
-- xterm.js
-- React Flow
 
 ## 当前已完成
 
@@ -29,6 +27,8 @@
   - `POST /api/chat/conversations`
   - `POST /api/chat/conversations/{id}/messages`
   - `POST /api/chat`
+  - `POST /api/chat/deep-research/task`
+  - `GET /api/tasks/{id}/stream`
   - `GET /api/knowledge-spaces`
   - `POST /api/knowledge-spaces`
   - `GET /api/documents`
@@ -39,9 +39,9 @@
 - 通过 `npm run generate:api` 从 FastAPI OpenAPI schema 生成 `src/types/generated-api.ts`
 - 通过 `npm run check:api` 检查 generated API types 是否和后端 OpenAPI schema 同步
 - 做了 3 个主页面：
-  - `Chat`：SSE 流式聊天、会话列表、RAG 开关
-  - `Documents`：知识空间列表、上传入口、TanStack Table + Virtual 文档表格、文档处理进度 SSE 订阅
-  - `Settings`：React Flow 架构图、Monaco 配置编辑器、xterm.js 终端面板
+  - `Chat`：SSE 流式聊天、会话列表、RAG 开关、深度研究 Celery 任务投递与任务 SSE 进度订阅
+  - `Documents`：知识空间列表、上传入口、TanStack Table + Virtual 文档表格、文档处理进度 SSE 订阅、chunk 深链定位和质量筛选
+  - `Settings`：运行时配置、Agent 配置、后端健康状态和系统架构视图
 - 完成 `shadcn/ui` 初始化和 `components.json`
 - 已通过 `npm run verify`
 
@@ -115,11 +115,11 @@ web-tanstack/
 
 ## 后续建议
 
-- 把 `Monaco` 编辑器扩展成运行时配置编辑面板，支持保存回 `/api/settings/runtime`
-- 把聊天页补齐深度研究模式与 Agent 状态流
-- 把大体积依赖做路由级懒加载，优先拆 `Monaco`、`xterm.js`、`React Flow`
-- 继续补齐更多 shadcn 组件，例如 `dialog`、`sheet`、`dropdown-menu`、`tabs`
+- 继续从旧 `web/` 平移仍有价值的聊天辅助体验，避免在旧前端继续新增功能。
+- 将更多长任务统一接入 `POST task + /api/tasks/{id}/stream` 的模式。
+- 保持 `npm run generate:api` 和 `npm run check:api` 作为 API 类型同步的提交前检查。
+- 继续补齐更多 shadcn 组件，例如 `dialog`、`sheet`、`dropdown-menu`、`tabs`。
 
 ## 说明
 
-当前仓库里原有的 `web/` Next.js 前端没有被替换，这个 `web-tanstack/` 是一套新的并列实现，适合你继续沿 TanStack 系列往下演进。
+当前仓库里原有的 `web/` Next.js 前端还没有物理删除，但 `web-tanstack/` 是后续主前端；迁移或新增功能时应优先修改本目录。

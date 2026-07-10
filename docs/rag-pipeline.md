@@ -141,7 +141,7 @@ stored chunks, with `content_type_counts`, `feature_counts`,
 inspector show reliable type and quality-filter counts even for older documents
 whose stored `parse_quality` summary is missing or stale.
 
-The Next.js document page uses this endpoint to show chunk type, page/section
+The TanStack document page uses this endpoint to show chunk type, page/section
 location, feature flags, token count, parse quality, and preview text. The
 chunk inspector keeps the active `content_type`/`q` filters while using
 `skip`/`limit` to load more matching chunks for long documents. It merges API

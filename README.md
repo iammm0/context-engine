@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)](https://fastapi.tiangolo.com/)
 
-`context-engine` 是一个用于构建检索、记忆与上下文感知 AI 系统的工程基础设施。后端基于 FastAPI，提供文档入库、混合检索、证据上下文组装、流式聊天、深度研究和运行时配置接口；前端目前保留两套实现：`web/` 是 Next.js 版本，`web-tanstack/` 是基于 Vite + TanStack 系列的新版本。
+`context-engine` 是一个用于构建检索、记忆与上下文感知 AI 系统的工程基础设施。后端基于 FastAPI，提供文档入库、混合检索、证据上下文组装、流式聊天、深度研究和运行时配置接口；前端以后续主维护的 `web-tanstack/` 为主，旧 `web/` Next.js 版本仅作为历史兼容和功能平移参照保留。
 
 当前发布版本为 `1.0.0`。后端版本号的单一来源是 [utils/version.py](utils/version.py)，健康检查和 OpenAPI 版本都会读取它。
 
@@ -36,8 +36,8 @@
 
 前端：
 
-- [web/](web)：Next.js 16、React 19、TypeScript、Tailwind CSS
-- [web-tanstack/](web-tanstack)：Vite、React 19、TanStack Router、TanStack Query、TanStack Table、Zustand、Monaco、xterm.js、React Flow
+- [web-tanstack/](web-tanstack)：主前端，Vite、React 19、TanStack Router、TanStack Query、TanStack Table、Zustand、Tailwind CSS
+- [web/](web)：旧 Next.js 16 前端，仅作为历史兼容和迁移参考
 
 ## 目录结构
 
@@ -58,8 +58,8 @@ context-engine/
 ├── services/            # 业务服务层
 ├── tests/               # 测试
 ├── utils/               # 日志、监控、版本、通用工具
-├── web/                 # Next.js 前端
-└── web-tanstack/        # Vite + TanStack 前端
+├── web/                 # 旧 Next.js 前端（历史兼容）
+└── web-tanstack/        # 主前端，Vite + TanStack
 ```
 
 ## 快速开始
@@ -194,7 +194,22 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ### 7. 启动前端
 
-Next.js 前端：
+主前端（TanStack）：
+
+```bash
+cd web-tanstack
+npm install
+npm run generate:api
+npm run dev
+```
+
+默认访问 `http://localhost:5173`。如需指定后端地址，在 `web-tanstack/.env.local` 中配置：
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+历史 Next.js 前端（仅兼容/迁移参考）：
 
 ```bash
 cd web
@@ -206,20 +221,6 @@ npm run dev
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-TanStack 前端：
-
-```bash
-cd web-tanstack
-npm install
-npm run dev
-```
-
-默认访问 `http://localhost:5173`。如需指定后端地址，在 `web-tanstack/.env.local` 中配置：
-
-```env
-VITE_API_URL=http://localhost:8000
 ```
 
 ## Docker 构建 API 镜像
@@ -335,20 +336,20 @@ python main.py
 pytest
 ```
 
-Next.js 前端：
-
-```bash
-cd web
-npm run lint
-npm run build
-```
-
-TanStack 前端：
+TanStack 主前端：
 
 ```bash
 cd web-tanstack
 npm run generate:api
 npm run verify
+```
+
+历史 Next.js 前端（可选兼容检查）：
+
+```bash
+cd web
+npm run lint
+npm run build
 ```
 
 本地依赖：
@@ -404,8 +405,8 @@ curl http://localhost:8000/health
 - [utils/README.md](utils/README.md)：工具模块说明
 - [scripts/README_MIGRATIONS.md](scripts/README_MIGRATIONS.md)：迁移脚本说明
 - [vendor/README.md](vendor/README.md)：本地第三方依赖说明
-- [web/README.md](web/README.md)：Next.js 前端说明
-- [web-tanstack/README.md](web-tanstack/README.md)：TanStack 前端说明
+- [web-tanstack/README.md](web-tanstack/README.md)：TanStack 主前端说明
+- [web/README.md](web/README.md)：旧 Next.js 前端兼容说明
 
 ## License
 

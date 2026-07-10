@@ -74,14 +74,19 @@ python main.py
 ### 前端
 
 ```bash
-cd web
+cd web-tanstack
 
 # 安装依赖
 npm install
 
+# 同步 FastAPI OpenAPI 类型
+npm run generate:api
+
 # 启动开发服务器
 npm run dev
 ```
+
+旧 `web/` Next.js 前端仅作为历史兼容和迁移参照保留；新功能优先提交到 `web-tanstack/`。
 
 ---
 
