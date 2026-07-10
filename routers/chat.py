@@ -1254,7 +1254,7 @@ async def queue_deep_research_task(
             queued.id,
             research_request.query[:80],
         )
-        return TaskDispatchInfo(backend="celery", task_id=queued.id)
+        return TaskDispatchInfo(backend="celery", task_id=queued.id, ready=False)
     except Exception as e:
         logger.error(f"投递深度研究任务失败: {e}", exc_info=True)
         raise HTTPException(

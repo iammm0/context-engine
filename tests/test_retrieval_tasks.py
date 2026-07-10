@@ -53,3 +53,4 @@ async def test_queue_query_analysis_returns_task_dispatch(monkeypatch):
     assert calls == ["需要检索吗"]
     assert response.backend == "celery"
     assert response.task_id == "analysis-task-1"
+    assert response.ready is False

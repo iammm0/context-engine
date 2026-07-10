@@ -171,7 +171,7 @@ def enqueue_document_processing(
             doc_id,
             result.id,
         )
-        return {"backend": "celery", "task_id": result.id}
+        return {"backend": "celery", "task_id": result.id, "ready": False}
     except Exception as exc:
         if not _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", False):
             logger.error("Failed to queue Celery document job - document_id=%s", doc_id, exc_info=True)

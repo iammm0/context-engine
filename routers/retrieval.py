@@ -117,7 +117,7 @@ async def queue_query_analysis(
             queued.id,
             request.query[:50],
         )
-        return TaskDispatchInfo(backend="celery", task_id=queued.id)
+        return TaskDispatchInfo(backend="celery", task_id=queued.id, ready=False)
     except Exception as e:
         logger.error(f"查询分析任务投递失败: {str(e)}", exc_info=True)
         raise HTTPException(

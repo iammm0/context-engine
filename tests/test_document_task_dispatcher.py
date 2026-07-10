@@ -37,6 +37,19 @@ class FailingDocumentTask:
         raise RuntimeError("queue down")
 
 
+class FakeQueuedDocumentTask:
+    id = "document-task-1"
+
+
+class SuccessfulDocumentTask:
+    def __init__(self):
+        self.calls = []
+
+    def delay(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return FakeQueuedDocumentTask()
+
+
 def test_enqueue_document_processing_local_backend(monkeypatch):
     monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "local")
 
@@ -56,6 +69,25 @@ def test_enqueue_document_processing_local_backend(monkeypatch):
     assert func.__name__ == "_run_local_document_processing"
     assert args == ("uploads/demo.pdf", "doc1", "assistant1", "space1")
     assert kwargs == {}
+
+
+def test_enqueue_document_processing_celery_marks_task_not_ready(monkeypatch):
+    monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "celery")
+    fake_task = SuccessfulDocumentTask()
+    monkeypatch.setattr(document_tasks, "process_document_task", fake_task)
+
+    background_tasks = FakeBackgroundTasks()
+    dispatch = enqueue_document_processing(
+        background_tasks,
+        "uploads/demo.pdf",
+        "doc1",
+        "assistant1",
+        "space1",
+    )
+
+    assert dispatch == {"backend": "celery", "task_id": "document-task-1", "ready": False}
+    assert fake_task.calls == [(("uploads/demo.pdf", "doc1", "assistant1", "space1"), {})]
+    assert background_tasks.tasks == []
 
 
 def test_enqueue_document_processing_requires_explicit_local_fallback(monkeypatch):

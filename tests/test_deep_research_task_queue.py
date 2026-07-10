@@ -65,6 +65,7 @@ async def test_queue_deep_research_task_returns_celery_dispatch(monkeypatch):
 
     assert response.backend == "celery"
     assert response.task_id == "deep-task-1"
+    assert response.ready is False
     assert fake_task.calls == [
         {
             "query": "compare reranking strategies",
