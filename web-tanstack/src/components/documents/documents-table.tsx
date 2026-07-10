@@ -7,9 +7,10 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { DatabaseZap, Eye, FileText, FileUp, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react"
+import { DatabaseZap, Eye, FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { BatchDocumentUpload } from "@/components/documents/batch-document-upload"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -74,7 +75,6 @@ function formatChunkLocation(chunk: DocumentChunkPreview) {
 export function DocumentsTable() {
   const queryClient = useQueryClient()
   const parentRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const { selectedKnowledgeSpaceId, setSelectedKnowledgeSpaceId } = useUiStore()
   const [sorting, setSorting] = useState<SortingState>([])
   const [newSpaceName, setNewSpaceName] = useState("")
@@ -120,23 +120,6 @@ export function DocumentsTable() {
       setNewSpaceName("")
       setSelectedKnowledgeSpaceId(data.id)
       await queryClient.invalidateQueries({ queryKey: ["knowledge-spaces"] })
-    },
-  })
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!selectedKnowledgeSpaceId) {
-        throw new Error("请先选择一个知识空间")
-      }
-
-      const result = await api.uploadDocument(selectedKnowledgeSpaceId, file)
-      if (result.error) {
-        throw new Error(result.error)
-      }
-      return result.data
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
     },
   })
 
@@ -334,6 +317,16 @@ export function DocumentsTable() {
     deleteDocumentMutation.mutate(selectedDocument.id)
   }
 
+  const handleUploadedDocument = (documentId: string) => {
+    setSelectedDocumentId(documentId)
+    void queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+  }
+
+  const handleSettledDocument = (documentId: string) => {
+    void queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+    void queryClient.invalidateQueries({ queryKey: ["document-chunks", documentId] })
+  }
+
   useEffect(() => {
     const documentIds = streamingDocumentKey ? streamingDocumentKey.split("|") : []
     if (!documentIds.length) {
@@ -464,7 +457,6 @@ export function DocumentsTable() {
     knowledgeSpacesQuery.error instanceof Error ? `知识空间加载失败：${knowledgeSpacesQuery.error.message}` : null,
     documentsQuery.error instanceof Error ? `文档列表加载失败：${documentsQuery.error.message}` : null,
     createSpaceMutation.error instanceof Error ? `知识空间创建失败：${createSpaceMutation.error.message}` : null,
-    uploadMutation.error instanceof Error ? `上传失败：${uploadMutation.error.message}` : null,
     updateDocumentMutation.error instanceof Error ? `重命名失败：${updateDocumentMutation.error.message}` : null,
     deleteDocumentMutation.error instanceof Error ? `删除失败：${deleteDocumentMutation.error.message}` : null,
     retryDocumentMutation.error instanceof Error ? `重试失败：${retryDocumentMutation.error.message}` : null,
@@ -522,25 +514,11 @@ export function DocumentsTable() {
             </Button>
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-dashed border-sky-300 bg-white p-4">
-            <div className="text-sm font-medium text-slate-950">Upload Document</div>
-            <div className="text-xs leading-5 text-slate-500">支持直接接现有 `/api/documents/upload`，上传后可继续轮询状态。</div>
-            <input
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) {
-                  uploadMutation.mutate(file)
-                }
-              }}
-              ref={fileRef}
-              type="file"
-            />
-            <Button className="w-full" onClick={() => fileRef.current?.click()} variant="outline">
-              {uploadMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <FileUp className="size-4" />}
-              上传文件
-            </Button>
-          </div>
+          <BatchDocumentUpload
+            knowledgeSpaceId={selectedKnowledgeSpaceId}
+            onDocumentSettled={handleSettledDocument}
+            onDocumentUploaded={handleUploadedDocument}
+          />
         </CardContent>
       </Card>
 
