@@ -41,6 +41,11 @@ class FakeDeepResearchTask:
         return FakeQueuedTask()
 
 
+class FailingDeepResearchTask:
+    def delay(self, *args, **kwargs):
+        raise RuntimeError("broker down")
+
+
 @pytest.mark.asyncio
 async def test_queue_deep_research_task_returns_celery_dispatch(monkeypatch):
     fake_task = FakeDeepResearchTask()
@@ -70,3 +75,22 @@ async def test_queue_deep_research_task_returns_celery_dispatch(monkeypatch):
             "generation_config": {"llm_model": "demo-model"},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_queue_deep_research_task_failure_returns_503(monkeypatch):
+    monkeypatch.setattr(deep_research_tasks, "deep_research_task", FailingDeepResearchTask())
+
+    with pytest.raises(chat.HTTPException) as exc_info:
+        await chat.queue_deep_research_task(
+            chat.DeepResearchRequest(
+                query="compare reranking strategies",
+                assistant_id="assistant-1",
+                knowledge_space_ids=["space-1"],
+                conversation_id="conv-1",
+            ),
+            None,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "投递深度研究任务失败" in exc_info.value.detail

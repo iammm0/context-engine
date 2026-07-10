@@ -1211,7 +1211,7 @@ async def deep_research_chat(
         )
 
 
-@router.post("/deep-research/task", response_model=TaskDispatchInfo)
+@router.post("/deep-research/task", response_model=TaskDispatchInfo, status_code=status.HTTP_202_ACCEPTED)
 async def queue_deep_research_task(
     research_request: DeepResearchRequest,
     _: None = Depends(require_mongodb),
@@ -1239,7 +1239,7 @@ async def queue_deep_research_task(
     except Exception as e:
         logger.error(f"投递深度研究任务失败: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"投递深度研究任务失败: {str(e)}",
         )
 
