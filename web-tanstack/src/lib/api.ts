@@ -3,10 +3,13 @@ import type {
   AgentConfigUpdate,
   AgentConfigsResponse,
   ApiEnvelope,
+  ActionResponse,
   ChatRequestPayload,
   ChatStreamEvent,
   ConversationAttachmentStatus,
   ConversationAttachmentUploadResponse,
+  ConversationCreateResponse,
+  ConversationUpdateResponse,
   DocumentActionResponse,
   DocumentChunksResponse,
   DocumentUploadResponse,
@@ -22,9 +25,11 @@ import type {
   DocumentUpdate,
   KnowledgeSpace,
   KnowledgeSpacesResponse,
+  MessageActionResponse,
   MessageUpdate,
   MessagePayload,
   ModelsResponse,
+  RegenerateMessageResponse,
   RuntimeConfigResponse,
   RuntimeConfigUpdate,
 } from "@/types/api"
@@ -160,7 +165,7 @@ export const api = {
   },
 
   createConversation(title: string) {
-    return requestJson<{ id: string; title: string; created_at: string; updated_at: string }>("/api/chat/conversations", {
+    return requestJson<ConversationCreateResponse>("/api/chat/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
@@ -172,7 +177,7 @@ export const api = {
   },
 
   updateConversation(conversationId: string, body: ConversationUpdate) {
-    return requestJson<{ id: string; title: string; created_at?: string | null; updated_at?: string | null }>(
+    return requestJson<ConversationUpdateResponse>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: "PUT",
@@ -183,7 +188,7 @@ export const api = {
   },
 
   deleteConversation(conversationId: string) {
-    return requestJson<{ success?: boolean; message?: string }>(
+    return requestJson<ActionResponse>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
       {
         method: "DELETE",
@@ -192,7 +197,7 @@ export const api = {
   },
 
   addConversationMessage(conversationId: string, body: MessagePayload) {
-    return requestJson<{ success?: boolean; message_id?: string; timestamp?: string }>(
+    return requestJson<MessageActionResponse>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: "POST",
@@ -203,7 +208,7 @@ export const api = {
   },
 
   updateConversationMessage(conversationId: string, messageId: string, body: MessageUpdate) {
-    return requestJson<{ success?: boolean; message_id?: string; timestamp?: string }>(
+    return requestJson<MessageActionResponse>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
       {
         method: "PUT",
@@ -214,7 +219,7 @@ export const api = {
   },
 
   regenerateConversationMessage(conversationId: string, messageId: string) {
-    return requestJson<{ success?: boolean; message?: string; message_id?: string; remaining_messages?: number }>(
+    return requestJson<RegenerateMessageResponse>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/regenerate`,
       {
         method: "POST",

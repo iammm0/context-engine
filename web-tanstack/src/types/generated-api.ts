@@ -712,6 +712,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActionResponse
+         * @description Generic success response.
+         */
+        ActionResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+        };
         /** AgentConfigItemResponse */
         AgentConfigItemResponse: {
             /** Agent Type */
@@ -913,12 +923,42 @@ export interface components {
             assistant_id?: string | null;
         };
         /**
+         * ConversationCreateResponse
+         * @description Conversation creation response.
+         */
+        ConversationCreateResponse: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Assistant Id */
+            assistant_id?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
          * ConversationUpdate
          * @description 更新对话请求
          */
         ConversationUpdate: {
             /** Title */
             title?: string | null;
+        };
+        /**
+         * ConversationUpdateResponse
+         * @description Conversation update response.
+         */
+        ConversationUpdateResponse: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /**
          * DeepResearchEvaluateRequest
@@ -1208,6 +1248,20 @@ export interface components {
             updated_at?: string | null;
         };
         /**
+         * MessageActionResponse
+         * @description Conversation message action response.
+         */
+        MessageActionResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+            /** Message Id */
+            message_id?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        };
+        /**
          * MessageAdd
          * @description 添加消息请求
          */
@@ -1269,6 +1323,20 @@ export interface components {
              * @default medium
              */
             confidence: string;
+        };
+        /**
+         * RegenerateMessageResponse
+         * @description Conversation regenerate action response.
+         */
+        RegenerateMessageResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+            /** Message Id */
+            message_id: string;
+            /** Remaining Messages */
+            remaining_messages: number;
         };
         /**
          * RetrievalRequest
@@ -1502,7 +1570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationCreateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1568,7 +1636,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationUpdateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1599,7 +1667,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1634,7 +1702,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MessageActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1670,7 +1738,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MessageActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1702,7 +1770,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RegenerateMessageResponse"];
                 };
             };
             /** @description Validation Error */

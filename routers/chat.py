@@ -107,6 +107,41 @@ class DeepResearchGateDecision(BaseModel):
     reasons: List[str]
 
 
+class ConversationCreateResponse(BaseModel):
+    """Conversation creation response."""
+    id: str
+    title: str
+    assistant_id: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class ConversationUpdateResponse(BaseModel):
+    """Conversation update response."""
+    id: str
+    title: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ActionResponse(BaseModel):
+    """Generic success response."""
+    success: bool
+    message: str
+
+
+class MessageActionResponse(ActionResponse):
+    """Conversation message action response."""
+    message_id: Optional[str] = None
+    timestamp: Optional[str] = None
+
+
+class RegenerateMessageResponse(ActionResponse):
+    """Conversation regenerate action response."""
+    message_id: str
+    remaining_messages: int
+
+
 def _evaluate_deep_research_value(query: str, threshold: int) -> DeepResearchGateDecision:
     text = (query or "").strip()
     if not text:
@@ -212,7 +247,7 @@ async def evaluate_deep_research(
         )
 
 
-@router.post("/conversations")
+@router.post("/conversations", response_model=ConversationCreateResponse)
 async def create_conversation(
     request: ConversationCreate,
     _: None = Depends(require_mongodb),
@@ -367,7 +402,7 @@ async def get_conversation(
         )
 
 
-@router.post("/conversations/{conversation_id}/messages")
+@router.post("/conversations/{conversation_id}/messages", response_model=MessageActionResponse)
 async def add_message(
     conversation_id: str,
     message: MessageAdd,
@@ -465,6 +500,7 @@ async def add_message(
         return {
             "success": True,
             "message": "消息已添加",
+            "message_id": msg_dict["message_id"],
             "timestamp": msg_dict["timestamp"].isoformat()
         }
     except HTTPException:
@@ -477,7 +513,7 @@ async def add_message(
         )
 
 
-@router.put("/conversations/{conversation_id}")
+@router.put("/conversations/{conversation_id}", response_model=ConversationUpdateResponse)
 async def update_conversation(
     conversation_id: str,
     request: ConversationUpdate,
@@ -536,7 +572,7 @@ async def update_conversation(
         )
 
 
-@router.delete("/conversations/{conversation_id}")
+@router.delete("/conversations/{conversation_id}", response_model=ActionResponse)
 async def delete_conversation(
     conversation_id: str,
     _: None = Depends(require_mongodb),
@@ -581,7 +617,7 @@ async def delete_conversation(
         )
 
 
-@router.put("/conversations/{conversation_id}/messages/{message_id}")
+@router.put("/conversations/{conversation_id}/messages/{message_id}", response_model=MessageActionResponse)
 async def update_message(
     conversation_id: str,
     message_id: str,
@@ -664,7 +700,7 @@ async def update_message(
         )
 
 
-@router.post("/conversations/{conversation_id}/messages/{message_id}/regenerate")
+@router.post("/conversations/{conversation_id}/messages/{message_id}/regenerate", response_model=RegenerateMessageResponse)
 async def regenerate_response(
     conversation_id: str,
     message_id: str,

@@ -127,6 +127,11 @@ export type TaskDispatchInfo = Schemas["TaskDispatchInfo"]
 export type DocumentUploadResponse = Schemas["DocumentUploadResponse"]
 export type ConversationAttachmentUploadResponse = Schemas["ConversationAttachmentUploadResponse"]
 export type DocumentActionResponse = Schemas["DocumentActionResponse"]
+export type ConversationCreateResponse = Schemas["ConversationCreateResponse"]
+export type ConversationUpdateResponse = Schemas["ConversationUpdateResponse"]
+export type ActionResponse = Schemas["ActionResponse"]
+export type MessageActionResponse = Schemas["MessageActionResponse"]
+export type RegenerateMessageResponse = Schemas["RegenerateMessageResponse"]
 
 export interface DocumentChunkPreview {
   id: string
