@@ -7,6 +7,8 @@ from agents.experts.example_generation_agent import ExampleGenerationAgent
 from agents.experts.summary_agent import SummaryAgent
 from agents.experts.exercise_agent import ExerciseAgent
 from agents.experts.scientific_coding_agent import ScientificCodingAgent
+from agents.experts.critic_agent import CriticAgent
+from agents.experts.argument_analysis_agent import ArgumentAnalysisAgent
 
 __all__ = [
     "DocumentRetrievalAgent",
@@ -16,6 +18,8 @@ __all__ = [
     "ExampleGenerationAgent",
     "SummaryAgent",
     "ExerciseAgent",
-    "ScientificCodingAgent"
+    "ScientificCodingAgent",
+    "CriticAgent",
+    "ArgumentAnalysisAgent",
 ]
 

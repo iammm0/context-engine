@@ -2,6 +2,7 @@ import type { TaskDispatchInfo } from "@/types/api"
 
 const CELERY_STATE_LABELS: Record<string, string> = {
   PENDING: "排队中",
+  PROGRESS: "运行中",
   RECEIVED: "已接收",
   STARTED: "运行中",
   RETRY: "重试中",

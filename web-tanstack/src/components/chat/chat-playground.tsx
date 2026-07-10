@@ -46,7 +46,6 @@ import type {
   DeepResearchAgentResult,
   DeepResearchAgentStatus,
   DeepResearchEvaluation,
-  DeepResearchStreamEvent,
   EvidenceItem,
   EvidenceQuality,
   QueryAnalysisResponse,
@@ -75,6 +74,20 @@ type QueryAnalysisRun = {
   task?: TaskDispatchInfo | null
   result?: QueryAnalysisResponse | null
   error?: string | null
+}
+
+type DeepResearchTaskResult = {
+  phase?: string
+  message?: string
+  progress?: number
+  run_id?: string
+  selected_agents?: string[]
+  planning?: string
+  agent_statuses?: DeepResearchAgentStatus[]
+  agent_results?: DeepResearchAgentResult[]
+  html_content?: string
+  final_content?: string
+  message_id?: string | null
 }
 
 type CitationTargetKind = "evidence" | "audit" | "source" | "ref"
@@ -154,6 +167,59 @@ function readQueryAnalysisResult(task: TaskDispatchInfo): QueryAnalysisResponse 
 function readGeneratedTitle(task: TaskDispatchInfo): string | null {
   const title = task.result?.title
   return typeof title === "string" && title.trim() ? title.trim() : null
+}
+
+function readDeepResearchTaskResult(task: TaskDispatchInfo): DeepResearchTaskResult | null {
+  const result = task.result
+  if (!result || typeof result !== "object") {
+    return null
+  }
+  return result as DeepResearchTaskResult
+}
+
+function waitForTaskCompletion(
+  task: TaskDispatchInfo,
+  signal: AbortSignal,
+  onProgress: (task: TaskDispatchInfo) => void,
+): Promise<TaskDispatchInfo> {
+  if (!task.task_id) {
+    return Promise.reject(new Error("任务没有返回可订阅的 Celery task_id"))
+  }
+  const taskId = task.task_id
+
+  return new Promise((resolve, reject) => {
+    let unsubscribe: () => void = () => {}
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", handleAbort)
+      unsubscribe()
+    }
+    const handleAbort = () => {
+      cleanup()
+      reject(createAbortError())
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true })
+    onProgress(task)
+
+    unsubscribe = api.subscribeTaskStatus(
+      taskId,
+      onProgress,
+      (nextTask) => {
+        cleanup()
+        resolve(nextTask)
+      },
+      (message) => {
+        cleanup()
+        reject(new Error(message))
+      },
+      task.backend,
+    )
+
+    if (signal.aborted) {
+      handleAbort()
+    }
+  })
 }
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -1601,24 +1667,35 @@ export function ChatPlayground() {
     setDeepResearchHtml("")
   }
 
-  const upsertDeepResearchStatus = (next: DeepResearchAgentStatus) => {
-    setDeepResearchStatuses((current) => {
-      const exists = current.some((status) => status.agent_type === next.agent_type)
-      if (exists) {
-        return current.map((status) => (status.agent_type === next.agent_type ? { ...status, ...next } : status))
-      }
-      return [...current, next]
-    })
-  }
+  const applyDeepResearchTaskProgress = (task: TaskDispatchInfo) => {
+    const result = readDeepResearchTaskResult(task)
+    const taskLabel = taskSummary(task)
+    if (!result) {
+      setStreamingMeta({ evidence: 0, sources: 0, status: taskLabel || "Deep research task" })
+      return
+    }
 
-  const updateDeepResearchResult = (result: DeepResearchAgentResult) => {
-    setDeepResearchResults((current) => {
-      const exists = current.some((item) => item.agent_type === result.agent_type)
-      if (exists) {
-        return current.map((item) => (item.agent_type === result.agent_type ? { ...item, ...result } : item))
-      }
-      return [...current, result]
+    setStreamingMeta({
+      evidence: 0,
+      sources: 0,
+      status: result.message || taskLabel || result.phase || "Deep research task",
     })
+    if (result.planning && !deepResearchGate) {
+      setDraftAnswer(`## 研究规划\n\n${result.planning}`)
+    }
+    if (Array.isArray(result.agent_statuses)) {
+      setDeepResearchStatuses(result.agent_statuses)
+    }
+    if (Array.isArray(result.agent_results)) {
+      setDeepResearchResults(result.agent_results)
+      setDraftAnswer(buildDeepResearchMarkdown(result.agent_results, result.html_content))
+    }
+    if (typeof result.html_content === "string" && result.html_content.trim()) {
+      setDeepResearchHtml(result.html_content)
+    }
+    if (typeof result.final_content === "string" && result.final_content.trim()) {
+      setDraftAnswer(result.final_content)
+    }
   }
 
   const regenerateMessageMutation = useMutation({
@@ -1840,8 +1917,8 @@ export function ChatPlayground() {
       }
 
       if (shouldUseDeepResearch) {
-        setStreamingMeta({ evidence: 0, sources: 0, status: "Deep research" })
-        setDraftAnswer("深度研究已启动，正在规划多 Agent 任务...")
+        setStreamingMeta({ evidence: 0, sources: 0, status: "Queuing deep research" })
+        setDraftAnswer("深度研究任务正在投递到 Celery...")
         setDeepResearchStatuses(
           DEFAULT_DEEP_RESEARCH_AGENTS.map((agentType, index) => ({
             agent_type: agentType,
@@ -1851,138 +1928,28 @@ export function ChatPlayground() {
           })),
         )
 
-        const resultsMap = new Map<string, DeepResearchAgentResult>()
-        let htmlReport = ""
-        let streamError: string | undefined
-
-        await api.streamDeepResearch(
-          {
-            query: question,
-            conversation_id: conversationId,
-            knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
-            generation_config: generationConfig,
-          },
-          (event: DeepResearchStreamEvent) => {
-            if (event.error) {
-              streamError = event.error
-              setDraftAnswer(`深度研究失败：${event.error}`)
-              setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
-              return
-            }
-
-            if (event.type === "planning") {
-              const selectedAgents = event.selected_agents?.length ? event.selected_agents : DEFAULT_DEEP_RESEARCH_AGENTS.slice(1)
-              setDeepResearchStatuses(
-                DEFAULT_DEEP_RESEARCH_AGENTS.map((agentType) => {
-                  if (agentType === "coordinator") {
-                    return {
-                      agent_type: agentType,
-                      status: "completed",
-                      details: event.reasoning || event.content || "任务规划完成",
-                      progress: 100,
-                    }
-                  }
-                  return {
-                    agent_type: agentType,
-                    status: selectedAgents.includes(agentType) ? "pending" : "skipped",
-                    details: selectedAgents.includes(agentType) ? undefined : "协调规划未选择此 Agent",
-                  }
-                }),
-              )
-              setDraftAnswer(`## 研究规划\n\n${event.content || event.reasoning || "任务规划完成"}`)
-              return
-            }
-
-            if (event.type === "agent_status" && event.agent_type) {
-              upsertDeepResearchStatus({
-                agent_type: event.agent_type,
-                status: event.status || "running",
-                current_step: event.current_step,
-                progress: event.progress,
-                details: event.details,
-                dependencies: Array.isArray(event.dependencies) ? event.dependencies.map(String) : undefined,
-                started_at: event.started_at,
-                completed_at: event.completed_at,
-              })
-              return
-            }
-
-            if ((event.type === "agent_result" || event.type === "markdown" || event.type === "text") && event.content) {
-              const agentType = event.agent_type || "summary"
-              const result: DeepResearchAgentResult = {
-                agent_type: agentType,
-                content: event.content,
-                title: event.title,
-                sources: event.sources,
-                evidence: event.evidence,
-                evidence_ids: event.evidence_ids,
-                claims: event.claims,
-                open_questions: event.open_questions,
-                confidence: event.confidence,
-              }
-              resultsMap.set(agentType, result)
-              updateDeepResearchResult(result)
-              upsertDeepResearchStatus({
-                agent_type: agentType,
-                status: "completed",
-                progress: 100,
-                details: event.title || "工作完成",
-              })
-              setDraftAnswer(buildDeepResearchMarkdown(Array.from(resultsMap.values())))
-              return
-            }
-
-            if (event.type === "html" && event.content) {
-              htmlReport = event.content
-              setDeepResearchHtml(event.content)
-              setStreamingMeta({ evidence: 0, sources: 0, status: "Report ready" })
-              return
-            }
-
-            if (event.done) {
-              setDeepResearchStatuses((current) =>
-                current.map((status) =>
-                  status.status === "running" ? { ...status, status: "completed", progress: status.progress ?? 100 } : status,
-                ),
-              )
-              setStreamingMeta({ evidence: 0, sources: 0, status: "Done" })
-            }
-          },
-          abortController.signal,
-        )
-
-        if (abortController.signal.aborted) {
-          throw createAbortError()
-        }
-        if (streamError) {
-          throw new Error(streamError)
+        const queued = await api.queueDeepResearch({
+          query: question,
+          conversation_id: conversationId,
+          knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
+          generation_config: generationConfig,
+        })
+        if (queued.error || !queued.data) {
+          throw new Error(queued.error || "深度研究任务投递失败")
         }
 
-        const finalResults = Array.from(resultsMap.values())
-        const finalContent = buildDeepResearchMarkdown(finalResults, htmlReport)
-        if (finalContent.trim()) {
-          queryClient.setQueryData(["conversation", conversationId], (existing: ConversationDetail | undefined) => ({
-            ...(existing || currentConversation),
-            messages: [
-              ...(existing?.messages || currentConversation.messages || []),
-              {
-                role: "assistant",
-                content: finalContent,
-                timestamp: new Date().toISOString(),
-              },
-            ],
-          }))
-          await api.addConversationMessage(conversationId, {
-            role: "assistant",
-            content: finalContent,
-          })
+        const finalTask = await waitForTaskCompletion(queued.data, abortController.signal, applyDeepResearchTaskProgress)
+        applyDeepResearchTaskProgress(finalTask)
+        if (finalTask.successful === false) {
+          throw new Error(finalTask.error || "深度研究任务执行失败")
         }
 
-        setDraftAnswer("")
+        setStreamingMeta({ evidence: 0, sources: 0, status: "Done" })
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["conversations"] }),
           queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
         ])
+        setDraftAnswer("")
         return
       }
 

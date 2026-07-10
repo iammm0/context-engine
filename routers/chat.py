@@ -1194,6 +1194,39 @@ async def deep_research_chat(
         )
 
 
+@router.post("/deep-research/task", response_model=TaskDispatchInfo)
+async def queue_deep_research_task(
+    research_request: DeepResearchRequest,
+    _: None = Depends(require_mongodb),
+) -> TaskDispatchInfo:
+    """Queue deep research in Celery for clients that can consume task SSE."""
+
+    try:
+        from tasks.deep_research_tasks import deep_research_task
+
+        queued = deep_research_task.delay(
+            research_request.query,
+            research_request.assistant_id,
+            research_request.knowledge_space_ids,
+            research_request.conversation_id,
+            research_request.enabled_agents,
+            research_request.generation_config,
+        )
+        logger.info(
+            "Deep research queued in Celery - conversation_id=%s task_id=%s query=%s",
+            research_request.conversation_id,
+            queued.id,
+            research_request.query[:80],
+        )
+        return TaskDispatchInfo(backend="celery", task_id=queued.id)
+    except Exception as e:
+        logger.error(f"投递深度研究任务失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"投递深度研究任务失败: {str(e)}",
+        )
+
+
 # 对话附件上传目录
 CONVERSATION_UPLOAD_DIR = os.getenv("CONVERSATION_UPLOAD_DIR", "./conversation_uploads")
 os.makedirs(CONVERSATION_UPLOAD_DIR, exist_ok=True)

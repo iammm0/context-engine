@@ -55,6 +55,10 @@ def enrich_task_dispatch(task_dispatch: Any) -> Optional[Dict[str, Any]]:
                     payload["result"] = result
             elif async_result.result is not None:
                 payload["error"] = str(async_result.result)[:500]
+        else:
+            result = _compact_result(getattr(async_result, "info", None))
+            if result is not None:
+                payload["result"] = result
     except Exception as exc:
         payload["state"] = payload.get("state") or "UNKNOWN"
         payload["error"] = str(exc)[:500]

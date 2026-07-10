@@ -312,6 +312,14 @@ export const api = {
     await parseSseResponse<DeepResearchStreamEvent>(response, onEvent)
   },
 
+  queueDeepResearch(body: DeepResearchRequest) {
+    return requestJson<TaskDispatchInfo>("/api/chat/deep-research/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  },
+
   getKnowledgeSpaces() {
     return requestJson<KnowledgeSpacesResponse>("/api/knowledge-spaces")
   },
