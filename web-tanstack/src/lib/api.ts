@@ -1,41 +1,22 @@
 import type {
-  AgentConfigItem,
   AgentConfigUpdate,
-  AgentConfigsResponse,
   ApiEnvelope,
-  ActionResponse,
   ChatRequestPayload,
   ChatStreamEvent,
   ConversationAttachmentStatus,
   ConversationAttachmentUploadResponse,
-  ConversationCreateResponse,
-  ConversationUpdateResponse,
-  DocumentActionResponse,
   DocumentChunksResponse,
   DocumentUploadResponse,
   DeepResearchEvaluateRequest,
-  DeepResearchEvaluation,
   DeepResearchRequest,
   DeepResearchStreamEvent,
   ConversationUpdate,
   ConversationDetail,
-  ConversationListResponse,
   DocumentListResponse,
   DocumentProgress,
   DocumentUpdate,
-  HealthStatus,
-  KnowledgeSpace,
-  KnowledgeSpacesResponse,
-  MetricsResponse,
-  MessageActionResponse,
   MessageUpdate,
   MessagePayload,
-  ModelsResponse,
-  ProbeStatusResponse,
-  QueryAnalysisResponse,
-  RegenerateMessageResponse,
-  RootResponse,
-  RuntimeConfigResponse,
   RuntimeConfigUpdate,
   TaskDispatchInfo,
 } from "@/types/api"
@@ -265,31 +246,31 @@ function subscribeEventStream<T>({ fallbackError, onDone, onError, onProgress, p
 
 export const api = {
   getRoot() {
-    return getJson<"/", RootResponse>("/")
+    return getJson<"/">("/")
   },
 
   getHealth() {
-    return getJson<"/health", HealthStatus>("/health")
+    return getJson<"/health">("/health")
   },
 
   getReadiness() {
-    return getJson<"/health/readiness", ProbeStatusResponse>("/health/readiness")
+    return getJson<"/health/readiness">("/health/readiness")
   },
 
   getMetrics() {
-    return getJson<"/health/metrics", MetricsResponse>("/health/metrics")
+    return getJson<"/health/metrics">("/health/metrics")
   },
 
   getModels() {
-    return getJson<"/api/chat/models", ModelsResponse>("/api/chat/models")
+    return getJson<"/api/chat/models">("/api/chat/models")
   },
 
   getConversations() {
-    return getJson<"/api/chat/conversations", ConversationListResponse>("/api/chat/conversations")
+    return getJson<"/api/chat/conversations">("/api/chat/conversations")
   },
 
   createConversation(title: string) {
-    return postJson<"/api/chat/conversations", ConversationCreateResponse>(
+    return postJson<"/api/chat/conversations">(
       "/api/chat/conversations",
       "/api/chat/conversations",
       { title },
@@ -304,7 +285,7 @@ export const api = {
   },
 
   updateConversation(conversationId: string, body: ConversationUpdate) {
-    return putJson<"/api/chat/conversations/{conversation_id}", ConversationUpdateResponse>(
+    return putJson<"/api/chat/conversations/{conversation_id}">(
       "/api/chat/conversations/{conversation_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
       body,
@@ -312,14 +293,14 @@ export const api = {
   },
 
   deleteConversation(conversationId: string) {
-    return deleteJson<"/api/chat/conversations/{conversation_id}", ActionResponse>(
+    return deleteJson<"/api/chat/conversations/{conversation_id}">(
       "/api/chat/conversations/{conversation_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
     )
   },
 
   addConversationMessage(conversationId: string, body: MessagePayload) {
-    return postJson<"/api/chat/conversations/{conversation_id}/messages", MessageActionResponse>(
+    return postJson<"/api/chat/conversations/{conversation_id}/messages">(
       "/api/chat/conversations/{conversation_id}/messages",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       body as JsonRequestBodyFor<"/api/chat/conversations/{conversation_id}/messages", "post">,
@@ -327,7 +308,7 @@ export const api = {
   },
 
   updateConversationMessage(conversationId: string, messageId: string, body: MessageUpdate) {
-    return putJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}", MessageActionResponse>(
+    return putJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}">(
       "/api/chat/conversations/{conversation_id}/messages/{message_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
       body,
@@ -335,7 +316,7 @@ export const api = {
   },
 
   regenerateConversationMessage(conversationId: string, messageId: string) {
-    return postJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate", RegenerateMessageResponse>(
+    return postJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate">(
       "/api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/regenerate`,
     )
@@ -361,7 +342,7 @@ export const api = {
   },
 
   evaluateDeepResearch(body: DeepResearchEvaluateRequest) {
-    return postJson<"/api/chat/deep-research/evaluate", DeepResearchEvaluation>(
+    return postJson<"/api/chat/deep-research/evaluate">(
       "/api/chat/deep-research/evaluate",
       "/api/chat/deep-research/evaluate",
       body,
@@ -377,7 +358,7 @@ export const api = {
   },
 
   analyzeQuery(query: string) {
-    return postJson<"/api/retrieval/analyze", QueryAnalysisResponse>(
+    return postJson<"/api/retrieval/analyze">(
       "/api/retrieval/analyze",
       "/api/retrieval/analyze",
       { query },
@@ -412,11 +393,11 @@ export const api = {
   },
 
   getKnowledgeSpaces() {
-    return getJson<"/api/knowledge-spaces", KnowledgeSpacesResponse>("/api/knowledge-spaces")
+    return getJson<"/api/knowledge-spaces">("/api/knowledge-spaces")
   },
 
   createKnowledgeSpace(name: string, description?: string) {
-    return postJson<"/api/knowledge-spaces", KnowledgeSpace>(
+    return postJson<"/api/knowledge-spaces">(
       "/api/knowledge-spaces",
       "/api/knowledge-spaces",
       { name, description },
@@ -448,7 +429,7 @@ export const api = {
   },
 
   updateDocument(documentId: string, body: DocumentUpdate) {
-    return putJson<"/api/documents/{doc_id}", DocumentActionResponse>(
+    return putJson<"/api/documents/{doc_id}">(
       "/api/documents/{doc_id}",
       `/api/documents/${encodeURIComponent(documentId)}`,
       body,
@@ -456,14 +437,14 @@ export const api = {
   },
 
   deleteDocument(documentId: string) {
-    return deleteJson<"/api/documents/{doc_id}", DocumentActionResponse>(
+    return deleteJson<"/api/documents/{doc_id}">(
       "/api/documents/{doc_id}",
       `/api/documents/${encodeURIComponent(documentId)}`,
     )
   },
 
   retryDocumentProcessing(documentId: string) {
-    return postJson<"/api/documents/{doc_id}/retry", DocumentActionResponse>(
+    return postJson<"/api/documents/{doc_id}/retry">(
       "/api/documents/{doc_id}/retry",
       `/api/documents/${encodeURIComponent(documentId)}/retry`,
     )
@@ -587,11 +568,11 @@ export const api = {
   },
 
   getRuntimeConfig() {
-    return getJson<"/api/settings/runtime", RuntimeConfigResponse>("/api/settings/runtime")
+    return getJson<"/api/settings/runtime">("/api/settings/runtime")
   },
 
   updateRuntimeConfig(body: RuntimeConfigUpdate) {
-    return putJson<"/api/settings/runtime", RuntimeConfigResponse>(
+    return putJson<"/api/settings/runtime">(
       "/api/settings/runtime",
       "/api/settings/runtime",
       body,
@@ -599,11 +580,11 @@ export const api = {
   },
 
   getAgents() {
-    return getJson<"/api/settings/agents", AgentConfigsResponse>("/api/settings/agents")
+    return getJson<"/api/settings/agents">("/api/settings/agents")
   },
 
   updateAgentConfig(agentType: string, body: AgentConfigUpdate) {
-    return putJson<"/api/settings/agents/{agent_type}", AgentConfigItem>(
+    return putJson<"/api/settings/agents/{agent_type}">(
       "/api/settings/agents/{agent_type}",
       `/api/settings/agents/${encodeURIComponent(agentType)}`,
       body,
