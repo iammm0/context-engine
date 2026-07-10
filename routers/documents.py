@@ -490,7 +490,7 @@ class DocumentActionResponse(BaseModel):
     task: Optional[TaskDispatchInfo] = None
 
 
-@router.post("/{doc_id}/retry", response_model=DocumentActionResponse)
+@router.post("/{doc_id}/retry", response_model=DocumentActionResponse, status_code=status.HTTP_202_ACCEPTED)
 async def retry_document_processing(
     doc_id: str,
     background_tasks: BackgroundTasks,

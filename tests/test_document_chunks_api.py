@@ -11,6 +11,16 @@ from routers import documents as documents_router
 from services.document_task_dispatcher import DocumentTaskQueueError
 
 
+def test_retry_document_processing_route_returns_accepted():
+    route = next(
+        route
+        for route in documents_router.router.routes
+        if getattr(route, "path", None) == "/{doc_id}/retry" and "POST" in getattr(route, "methods", set())
+    )
+
+    assert route.status_code == 202
+
+
 class FakeDocumentRepo:
     def get_document(self, doc_id):
         return {
