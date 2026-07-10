@@ -7,33 +7,10 @@ export interface ApiEnvelope<T> {
   error?: string
 }
 
-export interface ModelInfo {
-  name: string
-  size?: number
-  digest?: string
-  modified_at?: string
-}
-
-export interface ModelsResponse {
-  models: ModelInfo[]
-}
-
-export interface ConversationSummary {
-  id: string
-  user_id?: string | null
-  title: string
-  message_count: number
-  assistant_id?: string | null
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface ConversationListResponse {
-  conversations: ConversationSummary[]
-  total: number
-  skip: number
-  limit: number
-}
+export type ModelInfo = Schemas["ModelInfo"]
+export type ModelsResponse = Schemas["ModelsResponse"]
+export type ConversationSummary = Schemas["ConversationSummaryResponse"]
+export type ConversationListResponse = Schemas["ConversationListResponse"]
 
 export interface SourceInfo {
   title?: string
@@ -67,17 +44,17 @@ export interface RecommendedResource {
   description?: string
 }
 
-export interface ConversationMessage {
-  message_id?: string
+export type ConversationMessage = Omit<
+  Schemas["ConversationMessageResponse"],
+  "role" | "sources" | "evidence" | "evidence_quality" | "citation_warnings" | "citation_quality" | "recommended_resources"
+> & {
   role: "user" | "assistant"
-  content: string
-  timestamp?: string | null
-  sources?: SourceInfo[]
-  evidence?: EvidenceItem[]
+  sources?: SourceInfo[] | null
+  evidence?: EvidenceItem[] | null
   evidence_quality?: EvidenceQuality | null
-  citation_warnings?: string[]
+  citation_warnings?: string[] | null
   citation_quality?: CitationQuality | null
-  recommended_resources?: RecommendedResource[]
+  recommended_resources?: RecommendedResource[] | null
 }
 
 export type MessagePayload = Omit<
@@ -97,14 +74,8 @@ export type ChatRequestPayload = Omit<Schemas["ChatRequest"], "enable_rag" | "mo
   Partial<Pick<Schemas["ChatRequest"], "enable_rag" | "mode">>
 export type ConversationAttachmentStatus = Schemas["ConversationAttachmentStatus"]
 
-export interface ConversationDetail {
-  id: string
-  user_id?: string | null
-  title: string
-  assistant_id?: string | null
+export type ConversationDetail = Omit<Schemas["ConversationDetailResponse"], "messages"> & {
   messages: ConversationMessage[]
-  created_at?: string | null
-  updated_at?: string | null
 }
 
 export type ConversationUpdate = Schemas["ConversationUpdate"]

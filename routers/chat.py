@@ -107,6 +107,63 @@ class DeepResearchGateDecision(BaseModel):
     reasons: List[str]
 
 
+class ModelInfo(BaseModel):
+    """Available model metadata."""
+    name: str
+    size: Optional[int] = None
+    digest: Optional[str] = None
+    modified_at: Optional[str] = None
+
+
+class ModelsResponse(BaseModel):
+    """Available models response."""
+    models: List[ModelInfo]
+
+
+class ConversationSummaryResponse(BaseModel):
+    """Conversation list item."""
+    id: str
+    user_id: Optional[str] = None
+    title: str
+    message_count: int
+    assistant_id: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ConversationListResponse(BaseModel):
+    """Conversation list response."""
+    conversations: List[ConversationSummaryResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+class ConversationMessageResponse(BaseModel):
+    """Conversation detail message item."""
+    message_id: Optional[str] = None
+    role: str
+    content: str
+    timestamp: Optional[str] = None
+    sources: Optional[List[Dict[str, Any]]] = None
+    evidence: Optional[List[Dict[str, Any]]] = None
+    evidence_quality: Optional[Dict[str, Any]] = None
+    citation_warnings: Optional[List[str]] = None
+    citation_quality: Optional[Dict[str, Any]] = None
+    recommended_resources: Optional[List[Dict[str, Any]]] = None
+
+
+class ConversationDetailResponse(BaseModel):
+    """Conversation detail response."""
+    id: str
+    user_id: Optional[str] = None
+    title: str
+    assistant_id: Optional[str] = None
+    messages: List[ConversationMessageResponse]
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 class ConversationCreateResponse(BaseModel):
     """Conversation creation response."""
     id: str
@@ -204,7 +261,7 @@ def _evaluate_deep_research_value(query: str, threshold: int) -> DeepResearchGat
     )
 
 
-@router.get("/models")
+@router.get("/models", response_model=ModelsResponse)
 async def list_models():
     """获取可用模型列表"""
     try:
@@ -302,7 +359,7 @@ async def create_conversation(
         )
 
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=ConversationListResponse)
 async def list_conversations(
     skip: int = 0,
     limit: int = 100,
@@ -347,7 +404,7 @@ async def list_conversations(
         )
 
 
-@router.get("/conversations/{conversation_id}")
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
 async def get_conversation(
     conversation_id: str,
     _: None = Depends(require_mongodb),

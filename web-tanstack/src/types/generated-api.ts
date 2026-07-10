@@ -939,6 +939,96 @@ export interface components {
             updated_at: string;
         };
         /**
+         * ConversationDetailResponse
+         * @description Conversation detail response.
+         */
+        ConversationDetailResponse: {
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Title */
+            title: string;
+            /** Assistant Id */
+            assistant_id?: string | null;
+            /** Messages */
+            messages: components["schemas"]["ConversationMessageResponse"][];
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * ConversationListResponse
+         * @description Conversation list response.
+         */
+        ConversationListResponse: {
+            /** Conversations */
+            conversations: components["schemas"]["ConversationSummaryResponse"][];
+            /** Total */
+            total: number;
+            /** Skip */
+            skip: number;
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * ConversationMessageResponse
+         * @description Conversation detail message item.
+         */
+        ConversationMessageResponse: {
+            /** Message Id */
+            message_id?: string | null;
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Sources */
+            sources?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Evidence Quality */
+            evidence_quality?: {
+                [key: string]: unknown;
+            } | null;
+            /** Citation Warnings */
+            citation_warnings?: string[] | null;
+            /** Citation Quality */
+            citation_quality?: {
+                [key: string]: unknown;
+            } | null;
+            /** Recommended Resources */
+            recommended_resources?: {
+                [key: string]: unknown;
+            }[] | null;
+        };
+        /**
+         * ConversationSummaryResponse
+         * @description Conversation list item.
+         */
+        ConversationSummaryResponse: {
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Title */
+            title: string;
+            /** Message Count */
+            message_count: number;
+            /** Assistant Id */
+            assistant_id?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
          * ConversationUpdate
          * @description 更新对话请求
          */
@@ -1302,6 +1392,28 @@ export interface components {
             content: string;
         };
         /**
+         * ModelInfo
+         * @description Available model metadata.
+         */
+        ModelInfo: {
+            /** Name */
+            name: string;
+            /** Size */
+            size?: number | null;
+            /** Digest */
+            digest?: string | null;
+            /** Modified At */
+            modified_at?: string | null;
+        };
+        /**
+         * ModelsResponse
+         * @description Available models response.
+         */
+        ModelsResponse: {
+            /** Models */
+            models: components["schemas"]["ModelInfo"][];
+        };
+        /**
          * QueryAnalysisRequest
          * @description 查询分析请求模型
          */
@@ -1481,7 +1593,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ModelsResponse"];
                 };
             };
         };
@@ -1537,7 +1649,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1601,7 +1713,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationDetailResponse"];
                 };
             };
             /** @description Validation Error */
