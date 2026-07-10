@@ -33,11 +33,13 @@
   - `POST /api/knowledge-spaces`
   - `GET /api/documents`
   - `POST /api/documents/upload`
+  - `GET /api/documents/{id}/progress/stream`
   - `GET /api/settings/runtime`
   - `GET /api/settings/agents`
+- 通过 `npm run generate:api` 从 FastAPI OpenAPI schema 生成 `src/types/generated-api.ts`
 - 做了 3 个主页面：
   - `Chat`：SSE 流式聊天、会话列表、RAG 开关
-  - `Documents`：知识空间列表、上传入口、TanStack Table + Virtual 文档表格
+  - `Documents`：知识空间列表、上传入口、TanStack Table + Virtual 文档表格、文档处理进度 SSE 订阅
   - `Settings`：React Flow 架构图、Monaco 配置编辑器、xterm.js 终端面板
 - 完成 `shadcn/ui` 初始化和 `components.json`
 - 已通过 `npm run build` 和 `npm run lint`
@@ -49,6 +51,7 @@
 ```bash
 cd web-tanstack
 npm install
+npm run generate:api
 npm run dev
 ```
 

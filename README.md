@@ -92,6 +92,14 @@ docker compose up -d
 
 这个 compose 文件只启动 MongoDB、Qdrant、Neo4j 和 Redis，不启动 FastAPI 应用本身。
 
+文档入库处理默认会优先投递到 Celery/Redis 队列。Windows 本地开发可以在另一个 PowerShell 里启动 worker：
+
+```powershell
+.\scripts\start-celery-worker.ps1
+```
+
+如果暂时不启动 worker，可在环境变量里设置 `DOCUMENT_TASK_BACKEND=local`，或保持 `DOCUMENT_TASK_FALLBACK_LOCAL=true` 让上传在 Celery 投递失败时回退到 FastAPI BackgroundTasks。
+
 ### 3. 准备 Python 依赖
 
 ```bash
@@ -264,6 +272,7 @@ docker run -d \
 - `PUT /api/documents/{doc_id}`：更新文档
 - `DELETE /api/documents/{doc_id}`：删除文档
 - `GET /api/documents/{doc_id}/progress`：文档处理进度
+- `GET /api/documents/{doc_id}/progress/stream`：文档处理进度 SSE 流
 - `POST /api/documents/{doc_id}/retry`：重试文档处理
 - `GET /api/documents/{doc_id}/preview`：文档预览
 
@@ -338,6 +347,7 @@ TanStack 前端：
 
 ```bash
 cd web-tanstack
+npm run generate:api
 npm run lint
 npm run build
 ```

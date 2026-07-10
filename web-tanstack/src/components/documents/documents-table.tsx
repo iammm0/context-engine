@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { DatabaseZap, FileUp, LoaderCircle } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import { useUiStore } from "@/stores/ui-store"
-import type { DocumentItem } from "@/types/api"
+import type { DocumentItem, DocumentListResponse, DocumentProgress } from "@/types/api"
+
+const STREAMING_DOCUMENT_STATUSES = new Set(["uploading", "processing", "parsing", "chunking", "embedding"])
 
 function formatBytes(size: number) {
   if (size < 1024) {
@@ -91,6 +93,65 @@ export function DocumentsTable() {
   })
 
   const data = useMemo(() => documentsQuery.data?.documents || [], [documentsQuery.data])
+  const streamingDocumentKey = useMemo(
+    () =>
+      data
+        .filter((document) => STREAMING_DOCUMENT_STATUSES.has(document.status))
+        .map((document) => document.id)
+        .sort()
+        .join("|"),
+    [data],
+  )
+
+  useEffect(() => {
+    const documentIds = streamingDocumentKey ? streamingDocumentKey.split("|") : []
+    if (!documentIds.length) {
+      return
+    }
+
+    const updateDocumentProgress = (progress: DocumentProgress) => {
+      queryClient.setQueryData<DocumentListResponse>(["documents", selectedKnowledgeSpaceId], (existing) => {
+        if (!existing) {
+          return existing
+        }
+
+        return {
+          ...existing,
+          documents: existing.documents.map((document) =>
+            document.id === progress.document_id
+              ? {
+                  ...document,
+                  status: progress.status,
+                  progress_percentage: progress.progress_percentage,
+                  current_stage: progress.current_stage,
+                  stage_details: progress.stage_details,
+                }
+              : document,
+          ),
+        }
+      })
+    }
+
+    const unsubscribers = documentIds.map((documentId) =>
+      api.subscribeDocumentProgress(
+        documentId,
+        updateDocumentProgress,
+        (progress) => {
+          updateDocumentProgress(progress)
+          void queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+        },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+        },
+      ),
+    )
+
+    return () => {
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe()
+      }
+    }
+  }, [queryClient, selectedKnowledgeSpaceId, streamingDocumentKey])
 
   const columns = useMemo(
     () => [
