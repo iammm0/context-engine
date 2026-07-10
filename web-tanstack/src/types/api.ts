@@ -93,6 +93,9 @@ export type MessagePayload = Omit<
   recommended_resources?: RecommendedResource[] | null
 }
 
+export type ChatRequestPayload = Omit<Schemas["ChatRequest"], "enable_rag" | "mode"> &
+  Partial<Pick<Schemas["ChatRequest"], "enable_rag" | "mode">>
+
 export interface ConversationDetail {
   id: string
   user_id?: string | null

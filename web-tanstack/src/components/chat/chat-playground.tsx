@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, Check, Cpu, FileSearch, Pencil, SendHorizontal, Sparkles, Trash2, User, X } from "lucide-react"
+import { Bot, Check, Cpu, FileSearch, Pencil, RotateCcw, SendHorizontal, Sparkles, Trash2, User, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -517,6 +517,128 @@ export function ChatPlayground() {
     },
   })
 
+  const regenerateMessageMutation = useMutation({
+    mutationFn: async (message: ConversationMessage) => {
+      if (!activeConversationId) {
+        throw new Error("未选择会话")
+      }
+      if (!message.message_id || message.role !== "user") {
+        throw new Error("只能重新生成用户消息对应的回答")
+      }
+
+      const conversationId = activeConversationId
+      const currentConversation =
+        queryClient.getQueryData<ConversationDetail>(["conversation", conversationId]) || conversationDetailQuery.data
+
+      if (!currentConversation) {
+        throw new Error("当前会话尚未加载")
+      }
+
+      const messageIndex = currentConversation.messages.findIndex((item) => item.message_id === message.message_id)
+      if (messageIndex < 0) {
+        throw new Error("找不到要重新生成的消息")
+      }
+
+      const regenerateResult = await api.regenerateConversationMessage(conversationId, message.message_id)
+      if (regenerateResult.error) {
+        throw new Error(regenerateResult.error)
+      }
+
+      const keptMessages = currentConversation.messages.slice(0, messageIndex + 1)
+      queryClient.setQueryData(["conversation", conversationId], {
+        ...currentConversation,
+        messages: keptMessages,
+      })
+
+      setDraftAnswer("")
+      setStreamingMeta({ evidence: 0, sources: 0, status: "Regenerating" })
+      let assistantText = ""
+      let finalEvent: ChatStreamEvent | undefined
+      let streamError: string | undefined
+
+      await api.streamChat(
+        {
+          query: message.content,
+          conversation_id: conversationId,
+          knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
+          enable_rag: enableRag,
+          generation_config: {
+            llm_model: modelsQuery.data?.models?.[0]?.name,
+          },
+        },
+        (event) => {
+          finalEvent = event.done ? event : finalEvent
+
+          if (event.error) {
+            streamError = event.error
+            setDraftAnswer(`请求失败：${event.error}`)
+            setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
+            return
+          }
+
+          if (event.content) {
+            assistantText += event.content
+            setDraftAnswer(assistantText)
+          }
+
+          if (event.done) {
+            queryClient.setQueryData(["conversation", conversationId], (existing: ConversationDetail | undefined) => ({
+              ...(existing || currentConversation),
+              messages: [
+                ...(existing?.messages || keptMessages),
+                {
+                  role: "assistant",
+                  content: assistantText,
+                  timestamp: new Date().toISOString(),
+                  sources: event.sources,
+                  evidence: event.evidence,
+                  evidence_quality: event.evidence_quality,
+                  citation_warnings: event.citation_warnings,
+                  citation_quality: event.citation_quality,
+                  recommended_resources: event.recommended_resources,
+                },
+              ],
+            }))
+            setStreamingMeta({
+              evidence: event.evidence?.length || 0,
+              sources: event.sources?.length || 0,
+              status: "Done",
+            })
+            setDraftAnswer("")
+          }
+        },
+      )
+
+      if (streamError) {
+        throw new Error(streamError)
+      }
+
+      if (assistantText.trim()) {
+        await api.addConversationMessage(conversationId, {
+          role: "assistant",
+          content: assistantText,
+          sources: finalEvent?.sources,
+          evidence: finalEvent?.evidence,
+          evidence_quality: finalEvent?.evidence_quality,
+          citation_warnings: finalEvent?.citation_warnings,
+          citation_quality: finalEvent?.citation_quality,
+          recommended_resources: finalEvent?.recommended_resources,
+        })
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+        queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
+      ])
+    },
+    onSuccess: () => {
+      setActionMessage({ tone: "success", text: "回答已重新生成" })
+    },
+    onError: (error) => {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "重新生成失败" })
+    },
+  })
+
   const sendMutation = useMutation({
     mutationFn: async (question: string) => {
       let conversationId = activeConversationId
@@ -604,6 +726,7 @@ export function ChatPlayground() {
               sources: event.sources?.length || 0,
               status: "Done",
             })
+            setDraftAnswer("")
           }
         },
       )
@@ -874,7 +997,7 @@ export function ChatPlayground() {
                         {message.evidence?.length ? <span>{message.evidence.length} evidence</span> : null}
                       </div>
                       {message.role === "user" && message.message_id && editingMessageId !== message.message_id ? (
-                        <div className="mt-2 flex justify-end">
+                        <div className="mt-2 flex justify-end gap-2">
                           <Button
                             className="bg-white/10 text-white hover:bg-white/20"
                             onClick={() => {
@@ -886,6 +1009,16 @@ export function ChatPlayground() {
                           >
                             <Pencil className="size-3" />
                             编辑
+                          </Button>
+                          <Button
+                            className="bg-white/10 text-white hover:bg-white/20"
+                            disabled={regenerateMessageMutation.isPending}
+                            onClick={() => regenerateMessageMutation.mutate(message)}
+                            size="xs"
+                            variant="ghost"
+                          >
+                            <RotateCcw className="size-3" />
+                            重生成
                           </Button>
                         </div>
                       ) : null}
@@ -932,7 +1065,7 @@ export function ChatPlayground() {
 
                 <Button
                   className="h-14 rounded-2xl"
-                  disabled={!prompt.trim() || sendMutation.isPending}
+                  disabled={!prompt.trim() || sendMutation.isPending || regenerateMessageMutation.isPending}
                   onClick={() => {
                     void sendMutation.mutateAsync(prompt)
                     setPrompt("")

@@ -3,6 +3,7 @@ import type {
   AgentConfigUpdate,
   AgentConfigsResponse,
   ApiEnvelope,
+  ChatRequestPayload,
   ChatStreamEvent,
   DocumentChunksResponse,
   ConversationUpdate,
@@ -18,14 +19,6 @@ import type {
   RuntimeConfigResponse,
   RuntimeConfigUpdate,
 } from "@/types/api"
-
-type ChatPayload = {
-  query: string
-  conversation_id?: string
-  knowledge_space_ids?: string[]
-  enable_rag?: boolean
-  generation_config?: Record<string, unknown>
-}
 
 type UploadDocumentResponse = {
   message?: string
@@ -223,7 +216,16 @@ export const api = {
     )
   },
 
-  async streamChat(body: ChatPayload, onEvent: (event: ChatStreamEvent) => void) {
+  regenerateConversationMessage(conversationId: string, messageId: string) {
+    return requestJson<{ success?: boolean; message?: string; message_id?: string; remaining_messages?: number }>(
+      `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/regenerate`,
+      {
+        method: "POST",
+      },
+    )
+  },
+
+  async streamChat(body: ChatRequestPayload, onEvent: (event: ChatStreamEvent) => void) {
     const response = await fetch(apiUrl("/api/chat/"), {
       method: "POST",
       headers: {
