@@ -75,6 +75,20 @@ type QueryAnalysisRun = {
   error?: string | null
 }
 
+type CitationTargetKind = "evidence" | "audit" | "source" | "ref"
+type CitationTargetRegistrar = (
+  messageKey: string,
+  kind: CitationTargetKind,
+  citationId: string,
+  node: HTMLDivElement | null,
+) => void
+
+const CITATION_TARGET_PRIORITY: CitationTargetKind[] = ["evidence", "audit", "source", "ref"]
+
+function citationTargetKey(messageKey: string, citationId: string, kind: CitationTargetKind) {
+  return `${messageKey}::${citationId}::${kind}`
+}
+
 function formatTime(value?: string | null) {
   if (!value) {
     return "刚刚"
@@ -457,11 +471,15 @@ function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNo
 
 function EvidenceRefList({
   activeCitationId,
+  messageKey,
+  registerCitationTarget,
   title,
   items,
   tone,
 }: {
   activeCitationId?: string | null
+  messageKey?: string
+  registerCitationTarget?: CitationTargetRegistrar
   title: string
   items?: CitationEvidenceRef[]
   tone: "amber" | "rose"
@@ -490,6 +508,11 @@ function EvidenceRefList({
                 isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
               )}
               key={`${title}-${item.id}-${item.chunk_id || item.chunk_index || item.score}`}
+              ref={(node) => {
+                if (messageKey) {
+                  registerCitationTarget?.(messageKey, "ref", item.id, node)
+                }
+              }}
             >
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <DiagnosticBadge tone={tone}>{item.id}</DiagnosticBadge>
@@ -535,9 +558,13 @@ function EvidenceRefList({
 
 function ReferenceSourceList({
   activeCitationId,
+  messageKey,
+  registerCitationTarget,
   sources,
 }: {
   activeCitationId?: string | null
+  messageKey: string
+  registerCitationTarget?: CitationTargetRegistrar
   sources?: SourceInfo[] | null
 }) {
   if (!sources?.length) {
@@ -561,6 +588,11 @@ function ReferenceSourceList({
                 isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
               )}
               key={`${source.document_id || source.file_id || source.title || "source"}-${source.chunk_id || source.chunk_index || index}`}
+              ref={(node) => {
+                if (source.evidence_id) {
+                  registerCitationTarget?.(messageKey, "source", source.evidence_id, node)
+                }
+              }}
             >
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <DiagnosticBadge tone="sky">{index + 1}</DiagnosticBadge>
@@ -600,9 +632,13 @@ function ReferenceSourceList({
 function MessageDiagnostics({
   activeCitationId,
   message,
+  messageKey,
+  registerCitationTarget,
 }: {
   activeCitationId?: string | null
   message: ConversationMessage
+  messageKey: string
+  registerCitationTarget?: CitationTargetRegistrar
 }) {
   if (message.role === "user") {
     return null
@@ -657,7 +693,12 @@ function MessageDiagnostics({
         </div>
       ) : null}
 
-      <ReferenceSourceList activeCitationId={activeCitationId} sources={message.sources} />
+      <ReferenceSourceList
+        activeCitationId={activeCitationId}
+        messageKey={messageKey}
+        registerCitationTarget={registerCitationTarget}
+        sources={message.sources}
+      />
 
       {message.citation_quality?.evidence_citation_audit?.length ? (
         <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800" open>
@@ -678,6 +719,7 @@ function MessageDiagnostics({
                     isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
                   )}
                   key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-audit`}
+                  ref={(node) => registerCitationTarget?.(messageKey, "audit", item.id, node)}
                 >
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <DiagnosticBadge>{item.id}</DiagnosticBadge>
@@ -723,12 +765,16 @@ function MessageDiagnostics({
 
       <EvidenceRefList
         activeCitationId={activeCitationId}
+        messageKey={messageKey}
+        registerCitationTarget={registerCitationTarget}
         title="已引用需复核证据"
         items={message.citation_quality?.cited_risky_evidence}
         tone="rose"
       />
       <EvidenceRefList
         activeCitationId={activeCitationId}
+        messageKey={messageKey}
+        registerCitationTarget={registerCitationTarget}
         title="未引用高分证据"
         items={message.citation_quality?.unreferenced_top_evidence}
         tone="amber"
@@ -751,6 +797,7 @@ function MessageDiagnostics({
                     isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
                   )}
                   key={`${item.id}-${item.chunk_id}`}
+                  ref={(node) => registerCitationTarget?.(messageKey, "evidence", item.id, node)}
                 >
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <DiagnosticBadge tone="emerald">{item.id}</DiagnosticBadge>
@@ -930,14 +977,37 @@ export function ChatPlayground() {
     citationId: string
   } | null>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
+  const citationTargetRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
   const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
   const queryAnalysisSubscriptionRef = useRef<(() => void) | null>(null)
 
+  const registerCitationTarget = useCallback<CitationTargetRegistrar>((messageKey, kind, citationId, node) => {
+    const key = citationTargetKey(messageKey, citationId, kind)
+    if (node) {
+      citationTargetRefs.current[key] = node
+    } else {
+      delete citationTargetRefs.current[key]
+    }
+  }, [])
+
+  const scrollToCitationTarget = useCallback((messageKey: string, citationId: string) => {
+    window.setTimeout(() => {
+      for (const kind of CITATION_TARGET_PRIORITY) {
+        const target = citationTargetRefs.current[citationTargetKey(messageKey, citationId, kind)]
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "nearest" })
+          return
+        }
+      }
+    }, 0)
+  }, [])
+
   const handleCitationClick = useCallback((messageKey: string, citationId: string) => {
     setActiveCitation({ conversationId: activeConversationId, messageKey, citationId })
-  }, [activeConversationId])
+    scrollToCitationTarget(messageKey, citationId)
+  }, [activeConversationId, scrollToCitationTarget])
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -2171,7 +2241,12 @@ export function ChatPlayground() {
                           </Button>
                         </div>
                       ) : null}
-                      <MessageDiagnostics activeCitationId={activeCitationId} message={message} />
+                      <MessageDiagnostics
+                        activeCitationId={activeCitationId}
+                        message={message}
+                        messageKey={messageKey}
+                        registerCitationTarget={registerCitationTarget}
+                      />
                     </div>
                   </div>
                   )
