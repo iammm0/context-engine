@@ -4,9 +4,7 @@ import type {
   ChatRequestPayload,
   ChatStreamEvent,
   ConversationAttachmentStatus,
-  ConversationAttachmentUploadResponse,
   DocumentChunksResponse,
-  DocumentUploadResponse,
   DeepResearchEvaluateRequest,
   DeepResearchRequest,
   DeepResearchStreamEvent,
@@ -97,7 +95,7 @@ async function readJson<T>(response: Response): Promise<T | undefined> {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiEnvelope<T>> {
+async function requestJson<T>(path: string, init?: RequestInit, fallbackError = "网络错误"): Promise<ApiEnvelope<T>> {
   try {
     const response = await fetch(apiUrl(path), {
       ...init,
@@ -114,7 +112,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiEnve
 
     return { data: payload as T }
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "网络错误" }
+    return { error: error instanceof Error ? error.message : fallbackError }
   }
 }
 
@@ -153,6 +151,24 @@ function postJson<Path extends keyof paths, Result = JsonResponseFor<Path, "post
     headers: body === undefined ? init?.headers : jsonHeaders(init?.headers),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+}
+
+function postForm<Path extends keyof paths, Result = JsonResponseFor<Path, "post">>(
+  _route: Path,
+  path: string,
+  body: FormData,
+  fallbackError: string,
+  init?: JsonRequestOptions,
+) {
+  return requestJson<Result>(
+    path,
+    {
+      ...init,
+      method: "POST",
+      body,
+    },
+    fallbackError,
+  )
 }
 
 function putJson<Path extends keyof paths, Result = JsonResponseFor<Path, "put">>(
@@ -455,26 +471,17 @@ export const api = {
     return `${apiUrl(`/api/documents/${encodeURIComponent(documentId)}/preview`)}${pageFragment}`
   },
 
-  async uploadDocument(knowledgeSpaceId: string, file: File): Promise<ApiEnvelope<DocumentUploadResponse>> {
+  uploadDocument(knowledgeSpaceId: string, file: File) {
     const form = new FormData()
     form.append("file", file)
     form.append("knowledge_space_id", knowledgeSpaceId)
 
-    try {
-      const response = await fetch(apiUrl("/api/documents/upload"), {
-        method: "POST",
-        body: form,
-      })
-      const payload = await readJson<unknown>(response)
-
-      if (!response.ok) {
-        return { error: parseHttpError(payload) }
-      }
-
-      return { data: payload as DocumentUploadResponse }
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "上传失败" }
-    }
+    return postForm<"/api/documents/upload">(
+      "/api/documents/upload",
+      "/api/documents/upload",
+      form,
+      "上传失败",
+    )
   },
 
   subscribeDocumentProgress(
@@ -492,31 +499,22 @@ export const api = {
     })
   },
 
-  async uploadConversationAttachment(
+  uploadConversationAttachment(
     conversationId: string,
     knowledgeSpaceId: string,
     file: File,
-  ): Promise<ApiEnvelope<ConversationAttachmentUploadResponse>> {
+  ) {
     const form = new FormData()
     form.append("file", file)
     form.append("conversation_id", conversationId)
     form.append("knowledge_space_id", knowledgeSpaceId)
 
-    try {
-      const response = await fetch(apiUrl("/api/chat/conversation-attachment"), {
-        method: "POST",
-        body: form,
-      })
-      const payload = await readJson<unknown>(response)
-
-      if (!response.ok) {
-        return { error: parseHttpError(payload) }
-      }
-
-      return { data: payload as ConversationAttachmentUploadResponse }
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "附件上传失败" }
-    }
+    return postForm<"/api/chat/conversation-attachment">(
+      "/api/chat/conversation-attachment",
+      "/api/chat/conversation-attachment",
+      form,
+      "附件上传失败",
+    )
   },
 
   getConversationAttachmentStatus(conversationId: string, fileId: string) {
