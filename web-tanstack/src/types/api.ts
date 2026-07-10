@@ -448,8 +448,10 @@ export interface ParseQualityCheck {
 }
 
 export type RuntimeConfigResponse = Schemas["RuntimeConfigResponse"]
+export type RuntimeConfigUpdate = Schemas["RuntimeConfigUpdateRequest"]
 export type AgentConfigItem = Schemas["AgentConfigItemResponse"]
 export type AgentConfigsResponse = Schemas["AgentConfigsListResponse"]
+export type AgentConfigUpdate = Schemas["AgentConfigUpdateRequest"]
 
 export interface DeepResearchEvaluation {
   should_deep_research: boolean

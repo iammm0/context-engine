@@ -1,4 +1,6 @@
 import type {
+  AgentConfigItem,
+  AgentConfigUpdate,
   AgentConfigsResponse,
   ApiEnvelope,
   ChatStreamEvent,
@@ -12,6 +14,7 @@ import type {
   MessagePayload,
   ModelsResponse,
   RuntimeConfigResponse,
+  RuntimeConfigUpdate,
 } from "@/types/api"
 
 type ChatPayload = {
@@ -301,7 +304,23 @@ export const api = {
     return requestJson<RuntimeConfigResponse>("/api/settings/runtime")
   },
 
+  updateRuntimeConfig(body: RuntimeConfigUpdate) {
+    return requestJson<RuntimeConfigResponse>("/api/settings/runtime", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  },
+
   getAgents() {
     return requestJson<AgentConfigsResponse>("/api/settings/agents")
+  },
+
+  updateAgentConfig(agentType: string, body: AgentConfigUpdate) {
+    return requestJson<AgentConfigItem>(`/api/settings/agents/${encodeURIComponent(agentType)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
   },
 }
