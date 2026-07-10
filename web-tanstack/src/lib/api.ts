@@ -23,13 +23,17 @@ import type {
   DocumentListResponse,
   DocumentProgress,
   DocumentUpdate,
+  HealthStatus,
   KnowledgeSpace,
   KnowledgeSpacesResponse,
+  MetricsResponse,
   MessageActionResponse,
   MessageUpdate,
   MessagePayload,
   ModelsResponse,
+  ProbeStatusResponse,
   RegenerateMessageResponse,
+  RootResponse,
   RuntimeConfigResponse,
   RuntimeConfigUpdate,
 } from "@/types/api"
@@ -156,6 +160,22 @@ async function parseSseResponse<T>(response: Response, onEvent: (event: T) => vo
 }
 
 export const api = {
+  getRoot() {
+    return requestJson<RootResponse>("/")
+  },
+
+  getHealth() {
+    return requestJson<HealthStatus>("/health")
+  },
+
+  getReadiness() {
+    return requestJson<ProbeStatusResponse>("/health/readiness")
+  },
+
+  getMetrics() {
+    return requestJson<MetricsResponse>("/health/metrics")
+  },
+
   getModels() {
     return requestJson<ModelsResponse>("/api/chat/models")
   },

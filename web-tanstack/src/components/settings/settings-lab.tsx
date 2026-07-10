@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, CheckCircle2, Cpu, RefreshCw, RotateCcw, Save, Settings2, SlidersHorizontal } from "lucide-react"
+import { Activity, Bot, CheckCircle2, Cpu, RefreshCw, RotateCcw, Save, Settings2, SlidersHorizontal } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
-import type { AgentConfigItem, AgentConfigUpdate, RuntimeConfigResponse, RuntimeConfigUpdate } from "@/types/api"
+import type {
+  AgentConfigItem,
+  AgentConfigUpdate,
+  MetricsResponse,
+  RuntimeConfigResponse,
+  RuntimeConfigUpdate,
+} from "@/types/api"
 
 type RuntimeMode = RuntimeConfigResponse["mode"]
 type ParamInputType = "boolean" | "number" | "text"
@@ -128,6 +134,33 @@ function feedbackClass(tone: Feedback["tone"]) {
   return "border-sky-200 bg-sky-50 text-sky-800"
 }
 
+function statusBadgeClass(status?: string) {
+  const normalized = (status || "").toLowerCase()
+  if (["healthy", "ready", "alive"].includes(normalized)) {
+    return "bg-emerald-100 text-emerald-800"
+  }
+  if (["degraded", "not_ready"].includes(normalized)) {
+    return "bg-amber-100 text-amber-800"
+  }
+  if (normalized) {
+    return "bg-rose-100 text-rose-800"
+  }
+  return "bg-slate-100 text-slate-600"
+}
+
+function metricNumber(metrics: MetricsResponse | undefined, group: string, key: string) {
+  const groupValue = metrics?.system_metrics?.[group]
+  if (!groupValue || typeof groupValue !== "object") {
+    return undefined
+  }
+  const value = (groupValue as Record<string, unknown>)[key]
+  return typeof value === "number" ? value : undefined
+}
+
+function formatPercent(value?: number) {
+  return typeof value === "number" ? `${Math.round(value)}%` : "未知"
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return "尚未保存"
@@ -179,7 +212,47 @@ export function SettingsLab() {
     },
   })
 
+  const healthQuery = useQuery({
+    queryKey: ["backend-health"],
+    queryFn: async () => {
+      const result = await api.getHealth()
+      if (result.error || !result.data) {
+        throw new Error(result.error || "健康状态为空")
+      }
+      return result.data
+    },
+    refetchInterval: 30_000,
+  })
+
+  const readinessQuery = useQuery({
+    queryKey: ["backend-readiness"],
+    queryFn: async () => {
+      const result = await api.getReadiness()
+      if (result.error || !result.data) {
+        throw new Error(result.error || "就绪状态为空")
+      }
+      return result.data
+    },
+    refetchInterval: 30_000,
+  })
+
+  const metricsQuery = useQuery({
+    queryKey: ["backend-metrics"],
+    queryFn: async () => {
+      const result = await api.getMetrics()
+      if (result.error || !result.data) {
+        throw new Error(result.error || "指标为空")
+      }
+      return result.data
+    },
+    refetchInterval: 30_000,
+  })
+
   const modelNames = useMemo(() => modelsQuery.data?.models?.map((model) => model.name) || [], [modelsQuery.data])
+  const healthServices = useMemo(() => Object.entries(healthQuery.data?.services || {}), [healthQuery.data])
+  const cpuPercent = metricNumber(metricsQuery.data, "cpu", "percent")
+  const memoryPercent = metricNumber(metricsQuery.data, "memory", "percent")
+  const diskPercent = metricNumber(metricsQuery.data, "disk", "percent")
   const runtimeBaseDraft = useMemo(() => buildRuntimeDraft(runtimeQuery.data), [runtimeQuery.data])
   const runtimeDraft = runtimeDraftOverride || runtimeBaseDraft
 
@@ -245,6 +318,9 @@ export function SettingsLab() {
     runtimeQuery.error instanceof Error ? `运行时配置加载失败：${runtimeQuery.error.message}` : null,
     agentsQuery.error instanceof Error ? `Agent 配置加载失败：${agentsQuery.error.message}` : null,
     modelsQuery.error instanceof Error ? `模型列表加载失败：${modelsQuery.error.message}` : null,
+    healthQuery.error instanceof Error ? `健康状态加载失败：${healthQuery.error.message}` : null,
+    readinessQuery.error instanceof Error ? `就绪状态加载失败：${readinessQuery.error.message}` : null,
+    metricsQuery.error instanceof Error ? `指标加载失败：${metricsQuery.error.message}` : null,
   ].filter(Boolean) as string[]
 
   const saveRuntime = () => {
@@ -470,6 +546,60 @@ export function SettingsLab() {
                 <div className="font-medium text-slate-900">{runtimeModeLabels[runtimeDraft.mode]}</div>
               </div>
             </div>
+            <section className="space-y-3 rounded-lg border border-[var(--blue-line)] bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                  <Activity className="size-4 text-emerald-700" />
+                  后端健康
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={statusBadgeClass(healthQuery.data?.status)}>
+                    {healthQuery.data?.status || "loading"}
+                  </Badge>
+                  <Badge className={statusBadgeClass(readinessQuery.data?.status)}>
+                    {readinessQuery.data?.status || "unknown"}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-xs text-slate-500">CPU</div>
+                  <div className="font-medium text-slate-900">{formatPercent(cpuPercent)}</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-xs text-slate-500">内存</div>
+                  <div className="font-medium text-slate-900">{formatPercent(memoryPercent)}</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-xs text-slate-500">磁盘</div>
+                  <div className="font-medium text-slate-900">{formatPercent(diskPercent)}</div>
+                </div>
+              </div>
+
+              {healthServices.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {healthServices.map(([name, value]) => {
+                    const service = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+                    const status = typeof service.status === "string" ? service.status : "unknown"
+                    const connected = typeof service.connected === "boolean" ? service.connected : undefined
+                    const error = typeof service.error === "string" ? service.error : ""
+                    return (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" key={name}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-slate-800">{name}</span>
+                          <Badge className={statusBadgeClass(status)}>{status}</Badge>
+                        </div>
+                        <div className="mt-1 text-slate-500">
+                          {connected === undefined ? "连接状态未知" : connected ? "已连接" : "未连接"}
+                        </div>
+                        {error ? <div className="mt-1 line-clamp-2 text-rose-700">{error}</div> : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </section>
           </CardContent>
         </Card>
       </div>
