@@ -344,7 +344,16 @@ async def get_document_progress(
         )
 
 
-@router.get("/{doc_id}/progress/stream")
+@router.get(
+    "/{doc_id}/progress/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream with document processing progress updates.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 async def stream_document_progress(
     doc_id: str,
     request: Request,

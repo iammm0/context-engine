@@ -839,7 +839,16 @@ async def regenerate_response(
         )
 
 
-@router.post("/")
+@router.post(
+    "/",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream with chat tokens and final retrieval metadata.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 async def chat(
     chat_request: ChatRequest,
     http_request: Request,
@@ -996,7 +1005,16 @@ async def chat(
         )
 
 
-@router.post("/deep-research")
+@router.post(
+    "/deep-research",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream with deep research planning, agent status, and results.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 async def deep_research_chat(
     research_request: DeepResearchRequest,
     http_request: Request,
@@ -1640,6 +1658,7 @@ async def get_conversation_attachment_status(
 
 @router.get(
     "/conversation-attachment/{conversation_id}/{file_id}/status/stream",
+    response_class=StreamingResponse,
     responses={
         200: {
             "description": "Server-sent event stream with attachment progress updates.",
