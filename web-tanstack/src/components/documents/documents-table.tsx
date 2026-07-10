@@ -17,6 +17,7 @@ import {
   SourceLocatorAnchorPreview,
 } from "@/components/evidence/source-locator-preview"
 import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
+import { MarkdownMessage } from "@/components/message/markdown-message"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1101,8 +1102,8 @@ export function DocumentsTable() {
                           </Button>
                         </div>
 
-                        <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                          {chunk.preview || chunk.text}
+                        <div className="max-h-[180px] overflow-auto text-slate-700">
+                          <MarkdownMessage className="text-sm leading-6" content={chunk.preview || chunk.text || ""} />
                         </div>
 
                         {sourceLocatorSummary ? (
