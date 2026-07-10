@@ -20,6 +20,17 @@ def _bool_env(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _run_local_document_processing(
+    file_path: str,
+    doc_id: str,
+    assistant_id: Optional[str],
+    knowledge_space_id: Optional[str],
+) -> None:
+    from services.document_ingestion import process_document_background
+
+    process_document_background(file_path, doc_id, assistant_id, knowledge_space_id)
+
+
 def _enqueue_local(
     background_tasks: BackgroundTasks,
     file_path: str,
@@ -28,10 +39,8 @@ def _enqueue_local(
     knowledge_space_id: Optional[str],
     reason: Optional[str] = None,
 ) -> Dict[str, Any]:
-    from services.document_ingestion import process_document_background
-
     background_tasks.add_task(
-        process_document_background,
+        _run_local_document_processing,
         file_path,
         doc_id,
         assistant_id,

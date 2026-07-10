@@ -31,7 +31,7 @@ def test_enqueue_document_processing_local_backend(monkeypatch):
     assert dispatch == {"backend": "fastapi-background", "task_id": None}
     assert len(background_tasks.tasks) == 1
     func, args, kwargs = background_tasks.tasks[0]
-    assert func.__module__ == "services.document_ingestion"
-    assert func.__name__ == "process_document_background"
+    assert func.__module__ == "services.document_task_dispatcher"
+    assert func.__name__ == "_run_local_document_processing"
     assert args == ("uploads/demo.pdf", "doc1", "assistant1", "space1")
     assert kwargs == {}

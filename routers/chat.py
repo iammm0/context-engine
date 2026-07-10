@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, BackgroundTasks, Form, Request, Depends
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, BackgroundTasks, Form, Request, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -1107,6 +1107,7 @@ class ConversationAttachmentStatus(BaseModel):
     """对话附件状态模型"""
     file_id: str
     conversation_id: str
+    document_id: Optional[str] = None
     filename: str
     status: str  # uploading, processing, parsing, chunking, embedding, completed, failed
     progress_percentage: Optional[int] = 0
@@ -1115,6 +1116,77 @@ class ConversationAttachmentStatus(BaseModel):
     message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+TERMINAL_ATTACHMENT_STATUSES = {"completed", "failed", "cancelled"}
+
+
+async def _build_conversation_attachment_status_payload(
+    conversation_id: str,
+    file_id: str,
+) -> ConversationAttachmentStatus:
+    """Build attachment progress from the attachment record plus linked document status."""
+
+    collection = mongodb.get_collection("conversations")
+    conversation = await collection.find_one({"_id": conversation_id})
+
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="对话不存在"
+        )
+
+    attachment_collection = mongodb.get_collection("conversation_attachments")
+    attachment = await attachment_collection.find_one({
+        "conversation_id": conversation_id,
+        "file_id": file_id
+    })
+
+    if not attachment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="附件不存在"
+        )
+
+    doc_status = attachment.get("status", "unknown")
+    progress_percentage = attachment.get("progress_percentage", 0)
+    current_stage = attachment.get("current_stage")
+    stage_details = attachment.get("stage_details")
+    message = attachment.get("message")
+
+    document_id = attachment.get("document_id")
+    if document_id:
+        try:
+            from database.mongodb import DocumentRepository, mongodb_client
+            if mongodb_client.db is None:
+                mongodb_client.connect()
+            repo = DocumentRepository(mongodb_client)
+            doc = repo.get_document(document_id)
+            if doc:
+                doc_status = doc.get("status", doc_status)
+                progress_percentage = doc.get("progress_percentage", progress_percentage)
+                current_stage = doc.get("current_stage", current_stage)
+                stage_details = doc.get("stage_details", stage_details)
+                if doc_status == "completed":
+                    message = "文件处理完成：已上传到目标知识空间，可用于增强检索。"
+                elif doc_status == "failed":
+                    message = message or doc.get("message") or stage_details or "文件处理失败"
+        except Exception as e:
+            logger.warning(f"读取文档进度失败: {e}")
+
+    return ConversationAttachmentStatus(
+        file_id=attachment.get("file_id"),
+        conversation_id=attachment.get("conversation_id"),
+        document_id=document_id,
+        filename=attachment.get("filename"),
+        status=doc_status,
+        progress_percentage=progress_percentage,
+        current_stage=current_stage,
+        stage_details=stage_details,
+        message=message,
+        created_at=attachment.get("created_at").isoformat() if attachment.get("created_at") else None,
+        updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None
+    )
 
 
 async def update_attachment_status(
@@ -1460,63 +1532,66 @@ async def get_conversation_attachment_status(
     
     实时返回处理进度和状态（包括上传中、解析中、分块中、向量化中、已完成等阶段）
     """
-    # 验证对话是否存在
-    collection = mongodb.get_collection("conversations")
-    conversation = await collection.find_one({"_id": conversation_id})
-    
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 获取附件状态
-    attachment_collection = mongodb.get_collection("conversation_attachments")
-    attachment = await attachment_collection.find_one({
-        "conversation_id": conversation_id,
-        "file_id": file_id
-    })
-    
-    if not attachment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="附件不存在"
-        )
-    
-    # 将状态与进度以 documents 为准（与知识库上传一致）
-    doc_status = attachment.get("status", "unknown")
-    progress_percentage = attachment.get("progress_percentage", 0)
-    current_stage = attachment.get("current_stage")
-    stage_details = attachment.get("stage_details")
-    message = attachment.get("message")
+    return await _build_conversation_attachment_status_payload(conversation_id, file_id)
 
-    document_id = attachment.get("document_id")
-    if document_id:
-        try:
-            from database.mongodb import DocumentRepository, mongodb_client
-            if mongodb_client.db is None:
-                mongodb_client.connect()
-            repo = DocumentRepository(mongodb_client)
-            doc = repo.get_document(document_id)
-            if doc:
-                doc_status = doc.get("status", doc_status)
-                progress_percentage = doc.get("progress_percentage", progress_percentage)
-                current_stage = doc.get("current_stage", current_stage)
-                stage_details = doc.get("stage_details", stage_details)
-                if doc_status == "completed":
-                    message = f"文件处理完成：已上传到目标知识空间，可用于增强检索。"
-        except Exception as e:
-            logger.warning(f"读取文档进度失败: {e}")
 
-    return ConversationAttachmentStatus(
-        file_id=attachment.get("file_id"),
-        conversation_id=attachment.get("conversation_id"),
-        filename=attachment.get("filename"),
-        status=doc_status,
-        progress_percentage=progress_percentage,
-        current_stage=current_stage,
-        stage_details=stage_details,
-        message=message,
-        created_at=attachment.get("created_at").isoformat() if attachment.get("created_at") else None,
-        updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None
+@router.get(
+    "/conversation-attachment/{conversation_id}/{file_id}/status/stream",
+    responses={
+        200: {
+            "description": "Server-sent event stream with attachment progress updates.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
+async def stream_conversation_attachment_status(
+    conversation_id: str,
+    file_id: str,
+    request: Request,
+    interval: float = Query(1.5, ge=0.5, le=10.0),
+    _: None = Depends(require_mongodb),
+):
+    """Stream conversation attachment processing progress as server-sent events."""
+
+    async def event_generator():
+        last_payload = None
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            try:
+                status_payload = await _build_conversation_attachment_status_payload(conversation_id, file_id)
+            except HTTPException as exc:
+                payload = {
+                    "conversation_id": conversation_id,
+                    "file_id": file_id,
+                    "status": "not_found",
+                    "error": exc.detail,
+                }
+                yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                break
+
+            payload = status_payload.model_dump()
+            serialized = json.dumps(payload, ensure_ascii=False)
+            if serialized != last_payload:
+                yield f"event: progress\ndata: {serialized}\n\n"
+                last_payload = serialized
+
+            if (
+                payload["status"] in TERMINAL_ATTACHMENT_STATUSES
+                or int(payload.get("progress_percentage") or 0) >= 100
+            ):
+                yield f"event: done\ndata: {serialized}\n\n"
+                break
+
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

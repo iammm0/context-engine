@@ -252,6 +252,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/conversation-attachment/{conversation_id}/{file_id}/status/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Conversation Attachment Status
+         * @description Stream conversation attachment processing progress as server-sent events.
+         */
+        get: operations["stream_conversation_attachment_status_api_chat_conversation_attachment__conversation_id___file_id__status_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/upload": {
         parameters: {
             query?: never;
@@ -843,6 +863,8 @@ export interface components {
             file_id: string;
             /** Conversation Id */
             conversation_id: string;
+            /** Document Id */
+            document_id?: string | null;
             /** Filename */
             filename: string;
             /** Status */
@@ -1756,6 +1778,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationAttachmentStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_conversation_attachment_status_api_chat_conversation_attachment__conversation_id___file_id__status_stream_get: {
+        parameters: {
+            query?: {
+                interval?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-sent event stream with attachment progress updates. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */

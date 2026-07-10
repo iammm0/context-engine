@@ -78,6 +78,7 @@ function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAtta
   return {
     ...current,
     filename: status.filename || current.filename,
+    document_id: status.document_id ?? current.document_id,
     status: status.status || current.status,
     progress_percentage: status.progress_percentage ?? current.progress_percentage,
     current_stage: status.current_stage,
@@ -641,6 +642,7 @@ export function ChatPlayground() {
   })
   const messageListRef = useRef<HTMLDivElement>(null)
   const attachmentInputRef = useRef<HTMLInputElement>(null)
+  const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -712,35 +714,69 @@ export function ChatPlayground() {
 
   useEffect(() => {
     const processingAttachments = attachments.filter((attachment) => isAttachmentProcessing(attachment.status))
-    if (!processingAttachments.length) {
-      return
-    }
+    const processingKeys = new Set<string>()
 
-    let cancelled = false
-    const timer = window.setInterval(() => {
-      for (const attachment of processingAttachments) {
-        void api.getConversationAttachmentStatus(attachment.conversation_id, attachment.file_id).then((result) => {
-          if (cancelled) {
-            return
-          }
+    for (const attachment of processingAttachments) {
+      const key = `${attachment.conversation_id}:${attachment.file_id}`
+      processingKeys.add(key)
+
+      if (attachmentSubscriptionsRef.current[key]) {
+        continue
+      }
+
+      attachmentSubscriptionsRef.current[key] = api.subscribeConversationAttachmentProgress(
+        attachment.conversation_id,
+        attachment.file_id,
+        (status) => {
           setAttachments((current) =>
             current.map((item) =>
               item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
-                ? result.data
-                  ? mergeAttachmentStatus(item, result.data)
-                  : { ...item, error: result.error || "附件状态查询失败" }
+                ? mergeAttachmentStatus(item, status)
                 : item,
             ),
           )
-        })
-      }
-    }, 2000)
+        },
+        (status) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? mergeAttachmentStatus(item, status)
+                : item,
+            ),
+          )
+          attachmentSubscriptionsRef.current[key]?.()
+          delete attachmentSubscriptionsRef.current[key]
+        },
+        (message) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? { ...item, error: message }
+                : item,
+            ),
+          )
+          attachmentSubscriptionsRef.current[key]?.()
+          delete attachmentSubscriptionsRef.current[key]
+        },
+      )
+    }
 
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
+    for (const [key, unsubscribe] of Object.entries(attachmentSubscriptionsRef.current)) {
+      if (!processingKeys.has(key)) {
+        unsubscribe()
+        delete attachmentSubscriptionsRef.current[key]
+      }
     }
   }, [attachments])
+
+  useEffect(() => {
+    return () => {
+      for (const unsubscribe of Object.values(attachmentSubscriptionsRef.current)) {
+        unsubscribe()
+      }
+      attachmentSubscriptionsRef.current = {}
+    }
+  }, [])
 
   const createConversationMutation = useMutation({
     mutationFn: async () => {

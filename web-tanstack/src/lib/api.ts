@@ -53,6 +53,7 @@ type UploadConversationAttachmentResponse = {
 }
 
 type ProgressSubscriber = (progress: DocumentProgress) => void
+type AttachmentProgressSubscriber = (progress: ConversationAttachmentStatus) => void
 
 type DocumentChunksOptions = {
   skip?: number
@@ -436,6 +437,47 @@ export const api = {
     return requestJson<ConversationAttachmentStatus>(
       `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status`,
     )
+  },
+
+  subscribeConversationAttachmentProgress(
+    conversationId: string,
+    fileId: string,
+    onProgress: AttachmentProgressSubscriber,
+    onDone?: AttachmentProgressSubscriber,
+    onError?: (message: string) => void,
+  ) {
+    const source = new EventSource(
+      apiUrl(
+        `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status/stream`,
+      ),
+    )
+
+    const handleProgress = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as ConversationAttachmentStatus
+      onProgress(payload)
+    }
+
+    source.addEventListener("progress", handleProgress)
+    source.addEventListener("done", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as ConversationAttachmentStatus
+      onDone?.(payload)
+      source.close()
+    })
+    source.addEventListener("error", (event) => {
+      if (source.readyState === EventSource.CLOSED) {
+        return
+      }
+      onError?.("附件进度订阅中断")
+      if ("data" in event && typeof event.data === "string" && event.data) {
+        try {
+          onError?.(JSON.parse(event.data).error || "附件进度订阅中断")
+        } catch {
+          onError?.("附件进度订阅中断")
+        }
+      }
+    })
+
+    return () => source.close()
   },
 
   getRuntimeConfig() {
