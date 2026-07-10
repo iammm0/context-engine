@@ -9,6 +9,7 @@ if ROOT_DIR not in sys.path:
 
 from tasks import document_tasks
 from services.document_task_dispatcher import (
+    DocumentTaskQueueError,
     check_document_task_queue_health,
     enqueue_document_processing,
     store_document_task_dispatch,
@@ -63,7 +64,7 @@ def test_enqueue_document_processing_requires_explicit_local_fallback(monkeypatc
     monkeypatch.setattr(document_tasks, "process_document_task", FailingDocumentTask())
 
     background_tasks = FakeBackgroundTasks()
-    with pytest.raises(RuntimeError, match="queue down"):
+    with pytest.raises(DocumentTaskQueueError, match="queue down"):
         enqueue_document_processing(
             background_tasks,
             "uploads/demo.pdf",

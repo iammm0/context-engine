@@ -14,7 +14,11 @@ from pydantic import BaseModel
 from database.mongodb import mongodb, require_mongodb
 from models.rag import CitationQuality, EvidenceItem, EvidenceQuality, RecommendedResource, SourceInfo
 from models.task import TaskDispatchInfo
-from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
+from services.document_task_dispatcher import (
+    DocumentTaskQueueError,
+    enqueue_document_processing,
+    store_document_task_dispatch,
+)
 from services.task_status import enrich_task_dispatch
 from utils.logger import logger
 from utils.timezone import beijing_now
@@ -1547,6 +1551,42 @@ async def upload_conversation_attachment(
         
     except HTTPException:
         raise
+    except DocumentTaskQueueError as e:
+        if "doc_repo" in locals() and "document_id" in locals():
+            try:
+                doc_repo.update_document_status(document_id, "failed")
+                doc_repo.update_document_progress(
+                    document_id,
+                    0,
+                    "任务投递失败",
+                    f"Celery 文档处理任务投递失败: {e}",
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to mark attachment document queue dispatch failure - document_id=%s",
+                    document_id,
+                    exc_info=True,
+                )
+        await _update_attachment_status(
+            conversation_id,
+            file_id,
+            status="failed",
+            progress_percentage=0,
+            current_stage="任务投递失败",
+            stage_details=f"Celery 文档处理任务投递失败: {e}",
+            message="文件上传成功，但文档处理任务投递失败",
+        )
+        logger.error(
+            "对话附件文档处理任务投递失败 - conversation_id=%s file_id=%s error=%s",
+            conversation_id,
+            file_id,
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"文档处理任务投递失败: {str(e)}",
+        ) from e
     except Exception as e:
         # 清理文件
         if os.path.exists(file_path):

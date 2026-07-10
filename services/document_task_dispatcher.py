@@ -14,6 +14,10 @@ from utils.logger import logger
 LOCAL_BACKENDS = {"background", "fastapi", "local", "inline"}
 
 
+class DocumentTaskQueueError(RuntimeError):
+    """Raised when a document job cannot be submitted to the configured queue."""
+
+
 def _bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -171,7 +175,7 @@ def enqueue_document_processing(
     except Exception as exc:
         if not _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", False):
             logger.error("Failed to queue Celery document job - document_id=%s", doc_id, exc_info=True)
-            raise
+            raise DocumentTaskQueueError(str(exc)) from exc
 
         logger.warning(
             "Falling back to FastAPI BackgroundTasks after Celery enqueue failed - document_id=%s error=%s",

@@ -12,7 +12,11 @@ from pydantic import BaseModel
 from datetime import datetime
 from models.task import TaskDispatchInfo
 from services.document_ingestion import get_chunk_repo, get_document_repo
-from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
+from services.document_task_dispatcher import (
+    DocumentTaskQueueError,
+    enqueue_document_processing,
+    store_document_task_dispatch,
+)
 from services.task_status import enrich_task_dispatch
 from utils.logger import logger
 from utils.chunk_metadata import build_chunk_preview, build_chunk_preview_facets, filter_chunks_for_preview
@@ -36,6 +40,24 @@ class DocumentUploadResponse(BaseModel):
     file_size: int
     status: str
     task: TaskDispatchInfo
+
+
+def _mark_document_task_queue_failed(doc_repo, doc_id: str, error: Exception) -> None:
+    """Best-effort status update when a document job never reaches Celery."""
+    try:
+        doc_repo.update_document_status(doc_id, "failed")
+        doc_repo.update_document_progress(
+            doc_id,
+            0,
+            "任务投递失败",
+            f"Celery 文档处理任务投递失败: {error}",
+        )
+    except Exception:
+        logger.warning(
+            "Failed to mark document queue dispatch failure - document_id=%s",
+            doc_id,
+            exc_info=True,
+        )
 
 
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -203,6 +225,14 @@ async def upload_document(
         }
     except HTTPException:
         raise
+    except DocumentTaskQueueError as e:
+        if "doc_repo" in locals() and "doc_id" in locals():
+            _mark_document_task_queue_failed(doc_repo, doc_id, e)
+        logger.error("文档处理任务投递失败 - 文档ID: %s, 错误: %s", locals().get("doc_id"), e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"文档处理任务投递失败: {str(e)}",
+        ) from e
     except Exception as e:
         # 如果出错，尝试清理已保存的文件
         if os.path.exists(file_path):
@@ -557,6 +587,13 @@ async def retry_document_processing(
         }
     except HTTPException:
         raise
+    except DocumentTaskQueueError as e:
+        _mark_document_task_queue_failed(doc_repo, doc_id, e)
+        logger.error("文档重新处理任务投递失败 - 文档ID: %s, 错误: %s", doc_id, e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"文档重新处理任务投递失败: {str(e)}",
+        ) from e
     except Exception as e:
         logger.error(f"重新处理文档失败: {str(e)}", exc_info=True)
         raise HTTPException(

@@ -8,6 +8,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from routers import documents as documents_router
+from services.document_task_dispatcher import DocumentTaskQueueError
 
 
 class FakeDocumentRepo:
@@ -18,6 +19,49 @@ class FakeDocumentRepo:
             "status": "completed",
             "metadata": {"parse_quality": {"quality_score": 100}},
         }
+
+
+class FakeQueueFailureDocumentRepo:
+    def __init__(self):
+        self.status_updates = []
+        self.progress_updates = []
+
+    def update_document_status(self, doc_id, status):
+        self.status_updates.append((doc_id, status))
+
+    def update_document_progress(self, doc_id, progress_percentage, current_stage, stage_details):
+        self.progress_updates.append((doc_id, progress_percentage, current_stage, stage_details))
+
+
+class FakeUploadDocumentRepo(FakeQueueFailureDocumentRepo):
+    def __init__(self):
+        super().__init__()
+        self.created = []
+
+    def find_duplicate_by_hash(self, file_hash):
+        return None
+
+    def create_document(self, **kwargs):
+        self.created.append(kwargs)
+        return "doc1"
+
+
+class FakeUploadFile:
+    filename = "demo.pdf"
+    content_type = "application/pdf"
+
+    def __init__(self, content: bytes):
+        self.content = content
+        self.offset = 0
+
+    async def read(self, size=-1):
+        if self.offset >= len(self.content):
+            return b""
+        if size is None or size < 0:
+            size = len(self.content) - self.offset
+        chunk = self.content[self.offset : self.offset + size]
+        self.offset += len(chunk)
+        return chunk
 
 
 class FakePreviewDocumentRepo:
@@ -47,6 +91,45 @@ class FakeChunkRepo:
             }
             for i in range(7)
         ]
+
+
+def test_mark_document_task_queue_failed_records_failed_status():
+    repo = FakeQueueFailureDocumentRepo()
+
+    documents_router._mark_document_task_queue_failed(repo, "doc1", RuntimeError("queue down"))
+
+    assert repo.status_updates == [("doc1", "failed")]
+    assert repo.progress_updates == [
+        ("doc1", 0, "任务投递失败", "Celery 文档处理任务投递失败: queue down")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_upload_document_queue_failure_returns_503_and_marks_failed(monkeypatch, tmp_path):
+    repo = FakeUploadDocumentRepo()
+
+    def fail_enqueue(*args, **kwargs):
+        raise DocumentTaskQueueError("queue down")
+
+    monkeypatch.setattr(documents_router, "UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(documents_router, "get_document_repo", lambda: repo)
+    monkeypatch.setattr(documents_router, "enqueue_document_processing", fail_enqueue)
+
+    with pytest.raises(documents_router.HTTPException) as exc_info:
+        await documents_router.upload_document(
+            documents_router.BackgroundTasks(),
+            FakeUploadFile(b"%PDF demo"),
+            assistant_id=None,
+            knowledge_space_id="space1",
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "文档处理任务投递失败" in exc_info.value.detail
+    assert repo.status_updates == [("doc1", "processing"), ("doc1", "failed")]
+    assert repo.progress_updates == [
+        ("doc1", 0, "任务投递失败", "Celery 文档处理任务投递失败: queue down")
+    ]
+    assert repo.created[0]["knowledge_space_id"] == "space1"
 
 
 class FakeMixedChunkRepo:
