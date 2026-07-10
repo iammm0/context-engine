@@ -22,6 +22,7 @@ import {
   SourceLocatorAnchorPreview,
 } from "@/components/evidence/source-locator-preview"
 import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
+import { MarkdownMessage } from "@/components/message/markdown-message"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -2043,7 +2044,7 @@ export function ChatPlayground() {
                           </div>
                         </div>
                       ) : (
-                        <div className="whitespace-pre-wrap">{message.content}</div>
+                        <MarkdownMessage content={message.content} inverted={message.role === "user"} />
                       )}
                       <div className="mt-2 flex items-center gap-2 text-[11px] opacity-60">
                         {message.role === "user" ? <User className="size-3" /> : <Cpu className="size-3" />}
