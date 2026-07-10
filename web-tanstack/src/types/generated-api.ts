@@ -965,6 +965,21 @@ export interface components {
             } | null;
         };
         /**
+         * DocumentActionResponse
+         * @description Document management action response.
+         */
+        DocumentActionResponse: {
+            /** Message */
+            message: string;
+            /** Document Id */
+            document_id: string;
+            /** Title */
+            title?: string | null;
+            /** Status */
+            status?: string | null;
+            task?: components["schemas"]["TaskDispatchInfo"] | null;
+        };
+        /**
          * DocumentChunksResponse
          * @description 文档分块预览响应模型
          */
@@ -2015,7 +2030,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocumentActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2122,7 +2137,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocumentActionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2153,7 +2168,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocumentActionResponse"];
                 };
             };
             /** @description Validation Error */

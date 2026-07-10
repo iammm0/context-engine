@@ -1,6 +1,6 @@
 """文档管理路由（知识库功能）"""
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, BackgroundTasks, Query, Request
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import asyncio
 import json
 import os
@@ -433,7 +433,16 @@ class DocumentChunksResponse(BaseModel):
     target_offset: Optional[int] = None
 
 
-@router.post("/{doc_id}/retry")
+class DocumentActionResponse(BaseModel):
+    """Document management action response."""
+    message: str
+    document_id: str
+    title: Optional[str] = None
+    status: Optional[str] = None
+    task: Optional[TaskDispatchInfo] = None
+
+
+@router.post("/{doc_id}/retry", response_model=DocumentActionResponse)
 async def retry_document_processing(
     doc_id: str,
     background_tasks: BackgroundTasks,
@@ -521,15 +530,12 @@ async def retry_document_processing(
         
         logger.info(f"文档重新处理任务已启动 - 文档ID: {doc_id}")
         
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "message": "文档重新处理已启动",
-                "document_id": doc_id,
-                "status": "processing",
-                "task": task_dispatch,
-            }
-        )
+        return {
+            "message": "文档重新处理已启动",
+            "document_id": doc_id,
+            "status": "processing",
+            "task": task_dispatch,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -750,7 +756,7 @@ class DocumentUpdateRequest(BaseModel):
     title: str
 
 
-@router.put("/{doc_id}")
+@router.put("/{doc_id}", response_model=DocumentActionResponse)
 async def update_document(
     doc_id: str,
     request: DocumentUpdateRequest,
@@ -784,14 +790,11 @@ async def update_document(
         
         logger.info(f"文档更新成功 - 文档ID: {doc_id}, 新标题: {request.title}")
         
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "message": "文档更新成功",
-                "document_id": doc_id,
-                "title": request.title.strip()
-            }
-        )
+        return {
+            "message": "文档更新成功",
+            "document_id": doc_id,
+            "title": request.title.strip()
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -862,7 +865,7 @@ async def preview_document(
         )
 
 
-@router.delete("/{doc_id}")
+@router.delete("/{doc_id}", response_model=DocumentActionResponse)
 async def delete_document(
     doc_id: str,
 ):
@@ -923,13 +926,10 @@ async def delete_document(
         
         # 返回成功（即使文档记录不存在，也已经清理了chunks、vectors和文件）
         logger.info(f"文档删除操作完成 - 文档ID: {doc_id}")
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "message": "文档删除成功",
-                "document_id": doc_id
-            }
-        )
+        return {
+            "message": "文档删除成功",
+            "document_id": doc_id
+        }
     except Exception as e:
         logger.error(f"删除文档失败: {str(e)}", exc_info=True)
         raise HTTPException(

@@ -126,18 +126,7 @@ export type DocumentUpdate = Schemas["DocumentUpdateRequest"]
 export type TaskDispatchInfo = Schemas["TaskDispatchInfo"]
 export type DocumentUploadResponse = Schemas["DocumentUploadResponse"]
 export type ConversationAttachmentUploadResponse = Schemas["ConversationAttachmentUploadResponse"]
-
-export interface DocumentActionResponse {
-  message?: string
-  document_id: string
-  title?: string
-  status?: string
-  task?: {
-    backend: string
-    task_id?: string | null
-    fallback_reason?: string
-  }
-}
+export type DocumentActionResponse = Schemas["DocumentActionResponse"]
 
 export interface DocumentChunkPreview {
   id: string
