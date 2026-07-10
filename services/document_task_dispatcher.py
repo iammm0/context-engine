@@ -41,7 +41,7 @@ def _redact_url(url: str) -> str:
 
 def check_document_task_queue_health() -> Dict[str, Any]:
     backend = _configured_backend()
-    fallback_local = _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", True)
+    fallback_local = _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", False)
 
     if backend in LOCAL_BACKENDS:
         return {
@@ -150,7 +150,8 @@ def enqueue_document_processing(
     """Queue document processing outside the request path.
 
     DOCUMENT_TASK_BACKEND=celery uses Redis/Celery. Set DOCUMENT_TASK_BACKEND=local
-    for a development fallback that keeps the old FastAPI BackgroundTasks path.
+    for local development, or set DOCUMENT_TASK_FALLBACK_LOCAL=true to opt in
+    to FastAPI BackgroundTasks when Celery enqueue fails.
     """
 
     backend = _configured_backend()
@@ -168,7 +169,7 @@ def enqueue_document_processing(
         )
         return {"backend": "celery", "task_id": result.id}
     except Exception as exc:
-        if not _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", True):
+        if not _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", False):
             logger.error("Failed to queue Celery document job - document_id=%s", doc_id, exc_info=True)
             raise
 

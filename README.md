@@ -98,7 +98,7 @@ docker compose up -d
 .\scripts\start-celery-worker.ps1
 ```
 
-如果暂时不启动 worker，可在环境变量里设置 `DOCUMENT_TASK_BACKEND=local`，或保持 `DOCUMENT_TASK_FALLBACK_LOCAL=true` 让上传在 Celery 投递失败时回退到 FastAPI BackgroundTasks。
+如果暂时不启动 worker，可在环境变量里设置 `DOCUMENT_TASK_BACKEND=local`。不建议在常规开发中静默回退到进程内任务；确实需要兼容旧行为时，再显式设置 `DOCUMENT_TASK_FALLBACK_LOCAL=true` 让上传在 Celery 投递失败时回退到 FastAPI BackgroundTasks。
 
 ### 3. 准备 Python 依赖
 

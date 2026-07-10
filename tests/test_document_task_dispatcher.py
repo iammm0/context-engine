@@ -1,10 +1,13 @@
 import os
 import sys
 
+import pytest
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from tasks import document_tasks
 from services.document_task_dispatcher import (
     check_document_task_queue_health,
     enqueue_document_processing,
@@ -28,6 +31,11 @@ class FakeDocumentRepository:
         self.metadata_updates.append((doc_id, metadata_patch))
 
 
+class FailingDocumentTask:
+    def delay(self, *args, **kwargs):
+        raise RuntimeError("queue down")
+
+
 def test_enqueue_document_processing_local_backend(monkeypatch):
     monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "local")
 
@@ -47,6 +55,46 @@ def test_enqueue_document_processing_local_backend(monkeypatch):
     assert func.__name__ == "_run_local_document_processing"
     assert args == ("uploads/demo.pdf", "doc1", "assistant1", "space1")
     assert kwargs == {}
+
+
+def test_enqueue_document_processing_requires_explicit_local_fallback(monkeypatch):
+    monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "celery")
+    monkeypatch.delenv("DOCUMENT_TASK_FALLBACK_LOCAL", raising=False)
+    monkeypatch.setattr(document_tasks, "process_document_task", FailingDocumentTask())
+
+    background_tasks = FakeBackgroundTasks()
+    with pytest.raises(RuntimeError, match="queue down"):
+        enqueue_document_processing(
+            background_tasks,
+            "uploads/demo.pdf",
+            "doc1",
+            "assistant1",
+            "space1",
+        )
+
+    assert background_tasks.tasks == []
+
+
+def test_enqueue_document_processing_fallback_local_is_opt_in(monkeypatch):
+    monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "celery")
+    monkeypatch.setenv("DOCUMENT_TASK_FALLBACK_LOCAL", "true")
+    monkeypatch.setattr(document_tasks, "process_document_task", FailingDocumentTask())
+
+    background_tasks = FakeBackgroundTasks()
+    dispatch = enqueue_document_processing(
+        background_tasks,
+        "uploads/demo.pdf",
+        "doc1",
+        "assistant1",
+        "space1",
+    )
+
+    assert dispatch == {
+        "backend": "fastapi-background",
+        "task_id": None,
+        "fallback_reason": "queue down",
+    }
+    assert len(background_tasks.tasks) == 1
 
 
 def test_document_task_queue_health_local_backend(monkeypatch):
