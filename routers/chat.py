@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from database.mongodb import mongodb, require_mongodb
 from models.task import TaskDispatchInfo
-from services.document_task_dispatcher import enqueue_document_processing
+from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
 from utils.logger import logger
 from utils.timezone import beijing_now
 
@@ -1228,6 +1228,7 @@ class ConversationAttachmentStatus(BaseModel):
     message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    task: Optional[TaskDispatchInfo] = None
 
 
 class ConversationAttachmentUploadResponse(BaseModel):
@@ -1274,6 +1275,7 @@ async def _build_conversation_attachment_status_payload(
     current_stage = attachment.get("current_stage")
     stage_details = attachment.get("stage_details")
     message = attachment.get("message")
+    task = attachment.get("task")
 
     document_id = attachment.get("document_id")
     if document_id:
@@ -1288,6 +1290,8 @@ async def _build_conversation_attachment_status_payload(
                 progress_percentage = doc.get("progress_percentage", progress_percentage)
                 current_stage = doc.get("current_stage", current_stage)
                 stage_details = doc.get("stage_details", stage_details)
+                metadata = doc.get("metadata") or {}
+                task = task or metadata.get("task")
                 if doc_status == "completed":
                     message = "文件处理完成：已上传到目标知识空间，可用于增强检索。"
                 elif doc_status == "failed":
@@ -1306,7 +1310,8 @@ async def _build_conversation_attachment_status_payload(
         stage_details=stage_details,
         message=message,
         created_at=attachment.get("created_at").isoformat() if attachment.get("created_at") else None,
-        updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None
+        updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None,
+        task=task,
     )
 
 
@@ -1614,6 +1619,20 @@ async def upload_conversation_attachment(
             None,
             knowledge_space_id,
         )
+        store_document_task_dispatch(doc_repo, document_id, task_dispatch)
+        try:
+            await attachment_collection.update_one(
+                {"conversation_id": conversation_id, "file_id": file_id},
+                {"$set": {"task": task_dispatch, "updated_at": beijing_now()}},
+            )
+        except Exception:
+            logger.warning(
+                "Failed to persist conversation attachment task metadata - conversation_id=%s file_id=%s task=%s",
+                conversation_id,
+                file_id,
+                task_dispatch,
+                exc_info=True,
+            )
         
         logger.info(f"对话附件上传成功，已启动后台处理任务 - 对话ID: {conversation_id}, 文件ID: {file_id}")
         

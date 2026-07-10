@@ -39,6 +39,7 @@ import type {
   DeepResearchStreamEvent,
   EvidenceItem,
   EvidenceQuality,
+  TaskDispatchInfo,
 } from "@/types/api"
 
 type ChatAttachment = {
@@ -51,6 +52,7 @@ type ChatAttachment = {
   current_stage?: string | null
   stage_details?: string | null
   message?: string | null
+  task?: TaskDispatchInfo | null
   error?: string
 }
 
@@ -74,6 +76,30 @@ function isAttachmentProcessing(status?: string | null) {
   return !["completed", "failed", "cancelled"].includes(status)
 }
 
+function taskBackendLabel(task?: TaskDispatchInfo | null) {
+  if (!task?.backend) {
+    return null
+  }
+  if (task.backend === "celery") {
+    return "Celery"
+  }
+  if (task.backend === "fastapi-background") {
+    return "Local"
+  }
+  return task.backend
+}
+
+function taskSummary(task?: TaskDispatchInfo | null) {
+  const label = taskBackendLabel(task)
+  if (!label) {
+    return null
+  }
+  if (task?.task_id) {
+    return `${label} #${task.task_id.slice(0, 8)}`
+  }
+  return label
+}
+
 function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAttachmentStatus): ChatAttachment {
   return {
     ...current,
@@ -84,6 +110,7 @@ function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAtta
     current_stage: status.current_stage,
     stage_details: status.stage_details,
     message: status.message,
+    task: status.task ?? current.task,
   }
 }
 
@@ -818,6 +845,7 @@ export function ChatPlayground() {
         progress_percentage: 5,
         current_stage: result.data.message || "已上传",
         message: result.data.message,
+        task: result.data.task,
       } satisfies ChatAttachment
     },
     onSuccess: async (attachment) => {
@@ -1761,6 +1789,7 @@ export function ChatPlayground() {
                     <div className="space-y-2">
                       {activeAttachments.map((attachment) => {
                         const progress = Math.max(0, Math.min(100, Number(attachment.progress_percentage || 0)))
+                        const task = taskSummary(attachment.task)
                         return (
                           <div
                             className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
@@ -1769,6 +1798,7 @@ export function ChatPlayground() {
                             <div className="flex min-w-0 items-center gap-2">
                               <Paperclip className="size-3.5 shrink-0 text-sky-700" />
                               <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{attachment.filename}</span>
+                              {task ? <span className="shrink-0 text-slate-500">{task}</span> : null}
                               <span className="shrink-0 text-slate-500">{attachment.status}</span>
                             </div>
                             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">

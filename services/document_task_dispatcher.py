@@ -52,6 +52,18 @@ def _enqueue_local(
     return payload
 
 
+def store_document_task_dispatch(doc_repo: Any, doc_id: str, task_dispatch: Dict[str, Any]) -> None:
+    try:
+        doc_repo.update_document_metadata(doc_id, {"task": task_dispatch})
+    except Exception:
+        logger.warning(
+            "Failed to persist document task dispatch metadata - document_id=%s task=%s",
+            doc_id,
+            task_dispatch,
+            exc_info=True,
+        )
+
+
 def enqueue_document_processing(
     background_tasks: BackgroundTasks,
     file_path: str,

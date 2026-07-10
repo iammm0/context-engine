@@ -894,6 +894,7 @@ export interface components {
             created_at?: string | null;
             /** Updated At */
             updated_at?: string | null;
+            task?: components["schemas"]["TaskDispatchInfo"] | null;
         };
         /**
          * ConversationAttachmentUploadResponse

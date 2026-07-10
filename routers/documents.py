@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from models.task import TaskDispatchInfo
 from services.document_ingestion import get_chunk_repo, get_document_repo
-from services.document_task_dispatcher import enqueue_document_processing
+from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
 from utils.logger import logger
 from utils.chunk_metadata import build_chunk_preview, build_chunk_preview_facets, filter_chunks_for_preview
 
@@ -22,17 +22,6 @@ router = APIRouter()
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
-def _store_document_task_dispatch(doc_repo: Any, doc_id: str, task_dispatch: Dict[str, Any]) -> None:
-    try:
-        doc_repo.update_document_metadata(doc_id, {"task": task_dispatch})
-    except Exception:
-        logger.warning(
-            "Failed to persist document task dispatch metadata - document_id=%s task=%s",
-            doc_id,
-            task_dispatch,
-            exc_info=True,
-        )
 
 # 文档仓储和入库流水线在 services.document_ingestion 中延迟初始化，
 # router 只保留 HTTP 入参校验、响应组装和轻量查询。
@@ -199,7 +188,7 @@ async def upload_document(
             assistant_id,
             knowledge_space_id,
         )
-        _store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
+        store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
         
         logger.info(f"文件上传成功，已启动后台处理任务 - 文档ID: {doc_id}, 助手ID: {assistant_id or '未指定'}, 文件哈希: {file_hash[:16]}...")
         
@@ -555,7 +544,7 @@ async def retry_document_processing(
             assistant_id,
             knowledge_space_id,
         )
-        _store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
+        store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
         
         logger.info(f"文档重新处理任务已启动 - 文档ID: {doc_id}")
         
