@@ -515,40 +515,14 @@ async def add_message(
                 # 如果标题是默认标题（如"新对话"）或标题是用户消息的前30个字符，则生成新标题
                 if current_title in ["新对话", "新对话..."] or len(current_title) <= 5:
                     try:
-                        from services.title_generator import title_generator
-                        messages_list = updated_doc.get("messages", [])
-                        # 转换为标题生成器需要的格式
-                        formatted_messages = []
-                        for msg in messages_list:
-                            formatted_messages.append({
-                                "role": msg.get("role", ""),
-                                "content": msg.get("content", "")
-                            })
-                        
-                        # 在后台任务中生成标题（不阻塞响应）
-                        import asyncio
-                        async def update_title():
-                            try:
-                                # 使用run_in_executor在线程池中执行同步的生成函数
-                                import concurrent.futures
-                                loop = asyncio.get_event_loop()
-                                with concurrent.futures.ThreadPoolExecutor() as executor:
-                                    new_title = await loop.run_in_executor(
-                                        executor,
-                                        title_generator.generate_conversation_title,
-                                        formatted_messages
-                                    )
-                                
-                                await collection.update_one(
-                                    {"_id": conversation_id},
-                                    {"$set": {"title": new_title, "updated_at": beijing_now()}}
-                                )
-                                logger.info(f"自动更新对话标题成功 - 对话ID: {conversation_id}, 新标题: {new_title}")
-                            except Exception as e:
-                                logger.warning(f"自动更新对话标题失败: {str(e)}")
-                        
-                        # 在后台任务中执行，不阻塞当前请求
-                        asyncio.create_task(update_title())
+                        from tasks.chat_tasks import generate_conversation_title_task
+
+                        queued = generate_conversation_title_task.delay(conversation_id, current_title)
+                        logger.info(
+                            "Conversation title generation queued in Celery - conversation_id=%s task_id=%s",
+                            conversation_id,
+                            queued.id,
+                        )
                     except Exception as e:
                         logger.warning(f"启动标题生成任务失败: {str(e)}")
         
@@ -1315,7 +1289,7 @@ async def _build_conversation_attachment_status_payload(
     )
 
 
-async def update_attachment_status(
+async def _update_attachment_status(
     conversation_id: str,
     file_id: str,
     status: str,
@@ -1349,135 +1323,6 @@ async def update_attachment_status(
         )
     except Exception as e:
         logger.error(f"更新附件状态失败: {e}", exc_info=True)
-
-
-async def process_conversation_attachment(
-    file_path: str,
-    conversation_id: str,
-    file_id: str,
-    filename: str
-):
-    """后台处理对话附件：解析、分块、向量化"""
-    try:
-        # 更新状态：解析中
-        await update_attachment_status(
-            conversation_id, file_id,
-            status="parsing",
-            progress_percentage=10,
-            current_stage="解析文档",
-            stage_details="正在解析文件内容..."
-        )
-        
-        # 1. 解析文件
-        from parsers.parser_factory import ParserFactory
-        parser = ParserFactory.get_parser(file_path)
-        
-        if not parser:
-            raise Exception(f"不支持的文件类型: {file_path}")
-        
-        parse_result = parser.parse(file_path)
-        
-        # 解析器可能返回 "text" 或 "content" 字段
-        text_content = parse_result.get("text") or parse_result.get("content", "")
-        
-        if not text_content or not text_content.strip():
-            raise Exception("文件解析失败：未提取到内容")
-        
-        metadata = parse_result.get("metadata", {})
-        
-        # 更新状态：分块中
-        await update_attachment_status(
-            conversation_id, file_id,
-            status="chunking",
-            progress_percentage=40,
-            current_stage="分块处理",
-            stage_details="正在将文档内容分块..."
-        )
-        
-        # 2. 分块
-        from chunking.simple_chunker import SimpleChunker
-        chunker = SimpleChunker(chunk_size=500, chunk_overlap=50)
-        chunks = chunker.chunk(text_content)
-        
-        if not chunks:
-            raise Exception("分块失败：未生成任何块")
-        
-        # 更新状态：向量化中
-        await update_attachment_status(
-            conversation_id, file_id,
-            status="embedding",
-            progress_percentage=60,
-            current_stage="向量化",
-            stage_details=f"正在向量化 {len(chunks)} 个文档块..."
-        )
-        
-        # 3. 向量化
-        from embedding.embedding_service import embedding_service
-        vectors = []
-        payloads = []
-        
-        for i, chunk in enumerate(chunks):
-            vector = embedding_service.encode_single(chunk.get("text", ""))
-            vectors.append(vector)
-            
-            payload = {
-                "chunk_id": str(uuid.uuid4()),
-                "file_id": file_id,
-                "conversation_id": conversation_id,
-                "text": chunk.get("text", ""),
-                "chunk_index": i,
-                "filename": filename,
-                "metadata": metadata
-            }
-            payloads.append(payload)
-            
-            # 更新进度
-            if (i + 1) % 10 == 0 or (i + 1) == len(chunks):
-                progress = 60 + int(((i + 1) / len(chunks)) * 30)
-                await update_attachment_status(
-                    conversation_id, file_id,
-                    status="embedding",
-                    progress_percentage=progress,
-                    current_stage="向量化",
-                    stage_details=f"已向量化 {i + 1}/{len(chunks)} 个文档块"
-                )
-        
-        # 4. 存储到专用的 Qdrant collection
-        collection_name = f"conversation_{conversation_id}"
-        from database.qdrant_client import get_qdrant_client
-        qdrant = get_qdrant_client(collection_name)
-        
-        # 创建 collection（如果不存在）
-        vector_size = len(vectors[0]) if vectors else 768
-        qdrant.create_collection(vector_size=vector_size)
-        
-        # 插入向量
-        qdrant.insert_vectors(vectors=vectors, payloads=payloads)
-        
-        # 更新状态：已完成
-        completion_message = f"文件处理完成！成功解析并向量化了 {len(chunks)} 个文档块，已存储到对话专用向量空间。"
-        await update_attachment_status(
-            conversation_id, file_id,
-            status="completed",
-            progress_percentage=100,
-            current_stage="完成",
-            stage_details=f"成功处理 {len(chunks)} 个文档块，已向量化并存储",
-            message=completion_message
-        )
-        
-        logger.info(f"对话附件处理完成 - 对话ID: {conversation_id}, 文件ID: {file_id}, 块数: {len(chunks)}")
-        
-    except Exception as e:
-        logger.error(f"对话附件处理失败: {e}", exc_info=True)
-        await update_attachment_status(
-            conversation_id, file_id,
-            status="failed",
-            progress_percentage=0,
-            current_stage="失败",
-            stage_details=str(e),
-            message=f"处理失败: {str(e)}"
-        )
-        raise
 
 
 @router.post("/conversation-attachment", response_model=ConversationAttachmentUploadResponse)
@@ -1603,7 +1448,7 @@ async def upload_conversation_attachment(
         await attachment_collection.insert_one(attachment_doc)
         
         # 更新状态：处理中
-        await update_attachment_status(
+        await _update_attachment_status(
             conversation_id, file_id,
             status="processing",
             progress_percentage=5,
