@@ -103,6 +103,9 @@ export interface ConversationDetail {
   updated_at?: string | null
 }
 
+export type ConversationUpdate = Schemas["ConversationUpdate"]
+export type MessageUpdate = Schemas["MessageUpdate"]
+
 export type KnowledgeSpace = Schemas["KnowledgeSpaceResponse"]
 export type KnowledgeSpacesResponse = Schemas["KnowledgeSpaceListResponse"]
 

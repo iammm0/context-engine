@@ -5,12 +5,14 @@ import type {
   ApiEnvelope,
   ChatStreamEvent,
   DocumentChunksResponse,
+  ConversationUpdate,
   ConversationDetail,
   ConversationListResponse,
   DocumentListResponse,
   DocumentProgress,
   KnowledgeSpace,
   KnowledgeSpacesResponse,
+  MessageUpdate,
   MessagePayload,
   ModelsResponse,
   RuntimeConfigResponse,
@@ -179,11 +181,42 @@ export const api = {
     return requestJson<ConversationDetail>(`/api/chat/conversations/${encodeURIComponent(conversationId)}`)
   },
 
+  updateConversation(conversationId: string, body: ConversationUpdate) {
+    return requestJson<{ id: string; title: string; created_at?: string | null; updated_at?: string | null }>(
+      `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )
+  },
+
+  deleteConversation(conversationId: string) {
+    return requestJson<{ success?: boolean; message?: string }>(
+      `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
+      {
+        method: "DELETE",
+      },
+    )
+  },
+
   addConversationMessage(conversationId: string, body: MessagePayload) {
     return requestJson<{ success?: boolean; message_id?: string; timestamp?: string }>(
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )
+  },
+
+  updateConversationMessage(conversationId: string, messageId: string, body: MessageUpdate) {
+    return requestJson<{ success?: boolean; message_id?: string; timestamp?: string }>(
+      `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
+      {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       },

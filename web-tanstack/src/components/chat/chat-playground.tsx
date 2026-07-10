@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, Cpu, FileSearch, SendHorizontal, Sparkles, User } from "lucide-react"
+import { Bot, Check, Cpu, FileSearch, Pencil, SendHorizontal, Sparkles, Trash2, User, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
@@ -364,6 +365,11 @@ export function ChatPlayground() {
     useUiStore()
   const [prompt, setPrompt] = useState("")
   const [draftAnswer, setDraftAnswer] = useState("")
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null)
+  const [conversationTitleDraft, setConversationTitleDraft] = useState("")
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [messageDraft, setMessageDraft] = useState("")
+  const [actionMessage, setActionMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null)
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
@@ -430,6 +436,84 @@ export function ChatPlayground() {
     onSuccess: async (data) => {
       setActiveConversationId(data.id)
       await queryClient.invalidateQueries({ queryKey: ["conversations"] })
+    },
+  })
+
+  const renameConversationMutation = useMutation({
+    mutationFn: async ({ conversationId, title }: { conversationId: string; title: string }) => {
+      const result = await api.updateConversation(conversationId, { title })
+      if (result.error || !result.data) {
+        throw new Error(result.error || "重命名会话失败")
+      }
+      return result.data
+    },
+    onSuccess: async (data) => {
+      queryClient.setQueryData(["conversation", data.id], (existing: ConversationDetail | undefined) =>
+        existing ? { ...existing, title: data.title, updated_at: data.updated_at ?? existing.updated_at } : existing,
+      )
+      setEditingConversationId(null)
+      setConversationTitleDraft("")
+      setActionMessage({ tone: "success", text: "会话已重命名" })
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] })
+    },
+    onError: (error) => {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "重命名会话失败" })
+    },
+  })
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      const result = await api.deleteConversation(conversationId)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      return conversationId
+    },
+    onSuccess: async (conversationId) => {
+      queryClient.removeQueries({ queryKey: ["conversation", conversationId] })
+      if (activeConversationId === conversationId) {
+        const nextConversation = conversationsQuery.data?.conversations.find((item) => item.id !== conversationId)
+        setActiveConversationId(nextConversation?.id)
+      }
+      setActionMessage({ tone: "success", text: "会话已删除" })
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] })
+    },
+    onError: (error) => {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "删除会话失败" })
+    },
+  })
+
+  const updateMessageMutation = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      if (!activeConversationId) {
+        throw new Error("未选择会话")
+      }
+      const result = await api.updateConversationMessage(activeConversationId, messageId, { content })
+      if (result.error || !result.data) {
+        throw new Error(result.error || "更新消息失败")
+      }
+      return { messageId, content, timestamp: result.data.timestamp }
+    },
+    onSuccess: async ({ messageId, content, timestamp }) => {
+      if (activeConversationId) {
+        queryClient.setQueryData(["conversation", activeConversationId], (existing: ConversationDetail | undefined) =>
+          existing
+            ? {
+                ...existing,
+                messages: existing.messages.map((message) =>
+                  message.message_id === messageId ? { ...message, content, timestamp: timestamp || message.timestamp } : message,
+                ),
+              }
+            : existing,
+        )
+        await queryClient.invalidateQueries({ queryKey: ["conversation", activeConversationId] })
+      }
+      setEditingMessageId(null)
+      setMessageDraft("")
+      setActionMessage({ tone: "success", text: "消息已更新" })
+    },
+    onError: (error) => {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "更新消息失败" })
     },
   })
 
@@ -583,19 +667,100 @@ export function ChatPlayground() {
 
           <div className="space-y-2">
             {(conversationsQuery.data?.conversations || []).map((conversation) => (
-              <button
+              <div
                 key={conversation.id}
-                className={`w-full rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-100 ${
+                className={`rounded-2xl border p-3 transition-all ${
                   activeConversationId === conversation.id
                     ? "border-sky-950 bg-sky-950 text-white shadow-[0_12px_24px_rgba(12,74,110,0.16)]"
                     : "border-[var(--blue-line)] bg-white text-slate-700 hover:bg-[var(--surface-blue)] hover:text-sky-950"
                 }`}
-                onClick={() => setActiveConversationId(conversation.id)}
-                type="button"
               >
-                <div className="truncate text-sm font-medium">{conversation.title}</div>
-                <div className="mt-1 text-xs opacity-70">{conversation.message_count} messages</div>
-              </button>
+                {editingConversationId === conversation.id ? (
+                  <div className="space-y-2">
+                    <Input
+                      className="h-9 bg-white text-slate-950"
+                      onChange={(event) => setConversationTitleDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          const title = conversationTitleDraft.trim()
+                          if (title) {
+                            renameConversationMutation.mutate({ conversationId: conversation.id, title })
+                          }
+                        }
+                        if (event.key === "Escape") {
+                          setEditingConversationId(null)
+                        }
+                      }}
+                      value={conversationTitleDraft}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        disabled={!conversationTitleDraft.trim() || renameConversationMutation.isPending}
+                        onClick={() =>
+                          renameConversationMutation.mutate({
+                            conversationId: conversation.id,
+                            title: conversationTitleDraft.trim(),
+                          })
+                        }
+                        size="sm"
+                      >
+                        <Check className="size-3.5" />
+                        保存
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setEditingConversationId(null)
+                          setConversationTitleDraft("")
+                        }}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <X className="size-3.5" />
+                        取消
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <button
+                      className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-100"
+                      onClick={() => setActiveConversationId(conversation.id)}
+                      type="button"
+                    >
+                      <div className="truncate text-sm font-medium">{conversation.title}</div>
+                      <div className="mt-1 text-xs opacity-70">{conversation.message_count} messages</div>
+                    </button>
+                    <div className="flex gap-1.5">
+                      <Button
+                        className={activeConversationId === conversation.id ? "bg-white/10 text-white hover:bg-white/20" : ""}
+                        onClick={() => {
+                          setEditingConversationId(conversation.id)
+                          setConversationTitleDraft(conversation.title)
+                        }}
+                        size="icon-xs"
+                        title="重命名"
+                        variant={activeConversationId === conversation.id ? "ghost" : "secondary"}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                      <Button
+                        className={activeConversationId === conversation.id ? "bg-white/10 text-white hover:bg-white/20" : ""}
+                        disabled={deleteConversationMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm(`删除会话“${conversation.title}”？`)) {
+                            deleteConversationMutation.mutate(conversation.id)
+                          }
+                        }}
+                        size="icon-xs"
+                        title="删除"
+                        variant={activeConversationId === conversation.id ? "ghost" : "secondary"}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </CardContent>
@@ -625,6 +790,17 @@ export function ChatPlayground() {
                 ))}
               </div>
             ) : null}
+            {actionMessage ? (
+              <div
+                className={`rounded-2xl border px-4 py-3 text-sm ${
+                  actionMessage.tone === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {actionMessage.text}
+              </div>
+            ) : null}
 
             <div
               className="blue-panel h-[440px] space-y-4 overflow-y-auto rounded-2xl p-4"
@@ -652,13 +828,67 @@ export function ChatPlayground() {
                           : "border border-[var(--blue-line)] bg-white text-slate-800"
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{message.content}</div>
+                      {editingMessageId === message.message_id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            className="min-h-[110px] bg-white text-slate-950"
+                            onChange={(event) => setMessageDraft(event.target.value)}
+                            value={messageDraft}
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              disabled={!messageDraft.trim() || updateMessageMutation.isPending}
+                              onClick={() => {
+                                if (message.message_id) {
+                                  updateMessageMutation.mutate({
+                                    messageId: message.message_id,
+                                    content: messageDraft.trim(),
+                                  })
+                                }
+                              }}
+                              size="sm"
+                            >
+                              <Check className="size-3.5" />
+                              保存
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setEditingMessageId(null)
+                                setMessageDraft("")
+                              }}
+                              size="sm"
+                              variant="secondary"
+                            >
+                              <X className="size-3.5" />
+                              取消
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      )}
                       <div className="mt-2 flex items-center gap-2 text-[11px] opacity-60">
                         {message.role === "user" ? <User className="size-3" /> : <Cpu className="size-3" />}
                         <span>{formatTime(message.timestamp)}</span>
                         {message.sources?.length ? <span>{message.sources.length} sources</span> : null}
                         {message.evidence?.length ? <span>{message.evidence.length} evidence</span> : null}
                       </div>
+                      {message.role === "user" && message.message_id && editingMessageId !== message.message_id ? (
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            className="bg-white/10 text-white hover:bg-white/20"
+                            onClick={() => {
+                              setEditingMessageId(message.message_id || null)
+                              setMessageDraft(message.content)
+                            }}
+                            size="xs"
+                            variant="ghost"
+                          >
+                            <Pencil className="size-3" />
+                            编辑
+                          </Button>
+                        </div>
+                      ) : null}
                       <MessageDiagnostics message={message} />
                     </div>
                   </div>
