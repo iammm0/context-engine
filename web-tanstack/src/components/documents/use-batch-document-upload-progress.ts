@@ -141,7 +141,7 @@ export function useBatchDocumentUploadProgress({
         (progress) => {
           applyProgress(progress)
           updateItem(itemId, {
-            progress: progress.progress_percentage || 100,
+            progress: progress.progress_percentage ?? 100,
             status: progress.status === "failed" ? "failed" : "completed",
             retryable: progress.status === "failed",
           })
