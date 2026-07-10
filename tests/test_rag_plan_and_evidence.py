@@ -5,9 +5,10 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from models.rag import EvidenceItem
+from models.rag import CitationQuality, EvidenceItem, EvidenceQuality
 from services.query_planner import query_planner
 from utils.citation import build_citation_diagnostics, build_citation_policy_context, extract_citation_ids, format_evidence_context, validate_citations
+from utils.evidence_quality import build_evidence_quality_diagnostics
 
 
 def test_evidence_format_and_citation_validation():
@@ -203,6 +204,52 @@ def test_citation_diagnostics_flags_cited_quality_notes():
     assert diagnostics["cited_risky_evidence"][0]["risk_reasons"] == ["quality_note"]
     assert diagnostics["cited_risky_evidence"][0]["quality_notes"] == ["chunk 过短，可能导致上下文不足。"]
     assert any("带质量提示" in warning for warning in diagnostics["warnings"])
+
+
+def test_rag_quality_diagnostics_validate_against_openapi_models():
+    evidence = [
+        EvidenceItem(
+            id="S1",
+            text="OCR fact.",
+            document_id="doc1",
+            chunk_id="chunk1",
+            score=0.8,
+            retrieval_type="vector",
+            metadata={
+                "content_type": "image_ocr",
+                "page_start": "3",
+                "page_end": "3",
+                "source_locator": {
+                    "anchor_count": 2,
+                    "has_image_source": True,
+                    "has_bbox": True,
+                },
+                "artifact": {
+                    "type": "image_ocr",
+                    "images": [{"confidence": 0.42, "low_confidence": True}],
+                },
+                "artifact_quality": {
+                    "status": "warn",
+                    "ocr_low_confidence_source_count": 1,
+                    "warnings": ["low OCR confidence"],
+                },
+                "quality_notes": ["manual OCR review required"],
+            },
+        )
+    ]
+
+    evidence_quality = EvidenceQuality.model_validate(build_evidence_quality_diagnostics(evidence))
+    citation_quality = CitationQuality.model_validate(build_citation_diagnostics("Use [S1].", evidence))
+
+    assert evidence_quality.status == "warn"
+    assert evidence_quality.evidence_count == 1
+    assert evidence_quality.ocr_count == 1
+    assert citation_quality.status == "complete"
+    assert citation_quality.evidence_count == 1
+    assert citation_quality.cited_risky_evidence[0].id == "S1"
+    assert citation_quality.cited_risky_evidence[0].page_start == 3
+    assert citation_quality.evidence_citation_audit[0].source_anchor_count == 2
+    assert citation_quality.model_dump()["cited_risky_evidence"][0]["artifact_quality"]["status"] == "warn"
 
 
 def test_citation_policy_includes_per_evidence_audit_ledger():

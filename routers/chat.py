@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database.mongodb import mongodb, require_mongodb
-from models.rag import EvidenceItem, RecommendedResource, SourceInfo
+from models.rag import CitationQuality, EvidenceItem, EvidenceQuality, RecommendedResource, SourceInfo
 from models.task import TaskDispatchInfo
 from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
 from services.task_status import enrich_task_dispatch
@@ -28,6 +28,12 @@ def _dump_model_list(items: Optional[List[Any]]) -> List[Dict[str, Any]]:
     return [item.model_dump(exclude_none=True) if isinstance(item, BaseModel) else item for item in items]
 
 
+def _dump_model(item: Optional[Any]) -> Optional[Dict[str, Any]]:
+    if item is None:
+        return None
+    return item.model_dump(exclude_none=True) if isinstance(item, BaseModel) else item
+
+
 class ChatMessage(BaseModel):
     """聊天消息模型"""
     role: str  # "user" or "assistant"
@@ -35,9 +41,9 @@ class ChatMessage(BaseModel):
     timestamp: Optional[datetime] = None
     sources: Optional[List[SourceInfo]] = None  # 检索到的文档来源
     evidence: Optional[List[EvidenceItem]] = None  # chunk级证据
-    evidence_quality: Optional[Dict[str, Any]] = None
+    evidence_quality: Optional[EvidenceQuality] = None
     citation_warnings: Optional[List[str]] = None
-    citation_quality: Optional[Dict[str, Any]] = None
+    citation_quality: Optional[CitationQuality] = None
     recommended_resources: Optional[List[RecommendedResource]] = None  # 推荐的相关资源
 
 
@@ -69,9 +75,9 @@ class MessageAdd(BaseModel):
     content: str
     sources: Optional[List[SourceInfo]] = None
     evidence: Optional[List[EvidenceItem]] = None
-    evidence_quality: Optional[Dict[str, Any]] = None
+    evidence_quality: Optional[EvidenceQuality] = None
     citation_warnings: Optional[List[str]] = None
-    citation_quality: Optional[Dict[str, Any]] = None
+    citation_quality: Optional[CitationQuality] = None
     recommended_resources: Optional[List[RecommendedResource]] = None
 
 
@@ -156,9 +162,9 @@ class ConversationMessageResponse(BaseModel):
     timestamp: Optional[str] = None
     sources: Optional[List[SourceInfo]] = None
     evidence: Optional[List[EvidenceItem]] = None
-    evidence_quality: Optional[Dict[str, Any]] = None
+    evidence_quality: Optional[EvidenceQuality] = None
     citation_warnings: Optional[List[str]] = None
-    citation_quality: Optional[Dict[str, Any]] = None
+    citation_quality: Optional[CitationQuality] = None
     recommended_resources: Optional[List[RecommendedResource]] = None
 
 
@@ -499,9 +505,9 @@ async def add_message(
             "timestamp": beijing_now(),
             "sources": _dump_model_list(message.sources),
             "evidence": _dump_model_list(message.evidence),
-            "evidence_quality": message.evidence_quality,
+            "evidence_quality": _dump_model(message.evidence_quality),
             "citation_warnings": message.citation_warnings or [],
-            "citation_quality": message.citation_quality,
+            "citation_quality": _dump_model(message.citation_quality),
             "recommended_resources": _dump_model_list(message.recommended_resources)
         }
         

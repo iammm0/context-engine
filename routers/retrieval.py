@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from models.rag import EvidenceItem, RecommendedResource, SourceInfo
+from models.rag import EvidenceItem, EvidenceQuality, RecommendedResource, SourceInfo
 from models.task import TaskDispatchInfo
 from retrieval.rag_retriever import RAGRetriever
 from services.query_analyzer import query_analyzer
@@ -40,7 +40,7 @@ class RetrievalResponse(BaseModel):
     context: str
     sources: List[SourceInfo]
     evidence: Optional[List[EvidenceItem]] = []
-    evidence_quality: Optional[Dict[str, Any]] = {}
+    evidence_quality: Optional[EvidenceQuality] = {}
     query_plan: Optional[Dict[str, Any]] = {}
     trace: Optional[Dict[str, Any]] = {}
     retrieval_count: int

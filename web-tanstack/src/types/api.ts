@@ -210,53 +210,9 @@ export interface SourceLocatorSummary {
   has_image_source?: boolean
 }
 
-export interface EvidenceArtifactQuality {
-  status: "not_structured" | "pass" | "warn" | string
-  risk_level: "low" | "medium" | "high" | string
-  structured: boolean
-  content_type: string
-  artifact_type: string
-  has_artifact: boolean
-  table_missing_structure: boolean
-  table_missing_source: boolean
-  ocr_missing_source: boolean
-  ocr_low_confidence_source_count: number
-  ocr_avg_confidence?: number | null
-  warnings?: string[]
-  recommendations?: string[]
-}
+export type EvidenceArtifactQuality = Schemas["EvidenceArtifactQuality"]
 
-export interface EvidenceQuality {
-  status: "no_evidence" | "pass" | "warn" | string
-  risk_level: "low" | "medium" | "high" | string
-  evidence_count: number
-  artifact_count: number
-  artifact_coverage?: number | null
-  structured_evidence_count: number
-  structured_artifact_count: number
-  structured_artifact_coverage?: number | null
-  source_locator_count?: number
-  source_locator_coverage?: number | null
-  structured_source_locator_count?: number
-  structured_source_locator_coverage?: number | null
-  missing_source_locator_count?: number
-  structured_missing_source_locator_count?: number
-  bbox_source_locator_count?: number
-  table_source_locator_count?: number
-  ocr_source_locator_count?: number
-  source_anchor_count?: number
-  table_count: number
-  table_missing_structure_count: number
-  table_missing_source_count: number
-  ocr_count: number
-  ocr_missing_source_count: number
-  ocr_low_confidence_source_count: number
-  ocr_avg_confidence?: number | null
-  content_type_counts?: Record<string, number>
-  artifact_type_counts?: Record<string, number>
-  warnings?: string[]
-  recommendations?: string[]
-}
+export type EvidenceQuality = Schemas["EvidenceQuality"]
 
 export type EvidenceItem = Omit<Schemas["EvidenceItem"], "metadata" | "score" | "retrieval_type"> & {
   score?: number
@@ -274,70 +230,24 @@ export type EvidenceItem = Omit<Schemas["EvidenceItem"], "metadata" | "score" | 
   }
 }
 
-export interface CitationEvidenceRef {
-  id: string
-  score?: number
-  document_id?: string
-  file_id?: string
-  conversation_id?: string
-  chunk_id?: string
-  chunk_index?: number
-  document_title?: string
-  section_path?: string[]
-  page?: number | null
-  page_start?: number | null
-  page_end?: number | null
-  content_type?: string
-  retrieval_type?: string
-  preview?: string
+export type CitationEvidenceRef = Omit<
+  Schemas["CitationEvidenceRef"],
+  "source_locator" | "artifact_quality" | "quality_notes" | "risk_reasons"
+> & {
   source_locator?: SourceLocatorSummary | null
   artifact_quality?: EvidenceArtifactQuality | null
   quality_notes?: string[]
   risk_reasons?: string[]
 }
 
-export interface CitationEvidenceAudit {
-  id: string
-  content_type?: string
-  document_id?: string
-  chunk_id?: string
-  chunk_index?: number
-  page?: number | null
-  page_start?: number | null
-  page_end?: number | null
-  score?: number
-  retrieval_type?: string
-  has_source_locator?: boolean
-  source_anchor_count?: number
-  has_table_source?: boolean
-  has_image_source?: boolean
-  has_bbox?: boolean
-  artifact_quality_status?: string | null
-  risk_reasons?: string[]
-  quality_notes?: string[]
-}
+export type CitationEvidenceAudit = Schemas["CitationEvidenceAudit"]
 
-export interface CitationQuality {
-  status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string
-  risk_level?: "low" | "medium" | "high" | string
-  evidence_count: number
-  used_citation_ids: string[]
-  valid_citation_ids: string[]
-  invalid_citation_ids: string[]
-  duplicate_citation_ids: string[]
-  cited_structured_evidence_count?: number
-  cited_missing_source_locator_ids?: string[]
-  cited_artifact_warning_ids?: string[]
-  cited_low_confidence_ocr_ids?: string[]
-  cited_quality_note_ids?: string[]
-  evidence_citation_audit?: CitationEvidenceAudit[]
+export type CitationQuality = Omit<
+  Schemas["CitationQuality-Output"],
+  "cited_risky_evidence" | "unreferenced_top_evidence"
+> & {
   cited_risky_evidence?: CitationEvidenceRef[]
-  unused_evidence_ids: string[]
-  unreferenced_top_evidence_ids: string[]
   unreferenced_top_evidence?: CitationEvidenceRef[]
-  coverage?: number | null
-  warnings?: string[]
-  recommendations?: string[]
 }
 
 export interface ParseQualitySummary {

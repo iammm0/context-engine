@@ -945,6 +945,224 @@ export interface components {
             } | null;
         };
         /**
+         * CitationEvidenceAudit
+         * @description Per-evidence citation audit summary.
+         */
+        CitationEvidenceAudit: {
+            /** Id */
+            id: string;
+            /** Content Type */
+            content_type?: string | null;
+            /** Document Id */
+            document_id?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
+            /** Chunk Index */
+            chunk_index?: number | null;
+            /** Page */
+            page?: number | null;
+            /** Page Start */
+            page_start?: number | null;
+            /** Page End */
+            page_end?: number | null;
+            /** Score */
+            score?: number | null;
+            /** Retrieval Type */
+            retrieval_type?: string | null;
+            /**
+             * Has Source Locator
+             * @default false
+             */
+            has_source_locator: boolean;
+            /**
+             * Source Anchor Count
+             * @default 0
+             */
+            source_anchor_count: number;
+            /**
+             * Has Table Source
+             * @default false
+             */
+            has_table_source: boolean;
+            /**
+             * Has Image Source
+             * @default false
+             */
+            has_image_source: boolean;
+            /**
+             * Has Bbox
+             * @default false
+             */
+            has_bbox: boolean;
+            /** Artifact Quality Status */
+            artifact_quality_status?: string | null;
+            /** Risk Reasons */
+            risk_reasons?: string[];
+            /** Quality Notes */
+            quality_notes?: string[];
+        };
+        /**
+         * CitationEvidenceRef
+         * @description Evidence locator included in citation diagnostics.
+         */
+        CitationEvidenceRef: {
+            /** Id */
+            id: string;
+            /** Score */
+            score?: number | null;
+            /** Document Id */
+            document_id?: string | null;
+            /** File Id */
+            file_id?: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
+            /** Chunk Index */
+            chunk_index?: number | null;
+            /** Document Title */
+            document_title?: string | null;
+            /** Section Path */
+            section_path?: string[];
+            /** Page */
+            page?: number | null;
+            /** Page Start */
+            page_start?: number | null;
+            /** Page End */
+            page_end?: number | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Retrieval Type */
+            retrieval_type?: string | null;
+            /** Preview */
+            preview?: string | null;
+            /** Source Locator */
+            source_locator?: {
+                [key: string]: unknown;
+            } | null;
+            artifact_quality?: components["schemas"]["EvidenceArtifactQuality"] | null;
+            /** Quality Notes */
+            quality_notes?: string[];
+            /** Risk Reasons */
+            risk_reasons?: string[];
+        };
+        /**
+         * CitationQuality
+         * @description Citation coverage diagnostics for generated answers.
+         */
+        "CitationQuality-Input": {
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Risk Level
+             * @default
+             */
+            risk_level: string;
+            /**
+             * Evidence Count
+             * @default 0
+             */
+            evidence_count: number;
+            /** Used Citation Ids */
+            used_citation_ids?: string[];
+            /** Valid Citation Ids */
+            valid_citation_ids?: string[];
+            /** Invalid Citation Ids */
+            invalid_citation_ids?: string[];
+            /** Duplicate Citation Ids */
+            duplicate_citation_ids?: string[];
+            /**
+             * Cited Structured Evidence Count
+             * @default 0
+             */
+            cited_structured_evidence_count: number;
+            /** Cited Missing Source Locator Ids */
+            cited_missing_source_locator_ids?: string[];
+            /** Cited Artifact Warning Ids */
+            cited_artifact_warning_ids?: string[];
+            /** Cited Low Confidence Ocr Ids */
+            cited_low_confidence_ocr_ids?: string[];
+            /** Cited Quality Note Ids */
+            cited_quality_note_ids?: string[];
+            /** Evidence Citation Audit */
+            evidence_citation_audit?: components["schemas"]["CitationEvidenceAudit"][];
+            /** Cited Risky Evidence */
+            cited_risky_evidence?: components["schemas"]["CitationEvidenceRef"][];
+            /** Unused Evidence Ids */
+            unused_evidence_ids?: string[];
+            /** Unreferenced Top Evidence Ids */
+            unreferenced_top_evidence_ids?: string[];
+            /** Unreferenced Top Evidence */
+            unreferenced_top_evidence?: components["schemas"]["CitationEvidenceRef"][];
+            /** Coverage */
+            coverage?: number | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Recommendations */
+            recommendations?: string[];
+        };
+        /**
+         * CitationQuality
+         * @description Citation coverage diagnostics for generated answers.
+         */
+        "CitationQuality-Output": {
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Risk Level
+             * @default
+             */
+            risk_level: string;
+            /**
+             * Evidence Count
+             * @default 0
+             */
+            evidence_count: number;
+            /** Used Citation Ids */
+            used_citation_ids?: string[];
+            /** Valid Citation Ids */
+            valid_citation_ids?: string[];
+            /** Invalid Citation Ids */
+            invalid_citation_ids?: string[];
+            /** Duplicate Citation Ids */
+            duplicate_citation_ids?: string[];
+            /**
+             * Cited Structured Evidence Count
+             * @default 0
+             */
+            cited_structured_evidence_count: number;
+            /** Cited Missing Source Locator Ids */
+            cited_missing_source_locator_ids?: string[];
+            /** Cited Artifact Warning Ids */
+            cited_artifact_warning_ids?: string[];
+            /** Cited Low Confidence Ocr Ids */
+            cited_low_confidence_ocr_ids?: string[];
+            /** Cited Quality Note Ids */
+            cited_quality_note_ids?: string[];
+            /** Evidence Citation Audit */
+            evidence_citation_audit?: components["schemas"]["CitationEvidenceAudit"][];
+            /** Cited Risky Evidence */
+            cited_risky_evidence?: components["schemas"]["CitationEvidenceRef"][];
+            /** Unused Evidence Ids */
+            unused_evidence_ids?: string[];
+            /** Unreferenced Top Evidence Ids */
+            unreferenced_top_evidence_ids?: string[];
+            /** Unreferenced Top Evidence */
+            unreferenced_top_evidence?: components["schemas"]["CitationEvidenceRef"][];
+            /** Coverage */
+            coverage?: number | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Recommendations */
+            recommendations?: string[];
+        };
+        /**
          * ConversationAttachmentStatus
          * @description 对话附件状态模型
          */
@@ -1071,16 +1289,10 @@ export interface components {
             sources?: components["schemas"]["SourceInfo"][] | null;
             /** Evidence */
             evidence?: components["schemas"]["EvidenceItem"][] | null;
-            /** Evidence Quality */
-            evidence_quality?: {
-                [key: string]: unknown;
-            } | null;
+            evidence_quality?: components["schemas"]["EvidenceQuality"] | null;
             /** Citation Warnings */
             citation_warnings?: string[] | null;
-            /** Citation Quality */
-            citation_quality?: {
-                [key: string]: unknown;
-            } | null;
+            citation_quality?: components["schemas"]["CitationQuality-Output"] | null;
             /** Recommended Resources */
             recommended_resources?: components["schemas"]["RecommendedResource"][] | null;
         };
@@ -1360,6 +1572,68 @@ export interface components {
             task: components["schemas"]["TaskDispatchInfo"];
         };
         /**
+         * EvidenceArtifactQuality
+         * @description Per-evidence structured artifact quality diagnostics.
+         */
+        EvidenceArtifactQuality: {
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Risk Level
+             * @default
+             */
+            risk_level: string;
+            /**
+             * Structured
+             * @default false
+             */
+            structured: boolean;
+            /**
+             * Content Type
+             * @default
+             */
+            content_type: string;
+            /**
+             * Artifact Type
+             * @default
+             */
+            artifact_type: string;
+            /**
+             * Has Artifact
+             * @default false
+             */
+            has_artifact: boolean;
+            /**
+             * Table Missing Structure
+             * @default false
+             */
+            table_missing_structure: boolean;
+            /**
+             * Table Missing Source
+             * @default false
+             */
+            table_missing_source: boolean;
+            /**
+             * Ocr Missing Source
+             * @default false
+             */
+            ocr_missing_source: boolean;
+            /**
+             * Ocr Low Confidence Source Count
+             * @default 0
+             */
+            ocr_low_confidence_source_count: number;
+            /** Ocr Avg Confidence */
+            ocr_avg_confidence?: number | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Recommendations */
+            recommendations?: string[];
+        };
+        /**
          * EvidenceItem
          * @description Chunk-level evidence passed through retrieval, generation, and agents.
          */
@@ -1402,6 +1676,134 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * EvidenceQuality
+         * @description Aggregate diagnostics for retrieved evidence quality.
+         */
+        EvidenceQuality: {
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Risk Level
+             * @default
+             */
+            risk_level: string;
+            /**
+             * Evidence Count
+             * @default 0
+             */
+            evidence_count: number;
+            /**
+             * Artifact Count
+             * @default 0
+             */
+            artifact_count: number;
+            /** Artifact Coverage */
+            artifact_coverage?: number | null;
+            /**
+             * Structured Evidence Count
+             * @default 0
+             */
+            structured_evidence_count: number;
+            /**
+             * Structured Artifact Count
+             * @default 0
+             */
+            structured_artifact_count: number;
+            /** Structured Artifact Coverage */
+            structured_artifact_coverage?: number | null;
+            /**
+             * Source Locator Count
+             * @default 0
+             */
+            source_locator_count: number;
+            /** Source Locator Coverage */
+            source_locator_coverage?: number | null;
+            /**
+             * Structured Source Locator Count
+             * @default 0
+             */
+            structured_source_locator_count: number;
+            /** Structured Source Locator Coverage */
+            structured_source_locator_coverage?: number | null;
+            /**
+             * Missing Source Locator Count
+             * @default 0
+             */
+            missing_source_locator_count: number;
+            /**
+             * Structured Missing Source Locator Count
+             * @default 0
+             */
+            structured_missing_source_locator_count: number;
+            /**
+             * Bbox Source Locator Count
+             * @default 0
+             */
+            bbox_source_locator_count: number;
+            /**
+             * Table Source Locator Count
+             * @default 0
+             */
+            table_source_locator_count: number;
+            /**
+             * Ocr Source Locator Count
+             * @default 0
+             */
+            ocr_source_locator_count: number;
+            /**
+             * Source Anchor Count
+             * @default 0
+             */
+            source_anchor_count: number;
+            /**
+             * Table Count
+             * @default 0
+             */
+            table_count: number;
+            /**
+             * Table Missing Structure Count
+             * @default 0
+             */
+            table_missing_structure_count: number;
+            /**
+             * Table Missing Source Count
+             * @default 0
+             */
+            table_missing_source_count: number;
+            /**
+             * Ocr Count
+             * @default 0
+             */
+            ocr_count: number;
+            /**
+             * Ocr Missing Source Count
+             * @default 0
+             */
+            ocr_missing_source_count: number;
+            /**
+             * Ocr Low Confidence Source Count
+             * @default 0
+             */
+            ocr_low_confidence_source_count: number;
+            /** Ocr Avg Confidence */
+            ocr_avg_confidence?: number | null;
+            /** Content Type Counts */
+            content_type_counts?: {
+                [key: string]: number;
+            };
+            /** Artifact Type Counts */
+            artifact_type_counts?: {
+                [key: string]: number;
+            };
+            /** Warnings */
+            warnings?: string[];
+            /** Recommendations */
+            recommendations?: string[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1487,16 +1889,10 @@ export interface components {
             sources?: components["schemas"]["SourceInfo"][] | null;
             /** Evidence */
             evidence?: components["schemas"]["EvidenceItem"][] | null;
-            /** Evidence Quality */
-            evidence_quality?: {
-                [key: string]: unknown;
-            } | null;
+            evidence_quality?: components["schemas"]["EvidenceQuality"] | null;
             /** Citation Warnings */
             citation_warnings?: string[] | null;
-            /** Citation Quality */
-            citation_quality?: {
-                [key: string]: unknown;
-            } | null;
+            citation_quality?: components["schemas"]["CitationQuality-Input"] | null;
             /** Recommended Resources */
             recommended_resources?: components["schemas"]["RecommendedResource"][] | null;
         };
@@ -1652,13 +2048,8 @@ export interface components {
              * @default []
              */
             evidence: components["schemas"]["EvidenceItem"][] | null;
-            /**
-             * Evidence Quality
-             * @default {}
-             */
-            evidence_quality: {
-                [key: string]: unknown;
-            } | null;
+            /** @default {} */
+            evidence_quality: components["schemas"]["EvidenceQuality"] | null;
             /**
              * Query Plan
              * @default {}

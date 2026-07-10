@@ -42,6 +42,20 @@ def _safe_int(value: Any) -> int:
     return 0
 
 
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.lstrip("-").isdigit():
+            return int(text)
+    return None
+
+
 def _format_ocr_image_ref(image: Dict[str, Any]) -> str:
     bits: List[str] = []
     if image.get("page") is not None:
@@ -294,8 +308,8 @@ def _evidence_citation_audit(item: EvidenceItem) -> Dict[str, Any]:
         "chunk_id": item.chunk_id,
         "chunk_index": item.chunk_index,
         "page": item.page,
-        "page_start": metadata.get("page_start"),
-        "page_end": metadata.get("page_end"),
+        "page_start": item.page_start if item.page_start is not None else _optional_int(metadata.get("page_start")),
+        "page_end": item.page_end if item.page_end is not None else _optional_int(metadata.get("page_end")),
         "score": item.score,
         "retrieval_type": item.retrieval_type,
         "has_source_locator": anchor_count > 0,
@@ -427,8 +441,8 @@ def _evidence_locator(item: EvidenceItem) -> Dict[str, Any]:
         "document_title": item.document_title,
         "section_path": item.section_path,
         "page": item.page,
-        "page_start": metadata.get("page_start"),
-        "page_end": metadata.get("page_end"),
+        "page_start": item.page_start if item.page_start is not None else _optional_int(metadata.get("page_start")),
+        "page_end": item.page_end if item.page_end is not None else _optional_int(metadata.get("page_end")),
         "content_type": metadata.get("content_type") or artifact.get("type"),
         "retrieval_type": item.retrieval_type,
         "preview": metadata.get("preview") or _compact_text(item.text, 160),

@@ -477,7 +477,7 @@ function buildEvidenceDocumentUrl(item: EvidenceItem | CitationEvidenceRef | Cit
 
   let contentType: string | undefined
   if ("content_type" in item) {
-    contentType = item.content_type
+    contentType = item.content_type ?? undefined
   } else if ("metadata" in item) {
     contentType = item.metadata?.content_type
   }
