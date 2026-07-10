@@ -5,6 +5,7 @@ import type {
   ApiEnvelope,
   ChatRequestPayload,
   ChatStreamEvent,
+  ConversationAttachmentStatus,
   DocumentChunksResponse,
   ConversationUpdate,
   ConversationDetail,
@@ -26,6 +27,18 @@ type UploadDocumentResponse = {
   filename?: string
   file_size?: number
   status: string
+  task?: {
+    backend: string
+    task_id?: string | null
+    fallback_reason?: string
+  }
+}
+
+type UploadConversationAttachmentResponse = {
+  file_id: string
+  document_id?: string
+  status: string
+  message?: string
   task?: {
     backend: string
     task_id?: string | null
@@ -333,6 +346,39 @@ export const api = {
     })
 
     return () => source.close()
+  },
+
+  async uploadConversationAttachment(
+    conversationId: string,
+    knowledgeSpaceId: string,
+    file: File,
+  ): Promise<ApiEnvelope<UploadConversationAttachmentResponse>> {
+    const form = new FormData()
+    form.append("file", file)
+    form.append("conversation_id", conversationId)
+    form.append("knowledge_space_id", knowledgeSpaceId)
+
+    try {
+      const response = await fetch(apiUrl("/api/chat/conversation-attachment"), {
+        method: "POST",
+        body: form,
+      })
+      const payload = await readJson<unknown>(response)
+
+      if (!response.ok) {
+        return { error: parseHttpError(payload) }
+      }
+
+      return { data: payload as UploadConversationAttachmentResponse }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "附件上传失败" }
+    }
+  },
+
+  getConversationAttachmentStatus(conversationId: string, fileId: string) {
+    return requestJson<ConversationAttachmentStatus>(
+      `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status`,
+    )
   },
 
   getRuntimeConfig() {

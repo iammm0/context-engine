@@ -95,6 +95,7 @@ export type MessagePayload = Omit<
 
 export type ChatRequestPayload = Omit<Schemas["ChatRequest"], "enable_rag" | "mode"> &
   Partial<Pick<Schemas["ChatRequest"], "enable_rag" | "mode">>
+export type ConversationAttachmentStatus = Schemas["ConversationAttachmentStatus"]
 
 export interface ConversationDetail {
   id: string

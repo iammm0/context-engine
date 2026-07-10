@@ -1,5 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, Check, Cpu, FileSearch, Pencil, RotateCcw, SendHorizontal, Sparkles, Trash2, User, X } from "lucide-react"
+import {
+  Bot,
+  Check,
+  Cpu,
+  FileSearch,
+  Paperclip,
+  Pencil,
+  RotateCcw,
+  SendHorizontal,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+  User,
+  X,
+} from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +26,7 @@ import { api } from "@/lib/api"
 import { useUiStore } from "@/stores/ui-store"
 import type {
   ChatStreamEvent,
+  ConversationAttachmentStatus,
   CitationEvidenceAudit,
   CitationEvidenceRef,
   CitationQuality,
@@ -20,6 +35,19 @@ import type {
   EvidenceItem,
   EvidenceQuality,
 } from "@/types/api"
+
+type ChatAttachment = {
+  file_id: string
+  conversation_id: string
+  document_id?: string
+  filename: string
+  status: string
+  progress_percentage?: number | null
+  current_stage?: string | null
+  stage_details?: string | null
+  message?: string | null
+  error?: string
+}
 
 function formatTime(value?: string | null) {
   if (!value) {
@@ -32,6 +60,25 @@ function formatTime(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value))
+}
+
+function isAttachmentProcessing(status?: string | null) {
+  if (!status) {
+    return true
+  }
+  return !["completed", "failed", "cancelled"].includes(status)
+}
+
+function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAttachmentStatus): ChatAttachment {
+  return {
+    ...current,
+    filename: status.filename || current.filename,
+    status: status.status || current.status,
+    progress_percentage: status.progress_percentage ?? current.progress_percentage,
+    current_stage: status.current_stage,
+    stage_details: status.stage_details,
+    message: status.message,
+  }
 }
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -370,12 +417,14 @@ export function ChatPlayground() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [messageDraft, setMessageDraft] = useState("")
   const [actionMessage, setActionMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null)
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
     status: "Idle",
   })
   const messageListRef = useRef<HTMLDivElement>(null)
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -425,6 +474,38 @@ export function ChatPlayground() {
     messageListRef.current.scrollTop = messageListRef.current.scrollHeight
   }, [conversationDetailQuery.data, draftAnswer])
 
+  useEffect(() => {
+    const processingAttachments = attachments.filter((attachment) => isAttachmentProcessing(attachment.status))
+    if (!processingAttachments.length) {
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      for (const attachment of processingAttachments) {
+        void api.getConversationAttachmentStatus(attachment.conversation_id, attachment.file_id).then((result) => {
+          if (cancelled) {
+            return
+          }
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? result.data
+                  ? mergeAttachmentStatus(item, result.data)
+                  : { ...item, error: result.error || "附件状态查询失败" }
+                : item,
+            ),
+          )
+        })
+      }
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [attachments])
+
   const createConversationMutation = useMutation({
     mutationFn: async () => {
       const result = await api.createConversation("TanStack 新对话")
@@ -436,6 +517,47 @@ export function ChatPlayground() {
     onSuccess: async (data) => {
       setActiveConversationId(data.id)
       await queryClient.invalidateQueries({ queryKey: ["conversations"] })
+    },
+  })
+
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!selectedKnowledgeSpaceId) {
+        throw new Error("请先选择知识空间")
+      }
+
+      let conversationId = activeConversationId
+      if (!conversationId) {
+        const created = await createConversationMutation.mutateAsync()
+        conversationId = created.id
+      }
+
+      const result = await api.uploadConversationAttachment(conversationId, selectedKnowledgeSpaceId, file)
+      if (result.error || !result.data) {
+        throw new Error(result.error || "附件上传失败")
+      }
+
+      return {
+        file_id: result.data.file_id,
+        conversation_id: conversationId,
+        document_id: result.data.document_id,
+        filename: file.name,
+        status: result.data.status || "processing",
+        progress_percentage: 5,
+        current_stage: result.data.message || "已上传",
+        message: result.data.message,
+      } satisfies ChatAttachment
+    },
+    onSuccess: async (attachment) => {
+      setAttachments((current) => [
+        ...current.filter((item) => !(item.conversation_id === attachment.conversation_id && item.file_id === attachment.file_id)),
+        attachment,
+      ])
+      setActionMessage({ tone: "success", text: "附件已上传，正在处理" })
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] })
+    },
+    onError: (error) => {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "附件上传失败" })
     },
   })
 
@@ -648,6 +770,13 @@ export function ChatPlayground() {
         conversationId = created.id
       }
 
+      const processingAttachments = attachments.filter(
+        (attachment) => attachment.conversation_id === conversationId && isAttachmentProcessing(attachment.status),
+      )
+      if (processingAttachments.length > 0) {
+        throw new Error("请等待附件处理完成后再发送消息")
+      }
+
       const currentConversation =
         queryClient.getQueryData<ConversationDetail>(["conversation", conversationId]) ||
         conversationDetailQuery.data ||
@@ -770,6 +899,10 @@ export function ChatPlayground() {
           },
         ]
       : messages
+  const activeAttachments = activeConversationId
+    ? attachments.filter((attachment) => attachment.conversation_id === activeConversationId)
+    : []
+  const hasProcessingAttachments = activeAttachments.some((attachment) => isAttachmentProcessing(attachment.status))
 
   return (
     <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -1063,9 +1196,70 @@ export function ChatPlayground() {
                   </div>
                 </div>
 
+                <div className="space-y-3 rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-950">会话附件</div>
+                      <div className="text-xs leading-5 text-slate-500">上传到当前知识空间后参与检索</div>
+                    </div>
+                    <Button
+                      disabled={!selectedKnowledgeSpaceId || uploadAttachmentMutation.isPending}
+                      onClick={() => attachmentInputRef.current?.click()}
+                      size="icon-sm"
+                      title="上传附件"
+                      variant="secondary"
+                    >
+                      <UploadCloud className="size-4" />
+                    </Button>
+                    <input
+                      accept=".pdf,.doc,.docx,.md,.markdown,.txt,.pptx,.xlsx,.xls,.html,.htm,.jpg,.jpeg,.png,.bmp,.webp,.tiff,.tif"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file) {
+                          uploadAttachmentMutation.mutate(file)
+                        }
+                        event.currentTarget.value = ""
+                      }}
+                      ref={attachmentInputRef}
+                      type="file"
+                    />
+                  </div>
+                  {!selectedKnowledgeSpaceId ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      先在文档页选择或创建知识空间，再上传会话附件。
+                    </div>
+                  ) : null}
+                  {activeAttachments.length > 0 ? (
+                    <div className="space-y-2">
+                      {activeAttachments.map((attachment) => {
+                        const progress = Math.max(0, Math.min(100, Number(attachment.progress_percentage || 0)))
+                        return (
+                          <div
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                            key={`${attachment.conversation_id}-${attachment.file_id}`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Paperclip className="size-3.5 shrink-0 text-sky-700" />
+                              <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{attachment.filename}</span>
+                              <span className="shrink-0 text-slate-500">{attachment.status}</span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                              <div className="h-full rounded-full bg-sky-600" style={{ width: `${progress}%` }} />
+                            </div>
+                            <div className="mt-1 leading-5 text-slate-500">
+                              {attachment.current_stage || attachment.message || attachment.stage_details || attachment.error || "等待状态更新"}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
                 <Button
                   className="h-14 rounded-2xl"
-                  disabled={!prompt.trim() || sendMutation.isPending || regenerateMessageMutation.isPending}
+                  disabled={!prompt.trim() || sendMutation.isPending || regenerateMessageMutation.isPending || hasProcessingAttachments}
                   onClick={() => {
                     void sendMutation.mutateAsync(prompt)
                     setPrompt("")
