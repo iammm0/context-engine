@@ -32,6 +32,7 @@ import type {
   MessagePayload,
   ModelsResponse,
   ProbeStatusResponse,
+  QueryAnalysisResponse,
   RegenerateMessageResponse,
   RootResponse,
   RuntimeConfigResponse,
@@ -272,6 +273,22 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    })
+  },
+
+  queueQueryAnalysis(query: string) {
+    return requestJson<TaskDispatchInfo>("/api/retrieval/analyze/task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query } satisfies { query: string }),
+    })
+  },
+
+  analyzeQuery(query: string) {
+    return requestJson<QueryAnalysisResponse>("/api/retrieval/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query } satisfies { query: string }),
     })
   },
 

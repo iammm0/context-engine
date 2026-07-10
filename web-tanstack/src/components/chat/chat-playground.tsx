@@ -45,6 +45,7 @@ import type {
   DeepResearchStreamEvent,
   EvidenceItem,
   EvidenceQuality,
+  QueryAnalysisResponse,
   SourceInfo,
   TaskDispatchInfo,
 } from "@/types/api"
@@ -61,6 +62,14 @@ type ChatAttachment = {
   message?: string | null
   task?: TaskDispatchInfo | null
   error?: string
+}
+
+type QueryAnalysisRun = {
+  status: "idle" | "queued" | "running" | "completed" | "failed"
+  query?: string
+  task?: TaskDispatchInfo | null
+  result?: QueryAnalysisResponse | null
+  error?: string | null
 }
 
 function formatTime(value?: string | null) {
@@ -103,6 +112,23 @@ function mergeAttachmentTask(current: ChatAttachment, task: TaskDispatchInfo, er
     task,
     error: error ?? current.error,
     status: task.ready && task.successful === false ? "failed" : current.status,
+  }
+}
+
+function readQueryAnalysisResult(task: TaskDispatchInfo): QueryAnalysisResponse | null {
+  const result = task.result
+  if (!result) {
+    return null
+  }
+
+  if (typeof result.need_retrieval !== "boolean" || typeof result.reason !== "string") {
+    return null
+  }
+
+  return {
+    need_retrieval: result.need_retrieval,
+    reason: result.reason,
+    confidence: typeof result.confidence === "string" ? result.confidence : "medium",
   }
 }
 
@@ -821,6 +847,7 @@ export function ChatPlayground() {
   const [deepResearchStatuses, setDeepResearchStatuses] = useState<DeepResearchAgentStatus[]>([])
   const [deepResearchResults, setDeepResearchResults] = useState<DeepResearchAgentResult[]>([])
   const [deepResearchHtml, setDeepResearchHtml] = useState("")
+  const [queryAnalysisRun, setQueryAnalysisRun] = useState<QueryAnalysisRun>({ status: "idle" })
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
@@ -830,6 +857,7 @@ export function ChatPlayground() {
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
   const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
+  const queryAnalysisSubscriptionRef = useRef<(() => void) | null>(null)
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -1023,8 +1051,82 @@ export function ChatPlayground() {
         unsubscribe()
       }
       attachmentTaskSubscriptionsRef.current = {}
+      queryAnalysisSubscriptionRef.current?.()
+      queryAnalysisSubscriptionRef.current = null
     }
   }, [])
+
+  const startQueryAnalysis = async () => {
+    const query = prompt.trim()
+    if (!query) {
+      return
+    }
+
+    queryAnalysisSubscriptionRef.current?.()
+    queryAnalysisSubscriptionRef.current = null
+    setQueryAnalysisRun({ status: "queued", query, result: null, error: null })
+
+    try {
+      const queued = await api.queueQueryAnalysis(query)
+      if (queued.error || !queued.data) {
+        setQueryAnalysisRun({
+          status: "failed",
+          query,
+          result: null,
+          error: queued.error || "查询分析任务投递失败",
+        })
+        return
+      }
+
+      const task = queued.data
+      setQueryAnalysisRun({ status: "running", query, task, result: null, error: null })
+
+      if (task.backend !== "celery" || !task.task_id) {
+        setQueryAnalysisRun({
+          status: "failed",
+          query,
+          task,
+          result: null,
+          error: "查询分析任务没有返回可订阅的 Celery task_id",
+        })
+        return
+      }
+
+      queryAnalysisSubscriptionRef.current = api.subscribeTaskStatus(
+        task.task_id,
+        (status) => {
+          setQueryAnalysisRun((current) => ({
+            ...current,
+            status: status.ready ? current.status : "running",
+            task: status,
+          }))
+        },
+        (status) => {
+          const result = readQueryAnalysisResult(status)
+          setQueryAnalysisRun({
+            status: result ? "completed" : "failed",
+            query,
+            task: status,
+            result,
+            error: result ? null : status.error || "查询分析任务未返回有效结果",
+          })
+          queryAnalysisSubscriptionRef.current = null
+        },
+        (message) => {
+          setQueryAnalysisRun({ status: "failed", query, task, result: null, error: message })
+          queryAnalysisSubscriptionRef.current = null
+        },
+        task.backend,
+      )
+    } catch (error) {
+      setQueryAnalysisRun({
+        status: "failed",
+        query,
+        result: null,
+        error: error instanceof Error ? error.message : "查询分析任务投递失败",
+      })
+    }
+  }
 
   const createConversationMutation = useMutation({
     mutationFn: async () => {
@@ -1623,6 +1725,9 @@ export function ChatPlayground() {
     ? attachments.filter((attachment) => attachment.conversation_id === activeConversationId)
     : []
   const hasProcessingAttachments = activeAttachments.some((attachment) => isAttachmentProcessing(attachment.status))
+  const queryAnalysisIsRunning = queryAnalysisRun.status === "queued" || queryAnalysisRun.status === "running"
+  const queryAnalysisTask = taskSummary(queryAnalysisRun.task)
+  const queryAnalysisResult = queryAnalysisRun.result
 
   return (
     <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -1911,6 +2016,46 @@ export function ChatPlayground() {
                     type="checkbox"
                   />
                 </label>
+
+                <div className="space-y-2 rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-950">检索预判</div>
+                      <div className="text-xs text-slate-500">{queryAnalysisTask || "Celery task"}</div>
+                    </div>
+                    <Button
+                      disabled={!prompt.trim() || queryAnalysisIsRunning}
+                      onClick={() => void startQueryAnalysis()}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <FileSearch className="size-3.5" />
+                      {queryAnalysisIsRunning ? "分析中" : "分析"}
+                    </Button>
+                  </div>
+                  {queryAnalysisRun.status !== "idle" ? (
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                      <div>
+                        状态：
+                        {queryAnalysisRun.status === "queued"
+                          ? "排队中"
+                          : queryAnalysisRun.status === "running"
+                            ? "运行中"
+                            : queryAnalysisRun.status === "completed"
+                              ? "已完成"
+                              : "失败"}
+                      </div>
+                      {queryAnalysisResult ? (
+                        <>
+                          <div>建议：{queryAnalysisResult.need_retrieval ? "需要检索" : "可直接回答"}</div>
+                          <div>置信度：{queryAnalysisResult.confidence}</div>
+                          <div>{queryAnalysisResult.reason}</div>
+                        </>
+                      ) : null}
+                      {queryAnalysisRun.error ? <div className="text-rose-600">{queryAnalysisRun.error}</div> : null}
+                    </div>
+                  ) : null}
+                </div>
 
                 <label className="blue-panel flex cursor-pointer items-center justify-between rounded-2xl px-4 py-3">
                   <div>

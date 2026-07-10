@@ -1,7 +1,8 @@
 """检索服务路由"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from models.task import TaskDispatchInfo
 from retrieval.rag_retriever import RAGRetriever
 from services.query_analyzer import query_analyzer
 import asyncio
@@ -95,6 +96,32 @@ async def analyze_query(
             need_retrieval=True,
             reason=f"分析失败，默认需要检索: {str(e)}",
             confidence="low"
+        )
+
+
+@router.post("/analyze/task", response_model=TaskDispatchInfo, status_code=status.HTTP_202_ACCEPTED)
+async def queue_query_analysis(
+    request: QueryAnalysisRequest,
+):
+    """Queue query analysis in Celery for clients that can consume task SSE."""
+
+    from utils.logger import logger
+
+    try:
+        from tasks.retrieval_tasks import analyze_query_task
+
+        queued = analyze_query_task.delay(request.query)
+        logger.info(
+            "Query analysis queued in Celery - task_id=%s query=%s",
+            queued.id,
+            request.query[:50],
+        )
+        return TaskDispatchInfo(backend="celery", task_id=queued.id)
+    except Exception as e:
+        logger.error(f"查询分析任务投递失败: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"查询分析任务投递失败: {str(e)}",
         )
 
 

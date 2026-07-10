@@ -94,6 +94,7 @@ export type DocumentListResponse = Omit<Schemas["DocumentListResponse"], "docume
 
 export type DocumentProgress = Schemas["DocumentProgressResponse"]
 export type DocumentUpdate = Schemas["DocumentUpdateRequest"]
+export type QueryAnalysisResponse = Schemas["QueryAnalysisResponse"]
 export type TaskDispatchInfo = Schemas["TaskDispatchInfo"]
 export type DocumentUploadResponse = Schemas["DocumentUploadResponse"]
 export type ConversationAttachmentUploadResponse = Schemas["ConversationAttachmentUploadResponse"]

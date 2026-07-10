@@ -20,7 +20,7 @@ celery_app = Celery(
     "advanced_rag",
     broker=broker_url,
     backend=result_backend,
-    include=["tasks.document_tasks", "tasks.chat_tasks"],
+    include=["tasks.document_tasks", "tasks.chat_tasks", "tasks.retrieval_tasks"],
 )
 
 celery_app.conf.update(

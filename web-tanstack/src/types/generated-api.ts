@@ -465,6 +465,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/retrieval/analyze/task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue Query Analysis
+         * @description Queue query analysis in Celery for clients that can consume task SSE.
+         */
+        post: operations["queue_query_analysis_api_retrieval_analyze_task_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retrieval": {
         parameters: {
             query?: never;
@@ -2515,6 +2535,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_query_analysis_api_retrieval_analyze_task_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDispatchInfo"];
                 };
             };
             /** @description Validation Error */
