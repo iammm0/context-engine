@@ -348,8 +348,7 @@ TanStack 前端：
 ```bash
 cd web-tanstack
 npm run generate:api
-npm run lint
-npm run build
+npm run verify
 ```
 
 本地依赖：

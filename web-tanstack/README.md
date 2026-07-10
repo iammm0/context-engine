@@ -37,12 +37,13 @@
   - `GET /api/settings/runtime`
   - `GET /api/settings/agents`
 - 通过 `npm run generate:api` 从 FastAPI OpenAPI schema 生成 `src/types/generated-api.ts`
+- 通过 `npm run check:api` 检查 generated API types 是否和后端 OpenAPI schema 同步
 - 做了 3 个主页面：
   - `Chat`：SSE 流式聊天、会话列表、RAG 开关
   - `Documents`：知识空间列表、上传入口、TanStack Table + Virtual 文档表格、文档处理进度 SSE 订阅
   - `Settings`：React Flow 架构图、Monaco 配置编辑器、xterm.js 终端面板
 - 完成 `shadcn/ui` 初始化和 `components.json`
-- 已通过 `npm run build` 和 `npm run lint`
+- 已通过 `npm run verify`
 
 ## 启动方式
 
@@ -70,6 +71,26 @@ VITE_API_URL=http://localhost:8000
 ```
 
 如果不设置，默认就是 `http://localhost:8000`。
+
+## 验证
+
+后端 API schema 变化后先重新生成类型：
+
+```bash
+npm run generate:api
+```
+
+提交前运行完整前端验证：
+
+```bash
+npm run verify
+```
+
+`verify` 会检查当前 `src/types/generated-api.ts` 是否和 FastAPI OpenAPI schema 同步，然后依次运行 lint、TypeScript 类型检查和生产构建。如果只想确认 generated types 没有漂移，可以单独运行：
+
+```bash
+npm run check:api
+```
 
 ## 目录说明
 

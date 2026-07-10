@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "generate:api": "python ../scripts/export_openapi.py src/types/.openapi-schema.json && openapi-typescript src/types/.openapi-schema.json -o src/types/generated-api.ts",
     "check:api": "node scripts/check-generated-api.mjs",
+    "typecheck": "tsc -b --noEmit",
+    "verify": "npm run check:api && npm run lint && npm run typecheck && npm run build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
