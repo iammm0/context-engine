@@ -260,7 +260,7 @@ docker run -d \
 - `DELETE /api/chat/conversations/{conversation_id}`：删除会话
 - `PUT /api/chat/conversations/{conversation_id}/messages/{message_id}`：更新消息
 - `POST /api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate`：重新生成消息
-- `POST /api/chat/conversation-attachment`：上传对话附件并入库
+- `POST /api/chat/conversation-attachment`：上传对话附件并入库，成功返回 `202 Accepted` 和后台任务信息
 - `GET /api/chat/conversation-attachment/{conversation_id}/{file_id}/status`：查询附件处理状态
 
 文档与知识空间：

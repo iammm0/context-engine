@@ -1404,7 +1404,11 @@ async def _update_attachment_status(
         logger.error(f"更新附件状态失败: {e}", exc_info=True)
 
 
-@router.post("/conversation-attachment", response_model=ConversationAttachmentUploadResponse)
+@router.post(
+    "/conversation-attachment",
+    response_model=ConversationAttachmentUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def upload_conversation_attachment(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
