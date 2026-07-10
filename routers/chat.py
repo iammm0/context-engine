@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from database.mongodb import mongodb, require_mongodb
 from models.task import TaskDispatchInfo
 from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
+from services.task_status import enrich_task_dispatch
 from utils.logger import logger
 from utils.timezone import beijing_now
 
@@ -1285,7 +1286,7 @@ async def _build_conversation_attachment_status_payload(
         message=message,
         created_at=attachment.get("created_at").isoformat() if attachment.get("created_at") else None,
         updated_at=attachment.get("updated_at").isoformat() if attachment.get("updated_at") else None,
-        task=task,
+        task=enrich_task_dispatch(task),
     )
 
 

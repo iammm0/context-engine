@@ -1602,6 +1602,18 @@ export interface components {
             task_id?: string | null;
             /** Fallback Reason */
             fallback_reason?: string | null;
+            /** State */
+            state?: string | null;
+            /** Ready */
+            ready?: boolean | null;
+            /** Successful */
+            successful?: boolean | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error?: string | null;
         };
         /** ValidationError */
         ValidationError: {

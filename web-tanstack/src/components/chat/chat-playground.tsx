@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
+import { taskSummary } from "@/lib/task"
 import { useUiStore } from "@/stores/ui-store"
 import type {
   ChatStreamEvent,
@@ -80,30 +81,6 @@ function isAttachmentProcessing(status?: string | null) {
     return true
   }
   return !["completed", "failed", "cancelled"].includes(status)
-}
-
-function taskBackendLabel(task?: TaskDispatchInfo | null) {
-  if (!task?.backend) {
-    return null
-  }
-  if (task.backend === "celery") {
-    return "Celery"
-  }
-  if (task.backend === "fastapi-background") {
-    return "Local"
-  }
-  return task.backend
-}
-
-function taskSummary(task?: TaskDispatchInfo | null) {
-  const label = taskBackendLabel(task)
-  if (!label) {
-    return null
-  }
-  if (task?.task_id) {
-    return `${label} #${task.task_id.slice(0, 8)}`
-  }
-  return label
 }
 
 function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAttachmentStatus): ChatAttachment {

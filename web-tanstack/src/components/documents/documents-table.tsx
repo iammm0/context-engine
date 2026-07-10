@@ -22,13 +22,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
+import { taskSummary } from "@/lib/task"
 import { useUiStore } from "@/stores/ui-store"
 import type {
   DocumentChunkPreview,
   DocumentItem,
   DocumentListResponse,
   DocumentProgress,
-  TaskDispatchInfo,
 } from "@/types/api"
 
 const STREAMING_DOCUMENT_STATUSES = new Set(["uploading", "processing", "parsing", "chunking", "embedding"])
@@ -150,30 +150,6 @@ function formatChunkLocation(chunk: DocumentChunkPreview) {
     parts.push(`${chunk.token_count} tokens`)
   }
   return parts.join(" · ") || "未定位"
-}
-
-function taskBackendLabel(task?: TaskDispatchInfo | null) {
-  if (!task?.backend) {
-    return null
-  }
-  if (task.backend === "celery") {
-    return "Celery"
-  }
-  if (task.backend === "fastapi-background") {
-    return "Local"
-  }
-  return task.backend
-}
-
-function taskSummary(task?: TaskDispatchInfo | null) {
-  const label = taskBackendLabel(task)
-  if (!label) {
-    return null
-  }
-  if (task?.task_id) {
-    return `${label} #${task.task_id.slice(0, 8)}`
-  }
-  return label
 }
 
 export function DocumentsTable() {

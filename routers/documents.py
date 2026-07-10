@@ -13,6 +13,7 @@ from datetime import datetime
 from models.task import TaskDispatchInfo
 from services.document_ingestion import get_chunk_repo, get_document_repo
 from services.document_task_dispatcher import enqueue_document_processing, store_document_task_dispatch
+from services.task_status import enrich_task_dispatch
 from utils.logger import logger
 from utils.chunk_metadata import build_chunk_preview, build_chunk_preview_facets, filter_chunks_for_preview
 
@@ -258,7 +259,7 @@ def _build_document_progress_payload(doc_id: str, doc: Dict[str, Any]) -> Dict[s
         "current_stage": doc.get("current_stage", "未知"),
         "stage_details": doc.get("stage_details", ""),
         "status": doc.get("status", "unknown"),
-        "task": metadata.get("task"),
+        "task": enrich_task_dispatch(metadata.get("task")),
     }
 
 
@@ -307,7 +308,7 @@ async def list_documents(
                     current_stage=doc.get("current_stage"),
                     stage_details=doc.get("stage_details"),
                     parse_quality=metadata.get("parse_quality"),
-                    task=metadata.get("task"),
+                    task=enrich_task_dispatch(metadata.get("task")),
                 )
                 document_list.append(document_info)
             except Exception as e:

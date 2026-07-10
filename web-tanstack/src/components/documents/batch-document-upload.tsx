@@ -4,6 +4,7 @@ import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from "r
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
+import { taskProcessingMessage } from "@/lib/task"
 import type { DocumentProgress, TaskDispatchInfo } from "@/types/api"
 
 type UploadStatus = "queued" | "uploading" | "processing" | "completed" | "failed"
@@ -99,19 +100,6 @@ function statusIcon(status: UploadStatus) {
 
 function canStartUpload(item: UploadQueueItem) {
   return item.status === "queued" || (item.status === "failed" && item.retryable)
-}
-
-function taskProcessingMessage(task?: TaskDispatchInfo | null) {
-  if (!task?.backend) {
-    return undefined
-  }
-  if (task.backend === "celery") {
-    return task.task_id ? `Celery 队列处理中 #${task.task_id.slice(0, 8)}` : "Celery 队列处理中"
-  }
-  if (task.backend === "fastapi-background") {
-    return "本地后台处理中"
-  }
-  return `${task.backend} 处理中`
 }
 
 function progressMessage(progress: DocumentProgress) {
