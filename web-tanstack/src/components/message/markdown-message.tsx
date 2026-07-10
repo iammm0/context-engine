@@ -1,4 +1,5 @@
-import type { ReactNode } from "react"
+import { Check, Copy } from "lucide-react"
+import { useState, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -196,6 +197,39 @@ function renderInline(text: string, inverted: boolean): ReactNode[] {
   return nodes
 }
 
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.14em] text-slate-400">
+        <span className="min-w-0 truncate">{language}</span>
+        <button
+          className="inline-flex size-6 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          onClick={copyCode}
+          title={copied ? "已复制" : "复制代码"}
+          type="button"
+        >
+          {copied ? <Check className="size-3.5 text-emerald-300" /> : <Copy className="size-3.5" />}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-2 text-xs leading-5 text-slate-100">
+        <code>{code}</code>
+      </pre>
+    </div>
+  )
+}
+
 export function MarkdownMessage({ className, content, inverted = false }: MarkdownMessageProps) {
   const blocks = parseMarkdownBlocks(content)
 
@@ -242,16 +276,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
         }
 
         if (block.type === "code") {
-          return (
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950" key={`code-${index}`}>
-              <div className="border-b border-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                {block.language}
-              </div>
-              <pre className="overflow-x-auto px-3 py-2 text-xs leading-5 text-slate-100">
-                <code>{block.code}</code>
-              </pre>
-            </div>
-          )
+          return <CodeBlock code={block.code} key={`code-${index}`} language={block.language} />
         }
 
         if (block.type === "table") {
