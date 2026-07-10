@@ -22,6 +22,7 @@ import {
   ArtifactSourceLocatorPreview,
   SourceLocatorAnchorPreview,
 } from "@/components/evidence/source-locator-preview"
+import { useConversationTitleTasks } from "@/components/chat/use-conversation-title-tasks"
 import { useDeepResearchTask } from "@/components/chat/use-deep-research-task"
 import { useQueryAnalysisTask } from "@/components/chat/use-query-analysis-task"
 import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
@@ -39,7 +40,6 @@ import { useUiStore } from "@/stores/ui-store"
 import type {
   ChatStreamEvent,
   ConversationAttachmentStatus,
-  ConversationListResponse,
   CitationEvidenceAudit,
   CitationEvidenceRef,
   CitationQuality,
@@ -124,11 +124,6 @@ function mergeAttachmentTask(current: ChatAttachment, task: TaskDispatchInfo, er
     error: error ?? current.error,
     status: task.ready && task.successful === false ? "failed" : current.status,
   }
-}
-
-function readGeneratedTitle(task: TaskDispatchInfo): string | null {
-  const title = task.result?.title
-  return typeof title === "string" && title.trim() ? title.trim() : null
 }
 
 const evidenceTypeLabel: Record<string, string> = {
@@ -1130,91 +1125,16 @@ export function ChatPlayground() {
     () => buildGenerationConfig(activeLlmModel, activeEmbeddingModel),
     [activeEmbeddingModel, activeLlmModel],
   )
-  const titleTaskKey = useMemo(
-    () =>
-      (conversationsQuery.data?.conversations || [])
-        .filter((conversation) => {
-          const task = conversation.title_task
-          return task?.backend === "celery" && Boolean(task.task_id) && task.ready === false
-        })
-        .map((conversation) => `${conversation.id}::${conversation.title_task?.backend}::${conversation.title_task?.task_id}`)
-        .sort()
-        .join("|"),
-    [conversationsQuery.data?.conversations],
-  )
+  useConversationTitleTasks({
+    activeConversationId,
+    conversations: conversationsQuery.data?.conversations,
+  })
 
   useEffect(() => {
     if (!activeConversationId && conversationsQuery.data?.conversations?.length) {
       setActiveConversationId(conversationsQuery.data.conversations[0].id)
     }
   }, [activeConversationId, conversationsQuery.data, setActiveConversationId])
-
-  useEffect(() => {
-    const taskEntries = titleTaskKey
-      ? titleTaskKey.split("|").map((entry) => {
-          const [conversationId, backend, taskId] = entry.split("::")
-          return { backend, conversationId, taskId }
-        })
-      : []
-
-    if (!taskEntries.length) {
-      return
-    }
-
-    const updateTitleTask = (conversationId: string, task: TaskDispatchInfo) => {
-      const generatedTitle = readGeneratedTitle(task)
-      queryClient.setQueryData<ConversationListResponse>(["conversations"], (existing) => {
-        if (!existing) {
-          return existing
-        }
-
-        return {
-          ...existing,
-          conversations: existing.conversations.map((conversation) =>
-            conversation.id === conversationId
-              ? {
-                  ...conversation,
-                  title: generatedTitle || conversation.title,
-                  title_task: task,
-                }
-              : conversation,
-          ),
-        }
-      })
-
-      queryClient.setQueryData<ConversationDetail>(["conversation", conversationId], (existing) =>
-        existing
-          ? {
-              ...existing,
-              title: generatedTitle || existing.title,
-              title_task: task,
-            }
-          : existing,
-      )
-    }
-
-    const unsubscribers = taskEntries.map(({ backend, conversationId, taskId }) =>
-      api.subscribeTaskStatus(
-        taskId,
-        (task) => updateTitleTask(conversationId, task),
-        (task) => {
-          updateTitleTask(conversationId, task)
-          void queryClient.invalidateQueries({ queryKey: ["conversations"] })
-          if (conversationId === activeConversationId) {
-            void queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] })
-          }
-        },
-        undefined,
-        backend,
-      ),
-    )
-
-    return () => {
-      for (const unsubscribe of unsubscribers) {
-        unsubscribe()
-      }
-    }
-  }, [activeConversationId, queryClient, titleTaskKey])
 
   useEffect(() => {
     if (!messageListRef.current) {
