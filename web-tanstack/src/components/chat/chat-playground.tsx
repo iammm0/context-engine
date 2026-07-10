@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -130,6 +130,44 @@ const DEFAULT_DEEP_RESEARCH_AGENTS = [
   "exercise",
   "scientific_coding",
 ]
+
+const CHAT_LLM_MODEL_STORAGE_KEY = "advanced-rag.chat.llm-model"
+const CHAT_EMBEDDING_MODEL_STORAGE_KEY = "advanced-rag.chat.embedding-model"
+
+function readStoredModelSelection(key: string) {
+  if (typeof window === "undefined") {
+    return ""
+  }
+  return window.localStorage.getItem(key) || ""
+}
+
+function writeStoredModelSelection(key: string, value: string) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  const nextValue = value.trim()
+  if (nextValue) {
+    window.localStorage.setItem(key, nextValue)
+  } else {
+    window.localStorage.removeItem(key)
+  }
+}
+
+function buildGenerationConfig(llmModel?: string, embeddingModel?: string) {
+  const config: Record<string, string> = {}
+  const nextLlmModel = llmModel?.trim()
+  const nextEmbeddingModel = embeddingModel?.trim()
+
+  if (nextLlmModel) {
+    config.llm_model = nextLlmModel
+  }
+  if (nextEmbeddingModel) {
+    config.embedding_model = nextEmbeddingModel
+  }
+
+  return config
+}
 
 function deepResearchAgentLabel(agentType?: string) {
   if (!agentType) {
@@ -588,6 +626,10 @@ export function ChatPlayground() {
     }
     return window.localStorage.getItem("deepResearchEnabled") === "true"
   })
+  const [selectedLlmModel, setSelectedLlmModel] = useState(() => readStoredModelSelection(CHAT_LLM_MODEL_STORAGE_KEY))
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState(() =>
+    readStoredModelSelection(CHAT_EMBEDDING_MODEL_STORAGE_KEY),
+  )
   const [deepResearchGate, setDeepResearchGate] = useState<DeepResearchEvaluation | null>(null)
   const [deepResearchStatuses, setDeepResearchStatuses] = useState<DeepResearchAgentStatus[]>([])
   const [deepResearchResults, setDeepResearchResults] = useState<DeepResearchAgentResult[]>([])
@@ -634,6 +676,14 @@ export function ChatPlayground() {
     },
   })
 
+  const modelNames = useMemo(() => modelsQuery.data?.models?.map((model) => model.name).filter(Boolean) || [], [modelsQuery.data])
+  const activeLlmModel = selectedLlmModel.trim() || modelNames[0] || ""
+  const activeEmbeddingModel = selectedEmbeddingModel.trim()
+  const generationConfig = useMemo(
+    () => buildGenerationConfig(activeLlmModel, activeEmbeddingModel),
+    [activeEmbeddingModel, activeLlmModel],
+  )
+
   useEffect(() => {
     if (!activeConversationId && conversationsQuery.data?.conversations?.length) {
       setActiveConversationId(conversationsQuery.data.conversations[0].id)
@@ -651,6 +701,14 @@ export function ChatPlayground() {
   useEffect(() => {
     window.localStorage.setItem("deepResearchEnabled", String(deepResearchEnabled))
   }, [deepResearchEnabled])
+
+  useEffect(() => {
+    writeStoredModelSelection(CHAT_LLM_MODEL_STORAGE_KEY, selectedLlmModel)
+  }, [selectedLlmModel])
+
+  useEffect(() => {
+    writeStoredModelSelection(CHAT_EMBEDDING_MODEL_STORAGE_KEY, selectedEmbeddingModel)
+  }, [selectedEmbeddingModel])
 
   useEffect(() => {
     const processingAttachments = attachments.filter((attachment) => isAttachmentProcessing(attachment.status))
@@ -889,9 +947,7 @@ export function ChatPlayground() {
           conversation_id: conversationId,
           knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
           enable_rag: enableRag,
-          generation_config: {
-            llm_model: modelsQuery.data?.models?.[0]?.name,
-          },
+          generation_config: generationConfig,
         },
         (event) => {
           finalEvent = event.done ? event : finalEvent
@@ -1057,9 +1113,7 @@ export function ChatPlayground() {
             query: question,
             conversation_id: conversationId,
             knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
-            generation_config: {
-              llm_model: modelsQuery.data?.models?.[0]?.name,
-            },
+            generation_config: generationConfig,
           },
           (event: DeepResearchStreamEvent) => {
             if (event.error) {
@@ -1192,9 +1246,7 @@ export function ChatPlayground() {
           conversation_id: conversationId,
           knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
           enable_rag: enableRag,
-          generation_config: {
-            llm_model: modelsQuery.data?.models?.[0]?.name,
-          },
+          generation_config: generationConfig,
         },
         (event) => {
           finalEvent = event.done ? event : finalEvent
@@ -1596,14 +1648,42 @@ export function ChatPlayground() {
                   />
                 </label>
 
-                <div className="space-y-2 rounded-2xl border border-[var(--blue-line)] bg-white p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Active model</div>
-                  <div className="text-sm font-medium text-slate-900">
-                    {modelsQuery.data?.models?.[0]?.name ||
-                      (modelsQuery.isError ? "Model unavailable" : "Loading models...")}
+                <div className="space-y-3 rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Models</div>
+                    {modelsQuery.isError ? <Badge className="bg-rose-100 text-rose-700">不可用</Badge> : null}
                   </div>
-                  <div className="text-xs leading-5 text-slate-500">
-                    这里可以继续扩展多模型切换和 Embedding 选择。
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-medium text-slate-600">推理模型</span>
+                    <Input
+                      list="chat-llm-models"
+                      onChange={(event) => setSelectedLlmModel(event.target.value)}
+                      placeholder={activeLlmModel ? `默认：${activeLlmModel}` : "留空使用后端默认模型"}
+                      value={selectedLlmModel}
+                    />
+                    <datalist id="chat-llm-models">
+                      {modelNames.map((name, index) => (
+                        <option key={`chat-llm-${name}-${index}`} value={name} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-medium text-slate-600">Embedding 模型</span>
+                    <Input
+                      list="chat-embedding-models"
+                      onChange={(event) => setSelectedEmbeddingModel(event.target.value)}
+                      placeholder="留空使用后端默认 Embedding"
+                      value={selectedEmbeddingModel}
+                    />
+                    <datalist id="chat-embedding-models">
+                      {modelNames.map((name, index) => (
+                        <option key={`chat-embedding-${name}-${index}`} value={name} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                    <div>当前推理：{activeLlmModel || "后端默认"}</div>
+                    <div>当前 Embedding：{activeEmbeddingModel || "后端默认"}</div>
                   </div>
                 </div>
 
