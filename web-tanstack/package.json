@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "generate:api": "python ../scripts/export_openapi.py src/types/.openapi-schema.json && openapi-typescript src/types/.openapi-schema.json -o src/types/generated-api.ts",
+    "check:api": "node scripts/check-generated-api.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
