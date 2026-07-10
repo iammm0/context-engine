@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database.mongodb import mongodb, require_mongodb
+from services.document_task_dispatcher import enqueue_document_processing
 from utils.logger import logger
 from utils.timezone import beijing_now
 
@@ -1413,8 +1414,13 @@ async def upload_conversation_attachment(
         )
         
         # 在后台异步处理文件（复用 documents 的后台入库）
-        from routers.documents import process_document_background
-        background_tasks.add_task(process_document_background, file_path, document_id, None, knowledge_space_id)
+        task_dispatch = enqueue_document_processing(
+            background_tasks,
+            file_path,
+            document_id,
+            None,
+            knowledge_space_id,
+        )
         
         logger.info(f"对话附件上传成功，已启动后台处理任务 - 对话ID: {conversation_id}, 文件ID: {file_id}")
         
@@ -1422,7 +1428,8 @@ async def upload_conversation_attachment(
             "file_id": file_id,
             "document_id": document_id,
             "status": "processing",
-            "message": "文件上传成功，正在后台处理"
+            "message": "文件上传成功，正在后台处理",
+            "task": task_dispatch,
         }
         
     except HTTPException:

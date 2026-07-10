@@ -28,7 +28,7 @@ def _enqueue_local(
     knowledge_space_id: Optional[str],
     reason: Optional[str] = None,
 ) -> Dict[str, Any]:
-    from routers.documents import process_document_background
+    from services.document_ingestion import process_document_background
 
     background_tasks.add_task(
         process_document_background,
@@ -88,4 +88,3 @@ def enqueue_document_processing(
             knowledge_space_id,
             reason=str(exc),
         )
-

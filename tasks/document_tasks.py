@@ -17,7 +17,7 @@ def process_document_task(
 ) -> dict:
     """Run document processing in a Celery worker process."""
 
-    from routers.documents import process_document_background
+    from services.document_ingestion import process_document_background
 
     process_document_background(
         file_path=file_path,
@@ -26,4 +26,3 @@ def process_document_task(
         knowledge_space_id=knowledge_space_id,
     )
     return {"document_id": doc_id, "task_id": self.request.id, "status": "finished"}
-
