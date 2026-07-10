@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, Bot, CheckCircle2, Cpu, RefreshCw, RotateCcw, Save, Settings2, SlidersHorizontal } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 
+import { ArchitectureFlowPanel } from "@/components/settings/architecture-flow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -198,6 +199,9 @@ export function SettingsLab() {
   const [runtimeDraftOverride, setRuntimeDraftOverride] = useState<RuntimeDraft | null>(null)
   const [agentDraftOverrides, setAgentDraftOverrides] = useState<Record<string, AgentDraft>>({})
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const runtimeSectionRef = useRef<HTMLElement>(null)
+  const healthSectionRef = useRef<HTMLElement>(null)
+  const agentsSectionRef = useRef<HTMLElement>(null)
 
   const runtimeQuery = useQuery({
     queryKey: ["runtime-config"],
@@ -270,6 +274,14 @@ export function SettingsLab() {
 
   const modelNames = useMemo(() => modelsQuery.data?.models?.map((model) => model.name) || [], [modelsQuery.data])
   const healthServices = useMemo(() => Object.entries(healthQuery.data?.services || {}), [healthQuery.data])
+  const taskQueue = useMemo(() => {
+    const service = healthQuery.data?.services?.task_queue
+    return service && typeof service === "object" ? (service as Record<string, unknown>) : undefined
+  }, [healthQuery.data])
+  const activeAgentCount = useMemo(
+    () => (agentsQuery.data?.agents || []).filter((agent) => agent.enabled).length,
+    [agentsQuery.data],
+  )
   const cpuPercent = metricNumber(metricsQuery.data, "cpu", "percent")
   const memoryPercent = metricNumber(metricsQuery.data, "memory", "percent")
   const diskPercent = metricNumber(metricsQuery.data, "disk", "percent")
@@ -343,6 +355,14 @@ export function SettingsLab() {
     metricsQuery.error instanceof Error ? `指标加载失败：${metricsQuery.error.message}` : null,
   ].filter(Boolean) as string[]
 
+  const navigateArchitectureTarget = (target: "runtime" | "agents" | "health", label: string) => {
+    const targetRef =
+      target === "runtime" ? runtimeSectionRef : target === "agents" ? agentsSectionRef : healthSectionRef
+
+    targetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    setFeedback({ tone: "info", message: `已定位到 ${label}` })
+  }
+
   const saveRuntime = () => {
     runtimeMutation.mutate({
       mode: "custom",
@@ -398,9 +418,18 @@ export function SettingsLab() {
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-      <div className="grid gap-4">
-        <Card>
+    <div className="grid gap-4">
+      <ArchitectureFlowPanel
+        activeAgentCount={activeAgentCount}
+        modules={runtimeDraft.modules}
+        onNavigate={navigateArchitectureTarget}
+        taskQueue={taskQueue}
+      />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div className="grid gap-4">
+          <section ref={runtimeSectionRef} className="scroll-mt-4">
+            <Card>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -530,9 +559,11 @@ export function SettingsLab() {
               </div>
             </section>
           </CardContent>
-        </Card>
+            </Card>
+          </section>
 
-        <Card>
+          <section ref={healthSectionRef} className="scroll-mt-4">
+            <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="size-5 text-emerald-700" />
@@ -632,10 +663,12 @@ export function SettingsLab() {
               ) : null}
             </section>
           </CardContent>
-        </Card>
-      </div>
+            </Card>
+          </section>
+        </div>
 
-      <Card>
+        <section ref={agentsSectionRef} className="scroll-mt-4">
+          <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -758,8 +791,10 @@ export function SettingsLab() {
               )
             })}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
     </div>
   )
 }
