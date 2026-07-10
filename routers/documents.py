@@ -22,6 +22,18 @@ router = APIRouter()
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
+def _store_document_task_dispatch(doc_repo: Any, doc_id: str, task_dispatch: Dict[str, Any]) -> None:
+    try:
+        doc_repo.update_document_metadata(doc_id, {"task": task_dispatch})
+    except Exception:
+        logger.warning(
+            "Failed to persist document task dispatch metadata - document_id=%s task=%s",
+            doc_id,
+            task_dispatch,
+            exc_info=True,
+        )
+
 # 文档仓储和入库流水线在 services.document_ingestion 中延迟初始化，
 # router 只保留 HTTP 入参校验、响应组装和轻量查询。
 
@@ -187,6 +199,7 @@ async def upload_document(
             assistant_id,
             knowledge_space_id,
         )
+        _store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
         
         logger.info(f"文件上传成功，已启动后台处理任务 - 文档ID: {doc_id}, 助手ID: {assistant_id or '未指定'}, 文件哈希: {file_hash[:16]}...")
         
@@ -232,6 +245,7 @@ class DocumentInfo(BaseModel):
     current_stage: Optional[str] = None
     stage_details: Optional[str] = None
     parse_quality: Optional[Dict[str, Any]] = None
+    task: Optional[TaskDispatchInfo] = None
 
 
 class DocumentProgressResponse(BaseModel):
@@ -241,18 +255,21 @@ class DocumentProgressResponse(BaseModel):
     current_stage: str
     stage_details: str
     status: str
+    task: Optional[TaskDispatchInfo] = None
 
 
 TERMINAL_DOCUMENT_STATUSES = {"completed", "failed"}
 
 
 def _build_document_progress_payload(doc_id: str, doc: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = doc.get("metadata") or {}
     return {
         "document_id": doc_id,
         "progress_percentage": doc.get("progress_percentage", 0),
         "current_stage": doc.get("current_stage", "未知"),
         "stage_details": doc.get("stage_details", ""),
         "status": doc.get("status", "unknown"),
+        "task": metadata.get("task"),
     }
 
 
@@ -289,6 +306,7 @@ async def list_documents(
         document_list = []
         for doc in docs:
             try:
+                metadata = doc.get("metadata") or {}
                 document_info = DocumentInfo(
                     id=doc["_id"],
                     title=doc["title"],
@@ -299,7 +317,8 @@ async def list_documents(
                     progress_percentage=doc.get("progress_percentage"),
                     current_stage=doc.get("current_stage"),
                     stage_details=doc.get("stage_details"),
-                    parse_quality=(doc.get("metadata") or {}).get("parse_quality")
+                    parse_quality=metadata.get("parse_quality"),
+                    task=metadata.get("task"),
                 )
                 document_list.append(document_info)
             except Exception as e:
@@ -536,6 +555,7 @@ async def retry_document_processing(
             assistant_id,
             knowledge_space_id,
         )
+        _store_document_task_dispatch(doc_repo, doc_id, task_dispatch)
         
         logger.info(f"文档重新处理任务已启动 - 文档ID: {doc_id}")
         

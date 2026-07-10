@@ -1228,6 +1228,7 @@ export interface components {
             parse_quality?: {
                 [key: string]: unknown;
             } | null;
+            task?: components["schemas"]["TaskDispatchInfo"] | null;
         };
         /**
          * DocumentListResponse
@@ -1254,6 +1255,7 @@ export interface components {
             stage_details: string;
             /** Status */
             status: string;
+            task?: components["schemas"]["TaskDispatchInfo"] | null;
         };
         /**
          * DocumentUpdateRequest

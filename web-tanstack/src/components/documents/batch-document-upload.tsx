@@ -4,7 +4,7 @@ import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from "r
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
-import type { DocumentProgress } from "@/types/api"
+import type { DocumentProgress, TaskDispatchInfo } from "@/types/api"
 
 type UploadStatus = "queued" | "uploading" | "processing" | "completed" | "failed"
 
@@ -17,6 +17,7 @@ type UploadQueueItem = {
   serverStatus?: string
   stage?: string
   message?: string
+  task?: TaskDispatchInfo | null
   error?: string
   retryable: boolean
 }
@@ -100,6 +101,27 @@ function canStartUpload(item: UploadQueueItem) {
   return item.status === "queued" || (item.status === "failed" && item.retryable)
 }
 
+function taskProcessingMessage(task?: TaskDispatchInfo | null) {
+  if (!task?.backend) {
+    return undefined
+  }
+  if (task.backend === "celery") {
+    return task.task_id ? `Celery 队列处理中 #${task.task_id.slice(0, 8)}` : "Celery 队列处理中"
+  }
+  if (task.backend === "fastapi-background") {
+    return "本地后台处理中"
+  }
+  return `${task.backend} 处理中`
+}
+
+function progressMessage(progress: DocumentProgress) {
+  const taskMessage = taskProcessingMessage(progress.task)
+  if (progress.stage_details && taskMessage) {
+    return `${progress.stage_details} (${taskMessage})`
+  }
+  return progress.stage_details || taskMessage
+}
+
 export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDocumentSettled }: BatchDocumentUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const subscriptionsRef = useRef<Map<string, () => void>>(new Map())
@@ -130,7 +152,8 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
         progress: progress.progress_percentage,
         serverStatus: progress.status,
         stage: progress.current_stage,
-        message: progress.stage_details,
+        message: progressMessage(progress),
+        task: progress.task,
         status: progress.status === "failed" ? "failed" : "processing",
         error: progress.status === "failed" ? progress.stage_details : undefined,
         retryable: progress.status === "failed",
@@ -302,6 +325,7 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
       serverStatus: result.data.status,
       stage: "准备处理",
       message: result.data.task?.backend === "celery" ? "已投递到 Celery 队列" : "已进入后端处理队列",
+      task: result.data.task,
     })
     onDocumentUploaded?.(documentId)
     subscribeProgress(item.id, documentId)

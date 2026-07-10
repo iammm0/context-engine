@@ -17,7 +17,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import { useUiStore } from "@/stores/ui-store"
-import type { DocumentChunkPreview, DocumentItem, DocumentListResponse, DocumentProgress } from "@/types/api"
+import type {
+  DocumentChunkPreview,
+  DocumentItem,
+  DocumentListResponse,
+  DocumentProgress,
+  TaskDispatchInfo,
+} from "@/types/api"
 
 const STREAMING_DOCUMENT_STATUSES = new Set(["uploading", "processing", "parsing", "chunking", "embedding"])
 const CHUNK_PAGE_SIZE = 40
@@ -70,6 +76,30 @@ function formatChunkLocation(chunk: DocumentChunkPreview) {
     parts.push(`${chunk.token_count} tokens`)
   }
   return parts.join(" · ") || "未定位"
+}
+
+function taskBackendLabel(task?: TaskDispatchInfo | null) {
+  if (!task?.backend) {
+    return null
+  }
+  if (task.backend === "celery") {
+    return "Celery"
+  }
+  if (task.backend === "fastapi-background") {
+    return "Local"
+  }
+  return task.backend
+}
+
+function taskSummary(task?: TaskDispatchInfo | null) {
+  const label = taskBackendLabel(task)
+  if (!label) {
+    return null
+  }
+  if (task?.task_id) {
+    return `${label} #${task.task_id.slice(0, 8)}`
+  }
+  return label
 }
 
 export function DocumentsTable() {
@@ -262,15 +292,19 @@ export function DocumentsTable() {
       if (result.error) {
         throw new Error(result.error)
       }
-      return documentId
+      return { documentId, task: result.data?.task }
     },
-    onSuccess: async (documentId) => {
-      patchDocumentInCache(documentId, {
+    onSuccess: async ({ documentId, task }) => {
+      const patch: Partial<DocumentItem> = {
         status: "processing",
         progress_percentage: 0,
         current_stage: "重新处理",
         stage_details: "已重新投递处理任务",
-      })
+      }
+      if (task) {
+        patch.task = task
+      }
+      patchDocumentInCache(documentId, patch)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] }),
         queryClient.invalidateQueries({ queryKey: ["document-chunks", documentId] }),
@@ -349,6 +383,7 @@ export function DocumentsTable() {
                   progress_percentage: progress.progress_percentage,
                   current_stage: progress.current_stage,
                   stage_details: progress.stage_details,
+                  task: progress.task ?? document.task,
                 }
               : document,
           ),
@@ -399,20 +434,25 @@ export function DocumentsTable() {
       {
         accessorKey: "progress_percentage",
         header: "Progress",
-        cell: ({ row }: { row: { original: DocumentItem } }) => (
-          <div className="min-w-[140px]">
-            <div className="mb-1 flex justify-between text-xs text-slate-500">
-              <span>{row.original.current_stage || "queued"}</span>
-              <span>{row.original.progress_percentage || 0}%</span>
+        cell: ({ row }: { row: { original: DocumentItem } }) => {
+          const task = taskSummary(row.original.task)
+
+          return (
+            <div className="min-w-[140px]">
+              <div className="mb-1 flex justify-between text-xs text-slate-500">
+                <span>{row.original.current_stage || "queued"}</span>
+                <span>{row.original.progress_percentage || 0}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-sky-100">
+                <div
+                  className="h-2 rounded-full bg-sky-600 transition-all"
+                  style={{ width: `${row.original.progress_percentage || 0}%` }}
+                />
+              </div>
+              {task ? <div className="mt-1 text-[11px] text-slate-500">{task}</div> : null}
             </div>
-            <div className="h-2 rounded-full bg-sky-100">
-              <div
-                className="h-2 rounded-full bg-sky-600 transition-all"
-                style={{ width: `${row.original.progress_percentage || 0}%` }}
-              />
-            </div>
-          </div>
-        ),
+          )
+        },
       },
       {
         accessorKey: "file_size",
@@ -564,6 +604,7 @@ export function DocumentsTable() {
                     <span>{formatBytes(selectedDocument.file_size)}</span>
                     <span>{selectedDocument.status}</span>
                     {selectedDocument.current_stage ? <span>{selectedDocument.current_stage}</span> : null}
+                    {selectedDocument.task ? <span>{taskSummary(selectedDocument.task)}</span> : null}
                   </div>
                 </div>
 
