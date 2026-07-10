@@ -1,3 +1,7 @@
+import type { components } from "./generated-api"
+
+type Schemas = components["schemas"]
+
 export interface ApiEnvelope<T> {
   data?: T
   error?: string
@@ -66,46 +70,18 @@ export interface ConversationDetail {
   updated_at?: string | null
 }
 
-export interface KnowledgeSpace {
-  id: string
-  name: string
-  description?: string | null
-  collection_name: string
-  is_default: boolean
-  created_at?: string | null
-  updated_at?: string | null
-}
+export type KnowledgeSpace = Schemas["KnowledgeSpaceResponse"]
+export type KnowledgeSpacesResponse = Schemas["KnowledgeSpaceListResponse"]
 
-export interface KnowledgeSpacesResponse {
-  knowledge_spaces: KnowledgeSpace[]
-  total: number
-}
-
-export interface DocumentItem {
-  id: string
-  title: string
-  file_type: string
-  file_size: number
-  created_at: string
-  status: string
-  progress_percentage?: number
-  current_stage?: string | null
-  stage_details?: string | null
+export type DocumentItem = Omit<Schemas["DocumentInfo"], "parse_quality"> & {
   parse_quality?: ParseQualitySummary | null
 }
 
-export interface DocumentListResponse {
+export type DocumentListResponse = Omit<Schemas["DocumentListResponse"], "documents"> & {
   documents: DocumentItem[]
-  total: number
 }
 
-export interface DocumentProgress {
-  document_id: string
-  progress_percentage: number
-  current_stage: string
-  stage_details: string
-  status: string
-}
+export type DocumentProgress = Schemas["DocumentProgressResponse"]
 
 export interface DocumentChunkPreview {
   id: string
@@ -124,9 +100,26 @@ export interface DocumentChunkPreview {
   features?: Record<string, boolean>
   artifact?: ChunkPreviewArtifact | null
   artifact_quality?: EvidenceArtifactQuality | null
+  source_locator?: SourceLocatorSummary | null
   quality_notes?: string[]
   chunker_type?: string | null
   parse_summary?: ParseQualitySummary | Record<string, unknown>
+}
+
+export interface DocumentChunkFacets {
+  content_type_counts?: Record<string, number>
+  feature_counts?: Record<string, number>
+  quality_note_count?: number
+  problem_chunk_count?: number
+}
+
+export type DocumentChunksResponse = Omit<
+  Schemas["DocumentChunksResponse"],
+  "chunks" | "parse_quality" | "facets"
+> & {
+  chunks: DocumentChunkPreview[]
+  parse_quality?: ParseQualitySummary | null
+  facets?: DocumentChunkFacets | null
 }
 
 export interface ChunkPreviewArtifact {
@@ -136,9 +129,80 @@ export interface ChunkPreviewArtifact {
   rows?: string[][]
   row_count?: number | null
   column_count?: number | null
+  sources?: TableSourceRef[]
   text?: string
   image_count?: number | null
   images?: OcrImageRef[]
+}
+
+export interface TableSourceRef {
+  table_index?: number | null
+  page?: number | null
+  page_end?: number | null
+  type?: string | null
+  caption?: string | null
+  title?: string | null
+  source?: string | null
+  target?: string | null
+  row_count?: number | null
+  column_count?: number | null
+  bbox?: unknown
+}
+
+export interface OcrImageRef {
+  page?: number | null
+  image_index?: number | null
+  confidence?: number | null
+  line_count?: number | null
+  text_length?: number | null
+  text_preview?: string | null
+  low_confidence?: boolean | null
+  width?: number | null
+  height?: number | null
+  target?: string | null
+  bbox?: unknown
+}
+
+export interface SourceLocatorAnchor {
+  type?: string
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  char_start?: number | null
+  char_end?: number | null
+  table_index?: number | null
+  image_index?: number | null
+  bbox?: unknown
+  width?: number | null
+  height?: number | null
+  confidence?: number | null
+  low_confidence?: boolean | null
+  text_preview?: string | null
+  source?: string | null
+  target?: string | null
+  caption?: string | null
+  title?: string | null
+  row_count?: number | null
+  column_count?: number | null
+  [key: string]: unknown
+}
+
+export interface SourceLocatorSummary {
+  source_type?: string
+  document_id?: string
+  chunk_index?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  char_start?: number | null
+  char_end?: number | null
+  section_path?: string[]
+  anchor_count?: number
+  anchors?: SourceLocatorAnchor[]
+  has_page?: boolean
+  has_char_range?: boolean
+  has_bbox?: boolean
+  has_table_source?: boolean
+  has_image_source?: boolean
 }
 
 export interface EvidenceArtifactQuality {
@@ -155,38 +219,6 @@ export interface EvidenceArtifactQuality {
   ocr_avg_confidence?: number | null
   warnings?: string[]
   recommendations?: string[]
-}
-
-export interface OcrImageRef {
-  page?: number | null
-  image_index?: number | null
-  confidence?: number | null
-  line_count?: number | null
-  text_length?: number | null
-  width?: number | null
-  height?: number | null
-  target?: string | null
-}
-
-export interface DocumentChunksResponse {
-  document_id: string
-  title: string
-  status: string
-  chunks: DocumentChunkPreview[]
-  total_chunks: number
-  total_all_chunks?: number | null
-  skip: number
-  limit: number
-  parse_quality?: ParseQualitySummary | null
-  target_chunk_id?: string | null
-  target_chunk_index?: number | null
-  target_found?: boolean | null
-  target_offset?: number | null
-  filters?: {
-    content_type?: string | null
-    feature?: string | null
-    q?: string | null
-  }
 }
 
 export interface EvidenceQuality {
@@ -286,28 +318,9 @@ export interface ParseQualityCheck {
   filter_label?: string | null
 }
 
-export interface RuntimeConfigResponse {
-  mode: string
-  modules: Record<string, boolean>
-  params: Record<string, string | number | boolean | string[] | undefined>
-  updated_at?: string | null
-}
-
-export interface AgentConfigItem {
-  agent_type: string
-  label: string
-  role: string
-  inference_model?: string | null
-  embedding_model?: string | null
-  system_prompt?: string | null
-  builtin_system_prompt: string
-  enabled: boolean
-  enable_locked: boolean
-}
-
-export interface AgentConfigsResponse {
-  agents: AgentConfigItem[]
-}
+export type RuntimeConfigResponse = Schemas["RuntimeConfigResponse"]
+export type AgentConfigItem = Schemas["AgentConfigItemResponse"]
+export type AgentConfigsResponse = Schemas["AgentConfigsListResponse"]
 
 export interface DeepResearchEvaluation {
   should_deep_research: boolean

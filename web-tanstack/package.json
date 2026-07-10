@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:api": "python ../scripts/export_openapi.py src/types/.openapi-schema.json && openapi-typescript src/types/.openapi-schema.json -o src/types/generated-api.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -42,6 +43,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "openapi-typescript": "^7.13.0",
     "shadcn": "^4.7.0",
     "tailwindcss": "^4.1.17",
     "typescript": "~6.0.2",

@@ -14,6 +14,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!web-tanstack/src/lib/
+!web-tanstack/src/lib/**
 parts/
 sdist/
 var/
@@ -61,6 +63,7 @@ yarn-error.log*
 .pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
+web-tanstack/src/types/.openapi-schema.json
 
 # ======================
 # 环境变量文件
