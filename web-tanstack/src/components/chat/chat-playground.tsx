@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   ArtifactSourceLocatorPreview,
@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { taskSummary } from "@/lib/task"
+import { cn } from "@/lib/utils"
 import { useUiStore } from "@/stores/ui-store"
 import type {
   ChatStreamEvent,
@@ -424,6 +425,24 @@ function formatSourceLocation(source: SourceInfo) {
   return [pages, section, chunk].filter(Boolean).join(" · ")
 }
 
+function collectMessageCitationIds(message: ConversationMessage) {
+  const ids = new Set<string>()
+  const addId = (id?: string | null) => {
+    const normalized = id?.trim()
+    if (normalized) {
+      ids.add(normalized)
+    }
+  }
+
+  message.evidence?.forEach((item) => addId(item.id))
+  message.sources?.forEach((source) => addId(source.evidence_id))
+  message.citation_quality?.valid_citation_ids?.forEach(addId)
+  message.citation_quality?.evidence_citation_audit?.forEach((item) => addId(item.id))
+  message.citation_quality?.cited_risky_evidence?.forEach((item) => addId(item.id))
+
+  return [...ids]
+}
+
 function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "sky" | "amber" | "rose" | "emerald" }) {
   const classes = {
     slate: "bg-slate-100 text-slate-700",
@@ -437,10 +456,12 @@ function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNo
 }
 
 function EvidenceRefList({
+  activeCitationId,
   title,
   items,
   tone,
 }: {
+  activeCitationId?: string | null
   title: string
   items?: CitationEvidenceRef[]
   tone: "amber" | "rose"
@@ -461,9 +482,13 @@ function EvidenceRefList({
           const location = formatEvidenceLocation(item)
           const documentUrl = buildEvidenceDocumentUrl(item)
           const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator)
+          const isActive = item.id === activeCitationId
           return (
             <div
-              className="rounded-md border border-white/70 bg-white/70 px-2 py-1"
+              className={cn(
+                "rounded-md border border-white/70 bg-white/70 px-2 py-1",
+                isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
+              )}
               key={`${title}-${item.id}-${item.chunk_id || item.chunk_index || item.score}`}
             >
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -508,7 +533,13 @@ function EvidenceRefList({
   )
 }
 
-function ReferenceSourceList({ sources }: { sources?: SourceInfo[] | null }) {
+function ReferenceSourceList({
+  activeCitationId,
+  sources,
+}: {
+  activeCitationId?: string | null
+  sources?: SourceInfo[] | null
+}) {
   if (!sources?.length) {
     return null
   }
@@ -522,9 +553,13 @@ function ReferenceSourceList({ sources }: { sources?: SourceInfo[] | null }) {
           const sourceLocatorSummary = formatSourceLocatorSummary(source.source_locator)
           const location = formatSourceLocation(source)
           const typeLabel = source.content_type ? evidenceTypeLabel[source.content_type] || source.content_type : null
+          const isActive = Boolean(source.evidence_id && source.evidence_id === activeCitationId)
           return (
             <div
-              className="rounded-md border border-sky-100 bg-white/85 px-2 py-1.5"
+              className={cn(
+                "rounded-md border border-sky-100 bg-white/85 px-2 py-1.5",
+                isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
+              )}
               key={`${source.document_id || source.file_id || source.title || "source"}-${source.chunk_id || source.chunk_index || index}`}
             >
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -562,7 +597,13 @@ function ReferenceSourceList({ sources }: { sources?: SourceInfo[] | null }) {
   )
 }
 
-function MessageDiagnostics({ message }: { message: ConversationMessage }) {
+function MessageDiagnostics({
+  activeCitationId,
+  message,
+}: {
+  activeCitationId?: string | null
+  message: ConversationMessage
+}) {
   if (message.role === "user") {
     return null
   }
@@ -616,7 +657,7 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
         </div>
       ) : null}
 
-      <ReferenceSourceList sources={message.sources} />
+      <ReferenceSourceList activeCitationId={activeCitationId} sources={message.sources} />
 
       {message.citation_quality?.evidence_citation_audit?.length ? (
         <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800" open>
@@ -629,9 +670,13 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
               const location = formatEvidenceLocation(item)
               const riskLabels = formatRiskLabels(item.risk_reasons)
               const documentUrl = buildEvidenceDocumentUrl(item)
+              const isActive = item.id === activeCitationId
               return (
                 <div
-                  className="rounded-md border border-slate-200 bg-slate-50/70 px-2 py-1"
+                  className={cn(
+                    "rounded-md border border-slate-200 bg-slate-50/70 px-2 py-1",
+                    isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
+                  )}
                   key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-audit`}
                 >
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -676,11 +721,21 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
         </details>
       ) : null}
 
-      <EvidenceRefList title="已引用需复核证据" items={message.citation_quality?.cited_risky_evidence} tone="rose" />
-      <EvidenceRefList title="未引用高分证据" items={message.citation_quality?.unreferenced_top_evidence} tone="amber" />
+      <EvidenceRefList
+        activeCitationId={activeCitationId}
+        title="已引用需复核证据"
+        items={message.citation_quality?.cited_risky_evidence}
+        tone="rose"
+      />
+      <EvidenceRefList
+        activeCitationId={activeCitationId}
+        title="未引用高分证据"
+        items={message.citation_quality?.unreferenced_top_evidence}
+        tone="amber"
+      />
 
       {message.evidence?.length ? (
-        <details className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+        <details className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900" open={Boolean(activeCitationId)}>
           <summary className="cursor-pointer font-medium">检索证据 · {message.evidence.length} 条</summary>
           <div className="mt-2 space-y-1">
             {message.evidence.slice(0, 5).map((item) => {
@@ -688,8 +743,15 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
               const location = formatEvidenceLocation(item)
               const documentUrl = buildEvidenceDocumentUrl(item)
               const sourceLocatorSummary = formatSourceLocatorSummary(item.metadata?.source_locator)
+              const isActive = item.id === activeCitationId
               return (
-                <div className="rounded-md border border-emerald-100 bg-white/80 px-2 py-1" key={`${item.id}-${item.chunk_id}`}>
+                <div
+                  className={cn(
+                    "rounded-md border border-emerald-100 bg-white/80 px-2 py-1",
+                    isActive && "border-amber-400 bg-amber-100/80 ring-1 ring-amber-400",
+                  )}
+                  key={`${item.id}-${item.chunk_id}`}
+                >
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <DiagnosticBadge tone="emerald">{item.id}</DiagnosticBadge>
                     <DiagnosticBadge tone="sky">{evidenceTypeLabel[type] || type}</DiagnosticBadge>
@@ -862,11 +924,20 @@ export function ChatPlayground() {
     sources: 0,
     status: "Idle",
   })
+  const [activeCitation, setActiveCitation] = useState<{
+    conversationId?: string | null
+    messageKey: string
+    citationId: string
+  } | null>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
   const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
   const queryAnalysisSubscriptionRef = useRef<(() => void) | null>(null)
+
+  const handleCitationClick = useCallback((messageKey: string, citationId: string) => {
+    setActiveCitation({ conversationId: activeConversationId, messageKey, citationId })
+  }, [activeConversationId])
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -1992,9 +2063,19 @@ export function ChatPlayground() {
                   发一条消息试试，右侧文档面板选择知识空间后可以直接走 RAG 检索。
                 </div>
               ) : (
-                allMessages.map((message, index) => (
+                allMessages.map((message, index) => {
+                  const messageKey = message.message_id || `${message.role}-${index}-${message.timestamp || ""}`
+                  const citationIds = message.role === "assistant" ? collectMessageCitationIds(message) : []
+                  const activeCitationId =
+                    activeCitation &&
+                    activeCitation.conversationId === activeConversationId &&
+                    activeCitation.messageKey === messageKey
+                      ? activeCitation.citationId
+                      : null
+
+                  return (
                   <div
-                    key={`${message.role}-${index}-${message.timestamp}`}
+                    key={messageKey}
                     className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     {message.role === "assistant" && (
@@ -2046,7 +2127,17 @@ export function ChatPlayground() {
                           </div>
                         </div>
                       ) : (
-                        <MarkdownMessage content={message.content} inverted={message.role === "user"} />
+                        <MarkdownMessage
+                          activeCitationId={activeCitationId}
+                          citationIds={citationIds}
+                          content={message.content}
+                          inverted={message.role === "user"}
+                          onCitationClick={
+                            message.role === "assistant"
+                              ? (citationId) => handleCitationClick(messageKey, citationId)
+                              : undefined
+                          }
+                        />
                       )}
                       <div className="mt-2 flex items-center gap-2 text-[11px] opacity-60">
                         {message.role === "user" ? <User className="size-3" /> : <Cpu className="size-3" />}
@@ -2080,10 +2171,11 @@ export function ChatPlayground() {
                           </Button>
                         </div>
                       ) : null}
-                      <MessageDiagnostics message={message} />
+                      <MessageDiagnostics activeCitationId={activeCitationId} message={message} />
                     </div>
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
 

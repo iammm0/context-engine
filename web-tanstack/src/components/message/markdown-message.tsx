@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -7,6 +7,9 @@ type MarkdownMessageProps = {
   className?: string
   content: string
   inverted?: boolean
+  citationIds?: string[]
+  activeCitationId?: string | null
+  onCitationClick?: (citationId: string) => void
 }
 
 type MarkdownBlock =
@@ -23,7 +26,14 @@ const UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
 const ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
 const QUOTE_PATTERN = /^\s*>\s?(.*)$/
 const TABLE_SEPARATOR_PATTERN = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/
-const INLINE_PATTERN = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g
+const INLINE_PATTERN = /(`[^`]+`|\*\*[^*]+\*\*|\[(S\d+)\]|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g
+
+type InlineRenderOptions = {
+  inverted: boolean
+  knownCitationIds: ReadonlySet<string>
+  activeCitationId?: string | null
+  onCitationClick?: (citationId: string) => void
+}
 
 function isTableSeparator(line?: string) {
   return Boolean(line && TABLE_SEPARATOR_PATTERN.test(line))
@@ -146,9 +156,11 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   return blocks.length ? blocks : [{ type: "paragraph", text: content }]
 }
 
-function renderInline(text: string, inverted: boolean): ReactNode[] {
+function renderInline(text: string, options: InlineRenderOptions): ReactNode[] {
   const nodes: ReactNode[] = []
   let lastIndex = 0
+  const { activeCitationId, inverted, knownCitationIds, onCitationClick } = options
+  const citationEnabled = knownCitationIds.size > 0
 
   for (const match of text.matchAll(INLINE_PATTERN)) {
     const token = match[0]
@@ -170,6 +182,37 @@ function renderInline(text: string, inverted: boolean): ReactNode[] {
       )
     } else if (token.startsWith("**")) {
       nodes.push(<strong key={`${token}-${match.index}`}>{token.slice(2, -2)}</strong>)
+    } else if (/^\[S\d+\]$/.test(token)) {
+      const citationId = token.slice(1, -1)
+      if (!citationEnabled) {
+        nodes.push(token)
+      } else {
+        const isKnown = knownCitationIds.has(citationId)
+        const isActive = activeCitationId === citationId
+        nodes.push(
+          <button
+            aria-label={isKnown ? `View evidence ${citationId}` : `Unmatched evidence ${citationId}`}
+            className={cn(
+              "mx-0.5 inline-flex align-baseline rounded px-1.5 py-0.5 text-[11px] font-semibold no-underline transition-colors focus-visible:outline-none focus-visible:ring-2",
+              isActive
+                ? "bg-amber-200 text-amber-950 ring-1 ring-amber-500 focus-visible:ring-amber-400"
+                : isKnown
+                  ? inverted
+                    ? "bg-white/15 text-white hover:bg-white/25 focus-visible:ring-white/40"
+                    : "bg-sky-100 text-sky-700 hover:bg-sky-200 focus-visible:ring-sky-300"
+                  : inverted
+                    ? "bg-white/10 text-white/70"
+                    : "bg-slate-100 text-slate-500",
+            )}
+            disabled={!isKnown || !onCitationClick}
+            key={`${citationId}-${match.index}`}
+            onClick={() => onCitationClick?.(citationId)}
+            type="button"
+          >
+            [{citationId}]
+          </button>,
+        )
+      }
     } else {
       const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/)
       if (link) {
@@ -230,8 +273,22 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   )
 }
 
-export function MarkdownMessage({ className, content, inverted = false }: MarkdownMessageProps) {
-  const blocks = parseMarkdownBlocks(content)
+export function MarkdownMessage({
+  activeCitationId,
+  citationIds = [],
+  className,
+  content,
+  inverted = false,
+  onCitationClick,
+}: MarkdownMessageProps) {
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content])
+  const knownCitationIds = useMemo(() => new Set(citationIds), [citationIds])
+  const inlineOptions: InlineRenderOptions = {
+    activeCitationId,
+    inverted,
+    knownCitationIds,
+    onCitationClick,
+  }
 
   return (
     <div className={cn("space-y-3 text-sm leading-6", inverted ? "text-white" : "text-slate-800", className)}>
@@ -240,7 +297,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
           const HeadingTag = `h${Math.min(block.depth + 1, 4)}` as "h2" | "h3" | "h4"
           return (
             <HeadingTag className="font-semibold text-current" key={`heading-${index}`}>
-              {renderInline(block.text, inverted)}
+              {renderInline(block.text, inlineOptions)}
             </HeadingTag>
           )
         }
@@ -253,7 +310,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
               key={`list-${index}`}
             >
               {block.items.map((item, itemIndex) => (
-                <li key={`${item}-${itemIndex}`}>{renderInline(item, inverted)}</li>
+                <li key={`${item}-${itemIndex}`}>{renderInline(item, inlineOptions)}</li>
               ))}
             </ListTag>
           )
@@ -269,7 +326,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
               key={`quote-${index}`}
             >
               {block.text.split("\n").map((line, lineIndex) => (
-                <p key={`${line}-${lineIndex}`}>{renderInline(line, inverted)}</p>
+                <p key={`${line}-${lineIndex}`}>{renderInline(line, inlineOptions)}</p>
               ))}
             </blockquote>
           )
@@ -287,7 +344,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
                   <tr>
                     {block.headers.map((header, headerIndex) => (
                       <th className="border-b border-slate-200 px-3 py-2 text-left font-semibold" key={headerIndex}>
-                        {renderInline(header, false)}
+                        {renderInline(header, { ...inlineOptions, inverted: false })}
                       </th>
                     ))}
                   </tr>
@@ -297,7 +354,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
                     <tr className="border-b border-slate-100 last:border-0" key={rowIndex}>
                       {block.headers.map((_, cellIndex) => (
                         <td className="px-3 py-2 align-top" key={cellIndex}>
-                          {renderInline(row[cellIndex] || "", false)}
+                          {renderInline(row[cellIndex] || "", { ...inlineOptions, inverted: false })}
                         </td>
                       ))}
                     </tr>
@@ -310,7 +367,7 @@ export function MarkdownMessage({ className, content, inverted = false }: Markdo
 
         return (
           <p className="whitespace-pre-wrap" key={`paragraph-${index}`}>
-            {renderInline(block.text, inverted)}
+            {renderInline(block.text, inlineOptions)}
           </p>
         )
       })}
