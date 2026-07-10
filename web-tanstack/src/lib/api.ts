@@ -69,6 +69,14 @@ type DocumentChunksOptions = {
   contextWindow?: number
 }
 
+type EventStreamOptions<T> = {
+  fallbackError: string
+  onDone?: (payload: T) => void
+  onError?: (message: string) => void
+  onProgress: (payload: T) => void
+  path: string
+}
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "")
 
 function apiUrl(path: string) {
@@ -224,6 +232,35 @@ async function parseSseResponse<T>(response: Response, onEvent: (event: T) => vo
       onEvent(JSON.parse(data) as T)
     }
   }
+}
+
+function subscribeEventStream<T>({ fallbackError, onDone, onError, onProgress, path }: EventStreamOptions<T>) {
+  const source = new EventSource(apiUrl(path))
+
+  source.addEventListener("progress", (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as T
+    onProgress(payload)
+  })
+  source.addEventListener("done", (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as T
+    onDone?.(payload)
+    source.close()
+  })
+  source.addEventListener("error", (event) => {
+    if (source.readyState === EventSource.CLOSED) {
+      return
+    }
+    onError?.(fallbackError)
+    if ("data" in event && typeof event.data === "string" && event.data) {
+      try {
+        onError?.(JSON.parse(event.data).error || fallbackError)
+      } catch {
+        onError?.(fallbackError)
+      }
+    }
+  })
+
+  return () => source.close()
 }
 
 export const api = {
@@ -465,34 +502,13 @@ export const api = {
     onDone?: ProgressSubscriber,
     onError?: (message: string) => void,
   ) {
-    const source = new EventSource(apiUrl(`/api/documents/${encodeURIComponent(documentId)}/progress/stream`))
-
-    const handleProgress = (event: MessageEvent<string>) => {
-      const payload = JSON.parse(event.data) as DocumentProgress
-      onProgress(payload)
-    }
-
-    source.addEventListener("progress", handleProgress)
-    source.addEventListener("done", (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as DocumentProgress
-      onDone?.(payload)
-      source.close()
+    return subscribeEventStream<DocumentProgress>({
+      fallbackError: "文档进度订阅中断",
+      onDone,
+      onError,
+      onProgress,
+      path: `/api/documents/${encodeURIComponent(documentId)}/progress/stream`,
     })
-    source.addEventListener("error", (event) => {
-      if (source.readyState === EventSource.CLOSED) {
-        return
-      }
-      onError?.("文档进度订阅中断")
-      if ("data" in event && typeof event.data === "string" && event.data) {
-        try {
-          onError?.(JSON.parse(event.data).error || "文档进度订阅中断")
-        } catch {
-          onError?.("文档进度订阅中断")
-        }
-      }
-    })
-
-    return () => source.close()
   },
 
   async uploadConversationAttachment(
@@ -536,38 +552,13 @@ export const api = {
     onDone?: AttachmentProgressSubscriber,
     onError?: (message: string) => void,
   ) {
-    const source = new EventSource(
-      apiUrl(
-        `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status/stream`,
-      ),
-    )
-
-    const handleProgress = (event: MessageEvent<string>) => {
-      const payload = JSON.parse(event.data) as ConversationAttachmentStatus
-      onProgress(payload)
-    }
-
-    source.addEventListener("progress", handleProgress)
-    source.addEventListener("done", (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as ConversationAttachmentStatus
-      onDone?.(payload)
-      source.close()
+    return subscribeEventStream<ConversationAttachmentStatus>({
+      fallbackError: "附件进度订阅中断",
+      onDone,
+      onError,
+      onProgress,
+      path: `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status/stream`,
     })
-    source.addEventListener("error", (event) => {
-      if (source.readyState === EventSource.CLOSED) {
-        return
-      }
-      onError?.("附件进度订阅中断")
-      if ("data" in event && typeof event.data === "string" && event.data) {
-        try {
-          onError?.(JSON.parse(event.data).error || "附件进度订阅中断")
-        } catch {
-          onError?.("附件进度订阅中断")
-        }
-      }
-    })
-
-    return () => source.close()
   },
 
   getTaskStatus(taskId: string, backend = "celery") {
@@ -586,34 +577,13 @@ export const api = {
     backend = "celery",
   ) {
     const query = buildQuery({ backend })
-    const source = new EventSource(apiUrl(`/api/tasks/${encodeURIComponent(taskId)}/stream${query}`))
-
-    const handleProgress = (event: MessageEvent<string>) => {
-      const payload = JSON.parse(event.data) as TaskDispatchInfo
-      onProgress(payload)
-    }
-
-    source.addEventListener("progress", handleProgress)
-    source.addEventListener("done", (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as TaskDispatchInfo
-      onDone?.(payload)
-      source.close()
+    return subscribeEventStream<TaskDispatchInfo>({
+      fallbackError: "任务状态订阅中断",
+      onDone,
+      onError,
+      onProgress,
+      path: `/api/tasks/${encodeURIComponent(taskId)}/stream${query}`,
     })
-    source.addEventListener("error", (event) => {
-      if (source.readyState === EventSource.CLOSED) {
-        return
-      }
-      onError?.("任务状态订阅中断")
-      if ("data" in event && typeof event.data === "string" && event.data) {
-        try {
-          onError?.(JSON.parse(event.data).error || "任务状态订阅中断")
-        } catch {
-          onError?.("任务状态订阅中断")
-        }
-      }
-    })
-
-    return () => source.close()
   },
 
   getRuntimeConfig() {
