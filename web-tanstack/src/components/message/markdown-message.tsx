@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 type MarkdownMessageProps = {
+  className?: string
   content: string
   inverted?: boolean
 }
@@ -195,11 +196,11 @@ function renderInline(text: string, inverted: boolean): ReactNode[] {
   return nodes
 }
 
-export function MarkdownMessage({ content, inverted = false }: MarkdownMessageProps) {
+export function MarkdownMessage({ className, content, inverted = false }: MarkdownMessageProps) {
   const blocks = parseMarkdownBlocks(content)
 
   return (
-    <div className={cn("space-y-3 text-sm leading-6", inverted ? "text-white" : "text-slate-800")}>
+    <div className={cn("space-y-3 text-sm leading-6", inverted ? "text-white" : "text-slate-800", className)}>
       {blocks.map((block, index) => {
         if (block.type === "heading") {
           const HeadingTag = `h${Math.min(block.depth + 1, 4)}` as "h2" | "h3" | "h4"

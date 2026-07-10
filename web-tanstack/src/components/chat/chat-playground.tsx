@@ -806,7 +806,9 @@ function DeepResearchPanel({
                     <DiagnosticBadge tone="emerald">evidence {result.evidence_ids.length}</DiagnosticBadge>
                   ) : null}
                 </div>
-                <div className="line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-slate-600">{result.content}</div>
+                <div className="max-h-[260px] overflow-auto rounded-md bg-white px-3 py-2">
+                  <MarkdownMessage className="text-xs leading-5" content={result.content} />
+                </div>
               </div>
             ))}
           </div>
