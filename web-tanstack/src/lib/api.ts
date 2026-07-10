@@ -369,7 +369,7 @@ export const api = {
   },
 
   queueQueryAnalysis(query: string) {
-    return postJson<"/api/retrieval/analyze/task", TaskDispatchInfo>(
+    return postJson<"/api/retrieval/analyze/task">(
       "/api/retrieval/analyze/task",
       "/api/retrieval/analyze/task",
       { query },
@@ -404,7 +404,7 @@ export const api = {
   },
 
   queueDeepResearch(body: DeepResearchRequest) {
-    return postJson<"/api/chat/deep-research/task", TaskDispatchInfo>(
+    return postJson<"/api/chat/deep-research/task">(
       "/api/chat/deep-research/task",
       "/api/chat/deep-research/task",
       body,
@@ -539,7 +539,7 @@ export const api = {
   },
 
   getConversationAttachmentStatus(conversationId: string, fileId: string) {
-    return getJson<"/api/chat/conversation-attachment/{conversation_id}/{file_id}/status", ConversationAttachmentStatus>(
+    return getJson<"/api/chat/conversation-attachment/{conversation_id}/{file_id}/status">(
       "/api/chat/conversation-attachment/{conversation_id}/{file_id}/status",
       `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status`,
     )
@@ -563,7 +563,7 @@ export const api = {
 
   getTaskStatus(taskId: string, backend = "celery") {
     const query = buildQuery({ backend })
-    return getJson<"/api/tasks/{task_id}", TaskDispatchInfo>(
+    return getJson<"/api/tasks/{task_id}">(
       "/api/tasks/{task_id}",
       `/api/tasks/${encodeURIComponent(taskId)}${query}`,
     )
