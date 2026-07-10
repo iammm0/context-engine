@@ -23,7 +23,7 @@ export function useConversationTitleTasks({ activeConversationId, conversations 
       (conversations || [])
         .filter((conversation) => {
           const task = conversation.title_task
-          return task?.backend === "celery" && Boolean(task.task_id) && task.ready === false
+          return task?.backend === "celery" && Boolean(task.task_id) && task.ready !== true
         })
         .map((conversation) => `${conversation.id}::${conversation.title_task?.backend}::${conversation.title_task?.task_id}`)
         .sort()

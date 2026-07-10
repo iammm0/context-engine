@@ -75,6 +75,7 @@ async def test_add_assistant_message_persists_title_task(monkeypatch):
     assert collection.document["title_task"] == {
         "backend": "celery",
         "task_id": "title-task-1",
+        "ready": False,
     }
     assert any("title_task" in update.get("$set", {}) for update in collection.updates)
 

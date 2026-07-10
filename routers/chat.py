@@ -542,7 +542,7 @@ async def add_message(
                         queued = generate_conversation_title_task.delay(conversation_id, current_title)
                         await collection.update_one(
                             {"_id": conversation_id},
-                            {"$set": {"title_task": {"backend": "celery", "task_id": queued.id}}},
+                            {"$set": {"title_task": {"backend": "celery", "task_id": queued.id, "ready": False}}},
                         )
                         logger.info(
                             "Conversation title generation queued in Celery - conversation_id=%s task_id=%s",
