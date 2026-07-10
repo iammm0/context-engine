@@ -39,10 +39,23 @@ import type {
   RuntimeConfigUpdate,
   TaskDispatchInfo,
 } from "@/types/api"
+import type { paths } from "@/types/generated-api"
 
 type ProgressSubscriber = (progress: DocumentProgress) => void
 type AttachmentProgressSubscriber = (progress: ConversationAttachmentStatus) => void
 type TaskProgressSubscriber = (progress: TaskDispatchInfo) => void
+type JsonMethod = "get" | "post" | "put" | "delete"
+type SuccessStatus = 200 | 201 | 202 | 204
+
+type OperationFor<Path extends keyof paths, Method extends JsonMethod> = paths[Path][Method]
+type JsonResponseContent<Response> = Response extends { content: { "application/json": infer Body } } ? Body : never
+type JsonResponseFor<Path extends keyof paths, Method extends JsonMethod> =
+  OperationFor<Path, Method> extends { responses: infer Responses }
+    ? JsonResponseContent<Responses[Extract<keyof Responses, SuccessStatus>]>
+    : never
+type JsonRequestBodyFor<Path extends keyof paths, Method extends JsonMethod> =
+  OperationFor<Path, Method> extends { requestBody: { content: { "application/json": infer Body } } } ? Body : never
+type JsonRequestOptions = Omit<RequestInit, "method" | "body">
 
 type DocumentChunksOptions = {
   skip?: number
@@ -116,6 +129,57 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiEnve
   }
 }
 
+function jsonHeaders(headers?: HeadersInit): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...(headers as Record<string, string> | undefined),
+  }
+}
+
+function getJson<Path extends keyof paths, Result = JsonResponseFor<Path, "get">>(
+  _route: Path,
+  path: string = _route,
+  init?: JsonRequestOptions,
+) {
+  return requestJson<Result>(path, { ...init, method: "GET" })
+}
+
+function deleteJson<Path extends keyof paths, Result = JsonResponseFor<Path, "delete">>(
+  _route: Path,
+  path: string = _route,
+  init?: JsonRequestOptions,
+) {
+  return requestJson<Result>(path, { ...init, method: "DELETE" })
+}
+
+function postJson<Path extends keyof paths, Result = JsonResponseFor<Path, "post">>(
+  _route: Path,
+  path: string,
+  body?: JsonRequestBodyFor<Path, "post">,
+  init?: JsonRequestOptions,
+) {
+  return requestJson<Result>(path, {
+    ...init,
+    method: "POST",
+    headers: body === undefined ? init?.headers : jsonHeaders(init?.headers),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+function putJson<Path extends keyof paths, Result = JsonResponseFor<Path, "put">>(
+  _route: Path,
+  path: string,
+  body: JsonRequestBodyFor<Path, "put">,
+  init?: JsonRequestOptions,
+) {
+  return requestJson<Result>(path, {
+    ...init,
+    method: "PUT",
+    headers: jsonHeaders(init?.headers),
+    body: JSON.stringify(body),
+  })
+}
+
 function buildQuery(params: Record<string, string | number | boolean | undefined>) {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -164,89 +228,79 @@ async function parseSseResponse<T>(response: Response, onEvent: (event: T) => vo
 
 export const api = {
   getRoot() {
-    return requestJson<RootResponse>("/")
+    return getJson<"/", RootResponse>("/")
   },
 
   getHealth() {
-    return requestJson<HealthStatus>("/health")
+    return getJson<"/health", HealthStatus>("/health")
   },
 
   getReadiness() {
-    return requestJson<ProbeStatusResponse>("/health/readiness")
+    return getJson<"/health/readiness", ProbeStatusResponse>("/health/readiness")
   },
 
   getMetrics() {
-    return requestJson<MetricsResponse>("/health/metrics")
+    return getJson<"/health/metrics", MetricsResponse>("/health/metrics")
   },
 
   getModels() {
-    return requestJson<ModelsResponse>("/api/chat/models")
+    return getJson<"/api/chat/models", ModelsResponse>("/api/chat/models")
   },
 
   getConversations() {
-    return requestJson<ConversationListResponse>("/api/chat/conversations")
+    return getJson<"/api/chat/conversations", ConversationListResponse>("/api/chat/conversations")
   },
 
   createConversation(title: string) {
-    return requestJson<ConversationCreateResponse>("/api/chat/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    })
+    return postJson<"/api/chat/conversations", ConversationCreateResponse>(
+      "/api/chat/conversations",
+      "/api/chat/conversations",
+      { title },
+    )
   },
 
   getConversation(conversationId: string) {
-    return requestJson<ConversationDetail>(`/api/chat/conversations/${encodeURIComponent(conversationId)}`)
+    return getJson<"/api/chat/conversations/{conversation_id}", ConversationDetail>(
+      "/api/chat/conversations/{conversation_id}",
+      `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
+    )
   },
 
   updateConversation(conversationId: string, body: ConversationUpdate) {
-    return requestJson<ConversationUpdateResponse>(
+    return putJson<"/api/chat/conversations/{conversation_id}", ConversationUpdateResponse>(
+      "/api/chat/conversations/{conversation_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
+      body,
     )
   },
 
   deleteConversation(conversationId: string) {
-    return requestJson<ActionResponse>(
+    return deleteJson<"/api/chat/conversations/{conversation_id}", ActionResponse>(
+      "/api/chat/conversations/{conversation_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
-      {
-        method: "DELETE",
-      },
     )
   },
 
   addConversationMessage(conversationId: string, body: MessagePayload) {
-    return requestJson<MessageActionResponse>(
+    return postJson<"/api/chat/conversations/{conversation_id}/messages", MessageActionResponse>(
+      "/api/chat/conversations/{conversation_id}/messages",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
+      body as JsonRequestBodyFor<"/api/chat/conversations/{conversation_id}/messages", "post">,
     )
   },
 
   updateConversationMessage(conversationId: string, messageId: string, body: MessageUpdate) {
-    return requestJson<MessageActionResponse>(
+    return putJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}", MessageActionResponse>(
+      "/api/chat/conversations/{conversation_id}/messages/{message_id}",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
+      body,
     )
   },
 
   regenerateConversationMessage(conversationId: string, messageId: string) {
-    return requestJson<RegenerateMessageResponse>(
+    return postJson<"/api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate", RegenerateMessageResponse>(
+      "/api/chat/conversations/{conversation_id}/messages/{message_id}/regenerate",
       `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/regenerate`,
-      {
-        method: "POST",
-      },
     )
   },
 
@@ -270,27 +324,27 @@ export const api = {
   },
 
   evaluateDeepResearch(body: DeepResearchEvaluateRequest) {
-    return requestJson<DeepResearchEvaluation>("/api/chat/deep-research/evaluate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    return postJson<"/api/chat/deep-research/evaluate", DeepResearchEvaluation>(
+      "/api/chat/deep-research/evaluate",
+      "/api/chat/deep-research/evaluate",
+      body,
+    )
   },
 
   queueQueryAnalysis(query: string) {
-    return requestJson<TaskDispatchInfo>("/api/retrieval/analyze/task", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query } satisfies { query: string }),
-    })
+    return postJson<"/api/retrieval/analyze/task", TaskDispatchInfo>(
+      "/api/retrieval/analyze/task",
+      "/api/retrieval/analyze/task",
+      { query },
+    )
   },
 
   analyzeQuery(query: string) {
-    return requestJson<QueryAnalysisResponse>("/api/retrieval/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query } satisfies { query: string }),
-    })
+    return postJson<"/api/retrieval/analyze", QueryAnalysisResponse>(
+      "/api/retrieval/analyze",
+      "/api/retrieval/analyze",
+      { query },
+    )
   },
 
   async streamDeepResearch(body: DeepResearchRequest, onEvent: (event: DeepResearchStreamEvent) => void, signal?: AbortSignal) {
@@ -313,33 +367,35 @@ export const api = {
   },
 
   queueDeepResearch(body: DeepResearchRequest) {
-    return requestJson<TaskDispatchInfo>("/api/chat/deep-research/task", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    return postJson<"/api/chat/deep-research/task", TaskDispatchInfo>(
+      "/api/chat/deep-research/task",
+      "/api/chat/deep-research/task",
+      body,
+    )
   },
 
   getKnowledgeSpaces() {
-    return requestJson<KnowledgeSpacesResponse>("/api/knowledge-spaces")
+    return getJson<"/api/knowledge-spaces", KnowledgeSpacesResponse>("/api/knowledge-spaces")
   },
 
   createKnowledgeSpace(name: string, description?: string) {
-    return requestJson<KnowledgeSpace>("/api/knowledge-spaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
-    })
+    return postJson<"/api/knowledge-spaces", KnowledgeSpace>(
+      "/api/knowledge-spaces",
+      "/api/knowledge-spaces",
+      { name, description },
+    )
   },
 
   getDocuments(knowledgeSpaceId?: string) {
-    return requestJson<DocumentListResponse>(
+    return getJson<"/api/documents", DocumentListResponse>(
+      "/api/documents",
       `/api/documents${buildQuery({ skip: 0, limit: 100, knowledge_space_id: knowledgeSpaceId })}`,
     )
   },
 
   getDocumentChunks(documentId: string, options?: DocumentChunksOptions) {
-    return requestJson<DocumentChunksResponse>(
+    return getJson<"/api/documents/{doc_id}/chunks", DocumentChunksResponse>(
+      "/api/documents/{doc_id}/chunks",
       `/api/documents/${encodeURIComponent(documentId)}/chunks${buildQuery({
         skip: options?.skip ?? 0,
         limit: options?.limit ?? 40,
@@ -355,23 +411,25 @@ export const api = {
   },
 
   updateDocument(documentId: string, body: DocumentUpdate) {
-    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    return putJson<"/api/documents/{doc_id}", DocumentActionResponse>(
+      "/api/documents/{doc_id}",
+      `/api/documents/${encodeURIComponent(documentId)}`,
+      body,
+    )
   },
 
   deleteDocument(documentId: string) {
-    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}`, {
-      method: "DELETE",
-    })
+    return deleteJson<"/api/documents/{doc_id}", DocumentActionResponse>(
+      "/api/documents/{doc_id}",
+      `/api/documents/${encodeURIComponent(documentId)}`,
+    )
   },
 
   retryDocumentProcessing(documentId: string) {
-    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}/retry`, {
-      method: "POST",
-    })
+    return postJson<"/api/documents/{doc_id}/retry", DocumentActionResponse>(
+      "/api/documents/{doc_id}/retry",
+      `/api/documents/${encodeURIComponent(documentId)}/retry`,
+    )
   },
 
   documentPreviewUrl(documentId: string, page?: number | null) {
@@ -465,7 +523,8 @@ export const api = {
   },
 
   getConversationAttachmentStatus(conversationId: string, fileId: string) {
-    return requestJson<ConversationAttachmentStatus>(
+    return getJson<"/api/chat/conversation-attachment/{conversation_id}/{file_id}/status", ConversationAttachmentStatus>(
+      "/api/chat/conversation-attachment/{conversation_id}/{file_id}/status",
       `/api/chat/conversation-attachment/${encodeURIComponent(conversationId)}/${encodeURIComponent(fileId)}/status`,
     )
   },
@@ -513,7 +572,10 @@ export const api = {
 
   getTaskStatus(taskId: string, backend = "celery") {
     const query = buildQuery({ backend })
-    return requestJson<TaskDispatchInfo>(`/api/tasks/${encodeURIComponent(taskId)}${query}`)
+    return getJson<"/api/tasks/{task_id}", TaskDispatchInfo>(
+      "/api/tasks/{task_id}",
+      `/api/tasks/${encodeURIComponent(taskId)}${query}`,
+    )
   },
 
   subscribeTaskStatus(
@@ -555,26 +617,26 @@ export const api = {
   },
 
   getRuntimeConfig() {
-    return requestJson<RuntimeConfigResponse>("/api/settings/runtime")
+    return getJson<"/api/settings/runtime", RuntimeConfigResponse>("/api/settings/runtime")
   },
 
   updateRuntimeConfig(body: RuntimeConfigUpdate) {
-    return requestJson<RuntimeConfigResponse>("/api/settings/runtime", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    return putJson<"/api/settings/runtime", RuntimeConfigResponse>(
+      "/api/settings/runtime",
+      "/api/settings/runtime",
+      body,
+    )
   },
 
   getAgents() {
-    return requestJson<AgentConfigsResponse>("/api/settings/agents")
+    return getJson<"/api/settings/agents", AgentConfigsResponse>("/api/settings/agents")
   },
 
   updateAgentConfig(agentType: string, body: AgentConfigUpdate) {
-    return requestJson<AgentConfigItem>(`/api/settings/agents/${encodeURIComponent(agentType)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    return putJson<"/api/settings/agents/{agent_type}", AgentConfigItem>(
+      "/api/settings/agents/{agent_type}",
+      `/api/settings/agents/${encodeURIComponent(agentType)}`,
+      body,
+    )
   },
 }
