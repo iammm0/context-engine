@@ -35,6 +35,8 @@ langchain-experimental>=0.0.50
 
 # 其他
 pydantic>=2.0.0
+celery[redis]>=5.3.0
+redis>=5.0.0
 
 # 测试
 pytest>=8.0.0

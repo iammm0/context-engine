@@ -1,6 +1,8 @@
 """文档管理路由（知识库功能）"""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, BackgroundTasks, Query
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, BackgroundTasks, Query, Request
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+import asyncio
+import json
 import os
 import shutil
 import traceback
@@ -15,6 +17,7 @@ from embedding.embedding_service import embedding_service
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
+from services.document_task_dispatcher import enqueue_document_processing
 from utils.logger import logger
 from utils.chunk_metadata import build_chunk_preview, build_chunk_preview_facets, build_parse_quality_summary, build_retrieval_payload_metadata, enrich_chunks_for_visualization, filter_chunks_for_preview
 
@@ -947,7 +950,13 @@ async def upload_document(
         doc_repo.update_document_status(doc_id, "processing")
         
         # 在后台异步处理文档，不阻塞响应（确保传递 knowledge_space_id）
-        background_tasks.add_task(process_document_background, file_path, doc_id, assistant_id, knowledge_space_id)
+        task_dispatch = enqueue_document_processing(
+            background_tasks,
+            file_path,
+            doc_id,
+            assistant_id,
+            knowledge_space_id,
+        )
         
         logger.info(f"文件上传成功，已启动后台处理任务 - 文档ID: {doc_id}, 助手ID: {assistant_id or '未指定'}, 文件哈希: {file_hash[:16]}...")
         
@@ -958,7 +967,8 @@ async def upload_document(
                 "document_id": doc_id,
                 "filename": file.filename,
                 "file_size": file_size,
-                "status": "processing"
+                "status": "processing",
+                "task": task_dispatch,
             }
         )
     except HTTPException:
@@ -1004,6 +1014,19 @@ class DocumentProgressResponse(BaseModel):
     current_stage: str
     stage_details: str
     status: str
+
+
+TERMINAL_DOCUMENT_STATUSES = {"completed", "failed"}
+
+
+def _build_document_progress_payload(doc_id: str, doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "document_id": doc_id,
+        "progress_percentage": doc.get("progress_percentage", 0),
+        "current_stage": doc.get("current_stage", "未知"),
+        "stage_details": doc.get("stage_details", ""),
+        "status": doc.get("status", "unknown"),
+    }
 
 
 class DocumentListResponse(BaseModel):
@@ -1083,13 +1106,7 @@ async def get_document_progress(
                 detail="文档不存在"
             )
         
-        return DocumentProgressResponse(
-            document_id=doc_id,
-            progress_percentage=doc.get("progress_percentage", 0),
-            current_stage=doc.get("current_stage", "未知"),
-            stage_details=doc.get("stage_details", ""),
-            status=doc.get("status", "unknown")
-        )
+        return DocumentProgressResponse(**_build_document_progress_payload(doc_id, doc))
     except HTTPException:
         raise
     except Exception as e:
@@ -1098,6 +1115,50 @@ async def get_document_progress(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取文档进度失败: {str(e)}"
         )
+
+
+@router.get("/{doc_id}/progress/stream")
+async def stream_document_progress(
+    doc_id: str,
+    request: Request,
+    interval: float = Query(1.5, ge=0.5, le=10.0),
+):
+    """Stream document processing progress as server-sent events."""
+
+    async def event_generator():
+        repo = get_document_repo()
+        last_payload = None
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            doc = repo.get_document(doc_id)
+            if not doc:
+                payload = {"document_id": doc_id, "status": "not_found", "error": "文档不存在"}
+                yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                break
+
+            payload = _build_document_progress_payload(doc_id, doc)
+            serialized = json.dumps(payload, ensure_ascii=False)
+            if serialized != last_payload:
+                yield f"event: progress\ndata: {serialized}\n\n"
+                last_payload = serialized
+
+            if payload["status"] in TERMINAL_DOCUMENT_STATUSES or payload["progress_percentage"] >= 100:
+                yield f"event: done\ndata: {serialized}\n\n"
+                break
+
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 class DocumentDetailResponse(BaseModel):
@@ -1223,7 +1284,13 @@ async def retry_document_processing(
         doc_repo.update_document_progress(doc_id, 0, "重新处理", "正在清理旧数据并重新开始处理...")
         
         # 7. 重新启动处理任务
-        background_tasks.add_task(process_document_background, file_path, doc_id, assistant_id, knowledge_space_id)
+        task_dispatch = enqueue_document_processing(
+            background_tasks,
+            file_path,
+            doc_id,
+            assistant_id,
+            knowledge_space_id,
+        )
         
         logger.info(f"文档重新处理任务已启动 - 文档ID: {doc_id}")
         
@@ -1232,7 +1299,8 @@ async def retry_document_processing(
             content={
                 "message": "文档重新处理已启动",
                 "document_id": doc_id,
-                "status": "processing"
+                "status": "processing",
+                "task": task_dispatch,
             }
         )
     except HTTPException:

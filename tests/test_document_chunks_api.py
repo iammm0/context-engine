@@ -100,6 +100,22 @@ class FakeMixedChunkRepo:
         ]
 
 
+class FakeProgressDocumentRepo:
+    def get_document(self, doc_id):
+        return {
+            "_id": doc_id,
+            "status": "completed",
+            "progress_percentage": 100,
+            "current_stage": "完成",
+            "stage_details": "done",
+        }
+
+
+class FakeRequest:
+    async def is_disconnected(self):
+        return False
+
+
 @pytest.mark.asyncio
 async def test_get_document_chunks_centers_window_on_target_chunk(monkeypatch):
     monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeDocumentRepo())
@@ -198,3 +214,18 @@ async def test_preview_document_serves_original_file_inline(monkeypatch, tmp_pat
 
     assert response.media_type == "application/pdf"
     assert response.headers["content-disposition"].startswith("inline;")
+
+
+@pytest.mark.asyncio
+async def test_stream_document_progress_emits_progress_and_done(monkeypatch):
+    monkeypatch.setattr(documents_router, "get_document_repo", lambda: FakeProgressDocumentRepo())
+
+    response = await documents_router.stream_document_progress("doc1", FakeRequest(), interval=0.5)
+    events = []
+    async for chunk in response.body_iterator:
+        events.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+
+    body = "".join(events)
+    assert "event: progress" in body
+    assert "event: done" in body
+    assert '"progress_percentage": 100' in body
