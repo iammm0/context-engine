@@ -45,11 +45,16 @@ function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAtta
 }
 
 function mergeAttachmentTask(current: ChatAttachment, task: TaskDispatchInfo, error?: string): ChatAttachment {
+  const failed = task.ready && task.successful === false
+  const completed = task.ready && task.successful === true
+
   return {
     ...current,
     task,
-    error: error ?? current.error,
-    status: task.ready && task.successful === false ? "failed" : current.status,
+    error: error ?? (failed ? task.error || current.error : current.error),
+    message: failed ? task.error || current.message : current.message,
+    progress_percentage: completed ? 100 : current.progress_percentage,
+    status: failed ? "failed" : completed && isAttachmentProcessing(current.status) ? "completed" : current.status,
   }
 }
 
@@ -59,11 +64,12 @@ export function useChatAttachmentSubscriptions({ attachments, setAttachments }: 
 
   useEffect(() => {
     const processingAttachments = attachments.filter((attachment) => isAttachmentProcessing(attachment.status))
-    const processingKeys = new Set<string>()
+    const activeAttachmentKeys = new Set<string>()
+    const activeTaskKeys = new Set<string>()
 
     for (const attachment of processingAttachments) {
       const key = `${attachment.conversation_id}:${attachment.file_id}`
-      processingKeys.add(key)
+      activeAttachmentKeys.add(key)
 
       if (attachmentSubscriptionsRef.current[key]) {
         continue
@@ -106,14 +112,14 @@ export function useChatAttachmentSubscriptions({ attachments, setAttachments }: 
       )
     }
 
-    for (const attachment of processingAttachments) {
+    for (const attachment of attachments) {
       const task = attachment.task
-      if (task?.backend !== "celery" || !task.task_id) {
+      if (task?.backend !== "celery" || !task.task_id || task.ready === true) {
         continue
       }
 
-      const key = `${attachment.conversation_id}:${attachment.file_id}:task`
-      processingKeys.add(key)
+      const key = `${attachment.conversation_id}:${attachment.file_id}:task:${task.task_id}`
+      activeTaskKeys.add(key)
 
       if (attachmentTaskSubscriptionsRef.current[key]) {
         continue
@@ -157,14 +163,14 @@ export function useChatAttachmentSubscriptions({ attachments, setAttachments }: 
     }
 
     for (const [key, unsubscribe] of Object.entries(attachmentSubscriptionsRef.current)) {
-      if (!processingKeys.has(key)) {
+      if (!activeAttachmentKeys.has(key)) {
         unsubscribe()
         delete attachmentSubscriptionsRef.current[key]
       }
     }
 
     for (const [key, unsubscribe] of Object.entries(attachmentTaskSubscriptionsRef.current)) {
-      if (!processingKeys.has(key)) {
+      if (!activeTaskKeys.has(key)) {
         unsubscribe()
         delete attachmentTaskSubscriptionsRef.current[key]
       }
