@@ -6,12 +6,14 @@ import type {
   ChatRequestPayload,
   ChatStreamEvent,
   ConversationAttachmentStatus,
+  DocumentActionResponse,
   DocumentChunksResponse,
   ConversationUpdate,
   ConversationDetail,
   ConversationListResponse,
   DocumentListResponse,
   DocumentProgress,
+  DocumentUpdate,
   KnowledgeSpace,
   KnowledgeSpacesResponse,
   MessageUpdate,
@@ -288,6 +290,31 @@ export const api = {
         context_window: options?.contextWindow,
       })}`,
     )
+  },
+
+  updateDocument(documentId: string, body: DocumentUpdate) {
+    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  },
+
+  deleteDocument(documentId: string) {
+    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: "DELETE",
+    })
+  },
+
+  retryDocumentProcessing(documentId: string) {
+    return requestJson<DocumentActionResponse>(`/api/documents/${encodeURIComponent(documentId)}/retry`, {
+      method: "POST",
+    })
+  },
+
+  documentPreviewUrl(documentId: string, page?: number | null) {
+    const pageFragment = typeof page === "number" && page > 0 ? `#page=${page}` : ""
+    return `${apiUrl(`/api/documents/${encodeURIComponent(documentId)}/preview`)}${pageFragment}`
   },
 
   async uploadDocument(knowledgeSpaceId: string, file: File): Promise<ApiEnvelope<UploadDocumentResponse>> {

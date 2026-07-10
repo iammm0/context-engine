@@ -122,6 +122,19 @@ export type DocumentListResponse = Omit<Schemas["DocumentListResponse"], "docume
 }
 
 export type DocumentProgress = Schemas["DocumentProgressResponse"]
+export type DocumentUpdate = Schemas["DocumentUpdateRequest"]
+
+export interface DocumentActionResponse {
+  message?: string
+  document_id: string
+  title?: string
+  status?: string
+  task?: {
+    backend: string
+    task_id?: string | null
+    fallback_reason?: string
+  }
+}
 
 export interface DocumentChunkPreview {
   id: string

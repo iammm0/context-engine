@@ -7,7 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { DatabaseZap, FileText, FileUp, LoaderCircle, Search } from "lucide-react"
+import { DatabaseZap, Eye, FileText, FileUp, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -79,6 +79,8 @@ export function DocumentsTable() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [newSpaceName, setNewSpaceName] = useState("")
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>()
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameTitle, setRenameTitle] = useState("")
   const [chunkContentType, setChunkContentType] = useState("all")
   const [chunkFeature, setChunkFeature] = useState("all")
   const [chunkQuery, setChunkQuery] = useState("")
@@ -143,6 +145,7 @@ export function DocumentsTable() {
     () => data.find((document) => document.id === selectedDocumentId),
     [data, selectedDocumentId],
   )
+  const selectedDocumentIsStreaming = selectedDocument ? STREAMING_DOCUMENT_STATUSES.has(selectedDocument.status) : false
   const streamingDocumentKey = useMemo(
     () =>
       data
@@ -165,6 +168,11 @@ export function DocumentsTable() {
       setSelectedDocumentId(data[0].id)
     }
   }, [data, selectedDocumentId])
+
+  useEffect(() => {
+    setIsRenaming(false)
+    setRenameTitle(selectedDocument?.title || "")
+  }, [selectedDocument?.id, selectedDocument?.title])
 
   useEffect(() => {
     setChunkSkip(0)
@@ -206,6 +214,125 @@ export function DocumentsTable() {
     const values = new Set(["all", "text", "table", "image_ocr", "formula", "code", ...Object.keys(contentTypeCounts)])
     return Array.from(values)
   }, [contentTypeCounts])
+
+  const patchDocumentInCache = (documentId: string, patch: Partial<DocumentItem>) => {
+    queryClient.setQueryData<DocumentListResponse>(["documents", selectedKnowledgeSpaceId], (existing) => {
+      if (!existing) {
+        return existing
+      }
+
+      return {
+        ...existing,
+        documents: existing.documents.map((document) =>
+          document.id === documentId ? { ...document, ...patch } : document,
+        ),
+      }
+    })
+  }
+
+  const updateDocumentMutation = useMutation({
+    mutationFn: async ({ documentId, title }: { documentId: string; title: string }) => {
+      const result = await api.updateDocument(documentId, { title })
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      return { documentId, title }
+    },
+    onSuccess: async ({ documentId, title }) => {
+      patchDocumentInCache(documentId, { title })
+      setIsRenaming(false)
+      await queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+    },
+  })
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (documentId: string) => {
+      const result = await api.deleteDocument(documentId)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      return documentId
+    },
+    onSuccess: async (documentId) => {
+      queryClient.setQueryData<DocumentListResponse>(["documents", selectedKnowledgeSpaceId], (existing) => {
+        if (!existing) {
+          return existing
+        }
+
+        return {
+          ...existing,
+          documents: existing.documents.filter((document) => document.id !== documentId),
+          total: Math.max(0, existing.total - 1),
+        }
+      })
+      queryClient.removeQueries({ queryKey: ["document-chunks", documentId] })
+      if (selectedDocumentId === documentId) {
+        setSelectedDocumentId(undefined)
+      }
+      await queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] })
+    },
+  })
+
+  const retryDocumentMutation = useMutation({
+    mutationFn: async (documentId: string) => {
+      const result = await api.retryDocumentProcessing(documentId)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      return documentId
+    },
+    onSuccess: async (documentId) => {
+      patchDocumentInCache(documentId, {
+        status: "processing",
+        progress_percentage: 0,
+        current_stage: "重新处理",
+        stage_details: "已重新投递处理任务",
+      })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["documents", selectedKnowledgeSpaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["document-chunks", documentId] }),
+      ])
+    },
+  })
+
+  const trimmedRenameTitle = renameTitle.trim()
+  const canSubmitRename = Boolean(
+    selectedDocument &&
+      trimmedRenameTitle &&
+      trimmedRenameTitle !== selectedDocument.title &&
+      !updateDocumentMutation.isPending,
+  )
+
+  const submitRename = () => {
+    if (!selectedDocument || !canSubmitRename) {
+      return
+    }
+    updateDocumentMutation.mutate({ documentId: selectedDocument.id, title: trimmedRenameTitle })
+  }
+
+  const openDocumentPreview = (documentId: string, page?: number | null) => {
+    window.open(api.documentPreviewUrl(documentId, page), "_blank", "noopener,noreferrer")
+  }
+
+  const retrySelectedDocument = () => {
+    if (!selectedDocument || selectedDocumentIsStreaming) {
+      return
+    }
+    retryDocumentMutation.mutate(selectedDocument.id)
+  }
+
+  const deleteSelectedDocument = () => {
+    if (!selectedDocument) {
+      return
+    }
+
+    const confirmed = window.confirm(`确认删除「${selectedDocument.title}」吗？这会清理文档记录、切块和向量数据。`)
+    if (!confirmed) {
+      return
+    }
+
+    deleteDocumentMutation.mutate(selectedDocument.id)
+  }
 
   useEffect(() => {
     const documentIds = streamingDocumentKey ? streamingDocumentKey.split("|") : []
@@ -338,6 +465,9 @@ export function DocumentsTable() {
     documentsQuery.error instanceof Error ? `文档列表加载失败：${documentsQuery.error.message}` : null,
     createSpaceMutation.error instanceof Error ? `知识空间创建失败：${createSpaceMutation.error.message}` : null,
     uploadMutation.error instanceof Error ? `上传失败：${uploadMutation.error.message}` : null,
+    updateDocumentMutation.error instanceof Error ? `重命名失败：${updateDocumentMutation.error.message}` : null,
+    deleteDocumentMutation.error instanceof Error ? `删除失败：${deleteDocumentMutation.error.message}` : null,
+    retryDocumentMutation.error instanceof Error ? `重试失败：${retryDocumentMutation.error.message}` : null,
     chunkPreviewQuery.error instanceof Error ? `Chunk inspector 加载失败：${chunkPreviewQuery.error.message}` : null,
   ].filter(Boolean) as string[]
 
@@ -415,76 +545,177 @@ export function DocumentsTable() {
       </Card>
 
       <div className="grid gap-5">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle>Document Inventory</CardTitle>
-              <CardDescription>虚拟滚动表格适合后续接大规模文档列表，这里先把字段和交互框好。</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Badge>{rows.length} rows</Badge>
-              <Badge>{selectedKnowledgeSpaceId ? "space selected" : "all spaces"}</Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-2xl border border-[var(--blue-line)] bg-white">
-            <div className="min-w-[820px]">
-              <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-b border-[var(--blue-line)] bg-[var(--surface-blue)] px-4 py-3 text-xs uppercase tracking-[0.16em] text-slate-500">
-                {table.getFlatHeaders().map((header) => (
-                  <button
-                    key={header.id}
-                    className="text-left transition-colors hover:text-sky-900 focus-visible:outline-none focus-visible:text-sky-900"
-                    onClick={header.column.getToggleSortingHandler()}
-                    type="button"
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </button>
-                ))}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Document Inventory</CardTitle>
+                <CardDescription>虚拟滚动表格适合后续接大规模文档列表，这里先把字段和交互框好。</CardDescription>
               </div>
+              <div className="flex gap-2">
+                <Badge>{rows.length} rows</Badge>
+                <Badge>{selectedKnowledgeSpaceId ? "space selected" : "all spaces"}</Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {selectedDocument ? (
+              <div className="mb-4 flex flex-col gap-3 border-b border-[var(--blue-line)] pb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Selected document</div>
+                  {isRenaming ? (
+                    <Input
+                      className="mt-2 h-9 max-w-xl"
+                      onChange={(event) => setRenameTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          submitRename()
+                        }
+                        if (event.key === "Escape") {
+                          setIsRenaming(false)
+                          setRenameTitle(selectedDocument.title)
+                        }
+                      }}
+                      value={renameTitle}
+                    />
+                  ) : (
+                    <div className="mt-1 truncate text-base font-semibold text-slate-950">{selectedDocument.title}</div>
+                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>{selectedDocument.file_type.toUpperCase()}</span>
+                    <span>{formatBytes(selectedDocument.file_size)}</span>
+                    <span>{selectedDocument.status}</span>
+                    {selectedDocument.current_stage ? <span>{selectedDocument.current_stage}</span> : null}
+                  </div>
+                </div>
 
-              <div className="h-[520px] overflow-auto" ref={parentRef}>
-                <div
-                  style={{
-                    height: `${rowVirtualizer.getTotalSize()}px`,
-                    position: "relative",
-                  }}
-                >
-                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = rows[virtualRow.index]
-                    return (
-                      <button
-                        key={row.id}
-                        className={`grid appearance-none grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-0 border-b border-sky-100 px-4 py-4 text-left text-sm transition-colors ${
-                          row.original.id === selectedDocumentId
-                            ? "bg-sky-50 text-sky-950"
-                            : "bg-white text-slate-700 hover:bg-[var(--surface-blue)]"
-                        }`}
-                        onClick={() => setSelectedDocumentId(row.original.id)}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          transform: `translateY(${virtualRow.start}px)`,
+                <div className="flex flex-wrap gap-2">
+                  {isRenaming ? (
+                    <>
+                      <Button disabled={!canSubmitRename} onClick={submitRename} size="sm">
+                        {updateDocumentMutation.isPending ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                        ) : (
+                          <Save className="size-3.5" />
+                        )}
+                        保存
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setIsRenaming(false)
+                          setRenameTitle(selectedDocument.title)
                         }}
-                        type="button"
+                        size="sm"
+                        variant="outline"
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <div key={cell.id} className="flex items-center">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </div>
-                        ))}
-                      </button>
-                    )
-                  })}
+                        <X className="size-3.5" />
+                        取消
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        setRenameTitle(selectedDocument.title)
+                        setIsRenaming(true)
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Pencil className="size-3.5" />
+                      重命名
+                    </Button>
+                  )}
+
+                  <Button onClick={() => openDocumentPreview(selectedDocument.id)} size="sm" variant="outline">
+                    <Eye className="size-3.5" />
+                    预览
+                  </Button>
+                  <Button
+                    disabled={selectedDocumentIsStreaming || retryDocumentMutation.isPending}
+                    onClick={retrySelectedDocument}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {retryDocumentMutation.isPending ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="size-3.5" />
+                    )}
+                    重试处理
+                  </Button>
+                  <Button
+                    disabled={deleteDocumentMutation.isPending}
+                    onClick={deleteSelectedDocument}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    {deleteDocumentMutation.isPending ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                    删除
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="overflow-x-auto rounded-2xl border border-[var(--blue-line)] bg-white">
+              <div className="min-w-[820px]">
+                <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-b border-[var(--blue-line)] bg-[var(--surface-blue)] px-4 py-3 text-xs uppercase tracking-[0.16em] text-slate-500">
+                  {table.getFlatHeaders().map((header) => (
+                    <button
+                      key={header.id}
+                      className="text-left transition-colors hover:text-sky-900 focus-visible:outline-none focus-visible:text-sky-900"
+                      onClick={header.column.getToggleSortingHandler()}
+                      type="button"
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="h-[520px] overflow-auto" ref={parentRef}>
+                  <div
+                    style={{
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      position: "relative",
+                    }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = rows[virtualRow.index]
+                      return (
+                        <button
+                          key={row.id}
+                          className={`grid appearance-none grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-0 border-b border-sky-100 px-4 py-4 text-left text-sm transition-colors ${
+                            row.original.id === selectedDocumentId
+                              ? "bg-sky-50 text-sky-950"
+                              : "bg-white text-slate-700 hover:bg-[var(--surface-blue)]"
+                          }`}
+                          onClick={() => setSelectedDocumentId(row.original.id)}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                          type="button"
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <div key={cell.id} className="flex items-center">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </div>
+                          ))}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -594,6 +825,17 @@ export function DocumentsTable() {
                         {chunk.artifact_quality?.status === "warn" ? (
                           <Badge className="border-amber-200 bg-amber-50 text-amber-800">artifact warn</Badge>
                         ) : null}
+                        <Button
+                          className="ml-auto"
+                          onClick={() =>
+                            openDocumentPreview(chunk.document_id || selectedDocument.id, chunk.page_start ?? chunk.page)
+                          }
+                          size="xs"
+                          variant="ghost"
+                        >
+                          <Eye className="size-3" />
+                          原文
+                        </Button>
                       </div>
 
                       <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
