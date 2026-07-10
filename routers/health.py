@@ -20,6 +20,19 @@ class HealthStatus(BaseModel):
     system: Optional[Dict[str, Any]] = None
 
 
+class ProbeStatusResponse(BaseModel):
+    """Liveness/readiness probe response."""
+    status: str
+    error: Optional[str] = None
+
+
+class MetricsResponse(BaseModel):
+    """Runtime metrics response."""
+    request_stats: Optional[Dict[str, Any]] = None
+    system_metrics: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
 @router.get("/health", response_model=HealthStatus)
 async def health_check():
     """
@@ -87,7 +100,7 @@ async def health_check():
     )
 
 
-@router.get("/health/liveness")
+@router.get("/health/liveness", response_model=ProbeStatusResponse)
 async def liveness_check():
     """
     Kubernetes存活探针
@@ -96,7 +109,7 @@ async def liveness_check():
     return {"status": "alive"}
 
 
-@router.get("/health/readiness")
+@router.get("/health/readiness", response_model=ProbeStatusResponse)
 async def readiness_check():
     """
     Kubernetes就绪探针
@@ -114,7 +127,7 @@ async def readiness_check():
         return {"status": "not_ready", "error": str(e)[:100]}
 
 
-@router.get("/health/metrics")
+@router.get("/health/metrics", response_model=MetricsResponse)
 async def metrics():
     """
     性能指标端点

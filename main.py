@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -98,7 +99,13 @@ app.include_router(settings.router, prefix="/api/settings", tags=["设置"])
 app.include_router(health.router, tags=["健康检查"])
 
 
-@app.get("/")
+class RootResponse(BaseModel):
+    """Root API response."""
+    message: str
+    version: str
+
+
+@app.get("/", response_model=RootResponse)
 async def root():
     """根路径"""
     return {"message": "context-engine API 服务", "version": "v0.8.5"}

@@ -1392,6 +1392,22 @@ export interface components {
             content: string;
         };
         /**
+         * MetricsResponse
+         * @description Runtime metrics response.
+         */
+        MetricsResponse: {
+            /** Request Stats */
+            request_stats?: {
+                [key: string]: unknown;
+            } | null;
+            /** System Metrics */
+            system_metrics?: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
          * ModelInfo
          * @description Available model metadata.
          */
@@ -1412,6 +1428,16 @@ export interface components {
         ModelsResponse: {
             /** Models */
             models: components["schemas"]["ModelInfo"][];
+        };
+        /**
+         * ProbeStatusResponse
+         * @description Liveness/readiness probe response.
+         */
+        ProbeStatusResponse: {
+            /** Status */
+            status: string;
+            /** Error */
+            error?: string | null;
         };
         /**
          * QueryAnalysisRequest
@@ -1519,6 +1545,16 @@ export interface components {
             recommended_resources: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        /**
+         * RootResponse
+         * @description Root API response.
+         */
+        RootResponse: {
+            /** Message */
+            message: string;
+            /** Version */
+            version: string;
         };
         /** RuntimeConfigResponse */
         RuntimeConfigResponse: {
@@ -2729,7 +2765,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ProbeStatusResponse"];
                 };
             };
         };
@@ -2749,7 +2785,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ProbeStatusResponse"];
                 };
             };
         };
@@ -2769,7 +2805,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MetricsResponse"];
                 };
             };
         };
@@ -2789,7 +2825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RootResponse"];
                 };
             };
         };
