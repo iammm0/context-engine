@@ -123,6 +123,9 @@ export type DocumentListResponse = Omit<Schemas["DocumentListResponse"], "docume
 
 export type DocumentProgress = Schemas["DocumentProgressResponse"]
 export type DocumentUpdate = Schemas["DocumentUpdateRequest"]
+export type TaskDispatchInfo = Schemas["TaskDispatchInfo"]
+export type DocumentUploadResponse = Schemas["DocumentUploadResponse"]
+export type ConversationAttachmentUploadResponse = Schemas["ConversationAttachmentUploadResponse"]
 
 export interface DocumentActionResponse {
   message?: string

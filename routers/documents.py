@@ -10,6 +10,7 @@ from database.qdrant_client import qdrant_client
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
+from models.task import TaskDispatchInfo
 from services.document_ingestion import get_chunk_repo, get_document_repo
 from services.document_task_dispatcher import enqueue_document_processing
 from utils.logger import logger
@@ -25,7 +26,17 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # router 只保留 HTTP 入参校验、响应组装和轻量查询。
 
 
-@router.post("/upload")
+class DocumentUploadResponse(BaseModel):
+    """Document upload response with queued task metadata."""
+    message: str
+    document_id: str
+    filename: str
+    file_size: int
+    status: str
+    task: TaskDispatchInfo
+
+
+@router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -179,17 +190,14 @@ async def upload_document(
         
         logger.info(f"文件上传成功，已启动后台处理任务 - 文档ID: {doc_id}, 助手ID: {assistant_id or '未指定'}, 文件哈希: {file_hash[:16]}...")
         
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "文件上传成功，正在后台处理",
-                "document_id": doc_id,
-                "filename": file.filename,
-                "file_size": file_size,
-                "status": "processing",
-                "task": task_dispatch,
-            }
-        )
+        return {
+            "message": "文件上传成功，正在后台处理",
+            "document_id": doc_id,
+            "filename": file.filename,
+            "file_size": file_size,
+            "status": "processing",
+            "task": task_dispatch,
+        }
     except HTTPException:
         raise
     except Exception as e:

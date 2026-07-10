@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database.mongodb import mongodb, require_mongodb
+from models.task import TaskDispatchInfo
 from services.document_task_dispatcher import enqueue_document_processing
 from utils.logger import logger
 from utils.timezone import beijing_now
@@ -1118,6 +1119,15 @@ class ConversationAttachmentStatus(BaseModel):
     updated_at: Optional[str] = None
 
 
+class ConversationAttachmentUploadResponse(BaseModel):
+    """Conversation attachment upload response with queued task metadata."""
+    file_id: str
+    document_id: str
+    status: str
+    message: str
+    task: TaskDispatchInfo
+
+
 TERMINAL_ATTACHMENT_STATUSES = {"completed", "failed", "cancelled"}
 
 
@@ -1354,7 +1364,7 @@ async def process_conversation_attachment(
         raise
 
 
-@router.post("/conversation-attachment")
+@router.post("/conversation-attachment", response_model=ConversationAttachmentUploadResponse)
 async def upload_conversation_attachment(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),

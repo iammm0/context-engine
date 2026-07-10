@@ -886,6 +886,21 @@ export interface components {
             updated_at?: string | null;
         };
         /**
+         * ConversationAttachmentUploadResponse
+         * @description Conversation attachment upload response with queued task metadata.
+         */
+        ConversationAttachmentUploadResponse: {
+            /** File Id */
+            file_id: string;
+            /** Document Id */
+            document_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            task: components["schemas"]["TaskDispatchInfo"];
+        };
+        /**
          * ConversationCreate
          * @description 创建对话请求
          */
@@ -1102,6 +1117,23 @@ export interface components {
         DocumentUpdateRequest: {
             /** Title */
             title: string;
+        };
+        /**
+         * DocumentUploadResponse
+         * @description Document upload response with queued task metadata.
+         */
+        DocumentUploadResponse: {
+            /** Message */
+            message: string;
+            /** Document Id */
+            document_id: string;
+            /** Filename */
+            filename: string;
+            /** File Size */
+            file_size: number;
+            /** Status */
+            status: string;
+            task: components["schemas"]["TaskDispatchInfo"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1323,6 +1355,15 @@ export interface components {
             params?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** TaskDispatchInfo */
+        TaskDispatchInfo: {
+            /** Backend */
+            backend: string;
+            /** Task Id */
+            task_id?: string | null;
+            /** Fallback Reason */
+            fallback_reason?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -1745,7 +1786,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationAttachmentUploadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1840,12 +1881,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocumentUploadResponse"];
                 };
             };
             /** @description Validation Error */

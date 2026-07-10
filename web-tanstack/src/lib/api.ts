@@ -6,8 +6,10 @@ import type {
   ChatRequestPayload,
   ChatStreamEvent,
   ConversationAttachmentStatus,
+  ConversationAttachmentUploadResponse,
   DocumentActionResponse,
   DocumentChunksResponse,
+  DocumentUploadResponse,
   DeepResearchEvaluateRequest,
   DeepResearchEvaluation,
   DeepResearchRequest,
@@ -26,31 +28,6 @@ import type {
   RuntimeConfigResponse,
   RuntimeConfigUpdate,
 } from "@/types/api"
-
-type UploadDocumentResponse = {
-  message?: string
-  document_id: string
-  filename?: string
-  file_size?: number
-  status: string
-  task?: {
-    backend: string
-    task_id?: string | null
-    fallback_reason?: string
-  }
-}
-
-type UploadConversationAttachmentResponse = {
-  file_id: string
-  document_id?: string
-  status: string
-  message?: string
-  task?: {
-    backend: string
-    task_id?: string | null
-    fallback_reason?: string
-  }
-}
 
 type ProgressSubscriber = (progress: DocumentProgress) => void
 type AttachmentProgressSubscriber = (progress: ConversationAttachmentStatus) => void
@@ -348,7 +325,7 @@ export const api = {
     return `${apiUrl(`/api/documents/${encodeURIComponent(documentId)}/preview`)}${pageFragment}`
   },
 
-  async uploadDocument(knowledgeSpaceId: string, file: File): Promise<ApiEnvelope<UploadDocumentResponse>> {
+  async uploadDocument(knowledgeSpaceId: string, file: File): Promise<ApiEnvelope<DocumentUploadResponse>> {
     const form = new FormData()
     form.append("file", file)
     form.append("knowledge_space_id", knowledgeSpaceId)
@@ -364,7 +341,7 @@ export const api = {
         return { error: parseHttpError(payload) }
       }
 
-      return { data: payload as UploadDocumentResponse }
+      return { data: payload as DocumentUploadResponse }
     } catch (error) {
       return { error: error instanceof Error ? error.message : "上传失败" }
     }
@@ -410,7 +387,7 @@ export const api = {
     conversationId: string,
     knowledgeSpaceId: string,
     file: File,
-  ): Promise<ApiEnvelope<UploadConversationAttachmentResponse>> {
+  ): Promise<ApiEnvelope<ConversationAttachmentUploadResponse>> {
     const form = new FormData()
     form.append("file", file)
     form.append("conversation_id", conversationId)
@@ -427,7 +404,7 @@ export const api = {
         return { error: parseHttpError(payload) }
       }
 
-      return { data: payload as UploadConversationAttachmentResponse }
+      return { data: payload as ConversationAttachmentUploadResponse }
     } catch (error) {
       return { error: error instanceof Error ? error.message : "附件上传失败" }
     }
