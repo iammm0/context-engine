@@ -97,6 +97,15 @@ function mergeAttachmentStatus(current: ChatAttachment, status: ConversationAtta
   }
 }
 
+function mergeAttachmentTask(current: ChatAttachment, task: TaskDispatchInfo, error?: string): ChatAttachment {
+  return {
+    ...current,
+    task,
+    error: error ?? current.error,
+    status: task.ready && task.successful === false ? "failed" : current.status,
+  }
+}
+
 const evidenceTypeLabel: Record<string, string> = {
   text: "文本",
   table: "表格",
@@ -820,6 +829,7 @@ export function ChatPlayground() {
   const messageListRef = useRef<HTMLDivElement>(null)
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
+  const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -938,10 +948,67 @@ export function ChatPlayground() {
       )
     }
 
+    for (const attachment of processingAttachments) {
+      const task = attachment.task
+      if (task?.backend !== "celery" || !task.task_id) {
+        continue
+      }
+
+      const key = `${attachment.conversation_id}:${attachment.file_id}:task`
+      processingKeys.add(key)
+
+      if (attachmentTaskSubscriptionsRef.current[key]) {
+        continue
+      }
+
+      attachmentTaskSubscriptionsRef.current[key] = api.subscribeTaskStatus(
+        task.task_id,
+        (status) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? mergeAttachmentTask(item, status)
+                : item,
+            ),
+          )
+        },
+        (status) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? mergeAttachmentTask(item, status)
+                : item,
+            ),
+          )
+          attachmentTaskSubscriptionsRef.current[key]?.()
+          delete attachmentTaskSubscriptionsRef.current[key]
+        },
+        (message) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.file_id === attachment.file_id && item.conversation_id === attachment.conversation_id
+                ? { ...item, error: message }
+                : item,
+            ),
+          )
+          attachmentTaskSubscriptionsRef.current[key]?.()
+          delete attachmentTaskSubscriptionsRef.current[key]
+        },
+        task.backend,
+      )
+    }
+
     for (const [key, unsubscribe] of Object.entries(attachmentSubscriptionsRef.current)) {
       if (!processingKeys.has(key)) {
         unsubscribe()
         delete attachmentSubscriptionsRef.current[key]
+      }
+    }
+
+    for (const [key, unsubscribe] of Object.entries(attachmentTaskSubscriptionsRef.current)) {
+      if (!processingKeys.has(key)) {
+        unsubscribe()
+        delete attachmentTaskSubscriptionsRef.current[key]
       }
     }
   }, [attachments])
@@ -952,6 +1019,10 @@ export function ChatPlayground() {
         unsubscribe()
       }
       attachmentSubscriptionsRef.current = {}
+      for (const unsubscribe of Object.values(attachmentTaskSubscriptionsRef.current)) {
+        unsubscribe()
+      }
+      attachmentTaskSubscriptionsRef.current = {}
     }
   }, [])
 
