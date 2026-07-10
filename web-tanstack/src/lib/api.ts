@@ -250,13 +250,14 @@ export const api = {
     )
   },
 
-  async streamChat(body: ChatRequestPayload, onEvent: (event: ChatStreamEvent) => void) {
+  async streamChat(body: ChatRequestPayload, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal) {
     const response = await fetch(apiUrl("/api/chat/"), {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
       },
+      signal,
       body: JSON.stringify(body),
     })
 
@@ -292,13 +293,14 @@ export const api = {
     })
   },
 
-  async streamDeepResearch(body: DeepResearchRequest, onEvent: (event: DeepResearchStreamEvent) => void) {
+  async streamDeepResearch(body: DeepResearchRequest, onEvent: (event: DeepResearchStreamEvent) => void, signal?: AbortSignal) {
     const response = await fetch(apiUrl("/api/chat/deep-research"), {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
       },
+      signal,
       body: JSON.stringify(body),
     })
 

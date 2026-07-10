@@ -298,6 +298,16 @@ function formatBytes(value?: number | null) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function createAbortError() {
+  const error = new Error("已停止生成")
+  error.name = "AbortError"
+  return error
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError"
+}
+
 function formatEvidenceLocation(item: EvidenceItem | CitationEvidenceRef | CitationEvidenceAudit) {
   const pageStart = "metadata" in item ? item.metadata?.page_start ?? item.page ?? null : item.page_start ?? item.page ?? null
   const pageEnd = "metadata" in item ? item.metadata?.page_end ?? item.page ?? null : item.page_end ?? item.page ?? null
@@ -1053,6 +1063,7 @@ export function ChatPlayground() {
     citationId: string
   } | null>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const citationTargetRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
@@ -1084,6 +1095,15 @@ export function ChatPlayground() {
     setActiveCitation({ conversationId: activeConversationId, messageKey, citationId })
     scrollToCitationTarget(messageKey, citationId)
   }, [activeConversationId, scrollToCitationTarget])
+
+  const handleStopGeneration = useCallback(() => {
+    if (!abortControllerRef.current) {
+      return
+    }
+
+    abortControllerRef.current.abort()
+    setStreamingMeta((current) => ({ ...current, status: "Stopping" }))
+  }, [])
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -1223,6 +1243,13 @@ export function ChatPlayground() {
   useEffect(() => {
     window.localStorage.setItem("deepResearchEnabled", String(deepResearchEnabled))
   }, [deepResearchEnabled])
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     writeStoredModelSelection(CHAT_LLM_MODEL_STORAGE_KEY, selectedLlmModel)
@@ -1627,89 +1654,108 @@ export function ChatPlayground() {
         messages: keptMessages,
       })
 
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
       setDraftAnswer("")
       setStreamingMeta({ evidence: 0, sources: 0, status: "Regenerating" })
       let assistantText = ""
       let finalEvent: ChatStreamEvent | undefined
       let streamError: string | undefined
 
-      await api.streamChat(
-        {
-          query: message.content,
-          conversation_id: conversationId,
-          knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
-          enable_rag: enableRag,
-          generation_config: generationConfig,
-        },
-        (event) => {
-          finalEvent = event.done ? event : finalEvent
+      try {
+        await api.streamChat(
+          {
+            query: message.content,
+            conversation_id: conversationId,
+            knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
+            enable_rag: enableRag,
+            generation_config: generationConfig,
+          },
+          (event) => {
+            finalEvent = event.done ? event : finalEvent
 
-          if (event.error) {
-            streamError = event.error
-            setDraftAnswer(`请求失败：${event.error}`)
-            setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
-            return
-          }
+            if (event.error) {
+              streamError = event.error
+              setDraftAnswer(`请求失败：${event.error}`)
+              setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
+              return
+            }
 
-          if (event.content) {
-            assistantText += event.content
-            setDraftAnswer(assistantText)
-          }
+            if (event.content) {
+              assistantText += event.content
+              setDraftAnswer(assistantText)
+            }
 
-          if (event.done) {
-            queryClient.setQueryData(["conversation", conversationId], (existing: ConversationDetail | undefined) => ({
-              ...(existing || currentConversation),
-              messages: [
-                ...(existing?.messages || keptMessages),
-                {
-                  role: "assistant",
-                  content: assistantText,
-                  timestamp: new Date().toISOString(),
-                  sources: event.sources,
-                  evidence: event.evidence,
-                  evidence_quality: event.evidence_quality,
-                  citation_warnings: event.citation_warnings,
-                  citation_quality: event.citation_quality,
-                  recommended_resources: event.recommended_resources,
-                },
-              ],
-            }))
-            setStreamingMeta({
-              evidence: event.evidence?.length || 0,
-              sources: event.sources?.length || 0,
-              status: "Done",
-            })
-            setDraftAnswer("")
-          }
-        },
-      )
+            if (event.done) {
+              queryClient.setQueryData(["conversation", conversationId], (existing: ConversationDetail | undefined) => ({
+                ...(existing || currentConversation),
+                messages: [
+                  ...(existing?.messages || keptMessages),
+                  {
+                    role: "assistant",
+                    content: assistantText,
+                    timestamp: new Date().toISOString(),
+                    sources: event.sources,
+                    evidence: event.evidence,
+                    evidence_quality: event.evidence_quality,
+                    citation_warnings: event.citation_warnings,
+                    citation_quality: event.citation_quality,
+                    recommended_resources: event.recommended_resources,
+                  },
+                ],
+              }))
+              setStreamingMeta({
+                evidence: event.evidence?.length || 0,
+                sources: event.sources?.length || 0,
+                status: "Done",
+              })
+              setDraftAnswer("")
+            }
+          },
+          abortController.signal,
+        )
 
-      if (streamError) {
-        throw new Error(streamError)
+        if (abortController.signal.aborted) {
+          throw createAbortError()
+        }
+        if (streamError) {
+          throw new Error(streamError)
+        }
+
+        if (assistantText.trim()) {
+          await api.addConversationMessage(conversationId, {
+            role: "assistant",
+            content: assistantText,
+            sources: finalEvent?.sources,
+            evidence: finalEvent?.evidence,
+            evidence_quality: finalEvent?.evidence_quality,
+            citation_warnings: finalEvent?.citation_warnings,
+            citation_quality: finalEvent?.citation_quality,
+            recommended_resources: finalEvent?.recommended_resources,
+          })
+        }
+
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+          queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
+        ])
+      } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null
+        }
       }
-
-      if (assistantText.trim()) {
-        await api.addConversationMessage(conversationId, {
-          role: "assistant",
-          content: assistantText,
-          sources: finalEvent?.sources,
-          evidence: finalEvent?.evidence,
-          evidence_quality: finalEvent?.evidence_quality,
-          citation_warnings: finalEvent?.citation_warnings,
-          citation_quality: finalEvent?.citation_quality,
-          recommended_resources: finalEvent?.recommended_resources,
-        })
-      }
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["conversations"] }),
-        queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
-      ])
     },
     onSuccess: () => {
       setActionMessage({ tone: "success", text: "回答已重新生成" })
     },
     onError: (error) => {
+      if (isAbortError(error)) {
+        setDraftAnswer((current) => (current.trim() ? `${current}\n\n[已停止生成]` : "已停止生成"))
+        setStreamingMeta((current) => ({ ...current, status: "Stopped" }))
+        setActionMessage({ tone: "success", text: "已停止生成" })
+        return
+      }
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "重新生成失败" })
     },
   })
@@ -1756,6 +1802,11 @@ export function ChatPlayground() {
         content: question,
       })
 
+      abortControllerRef.current?.abort()
+      const abortController = new AbortController()
+      abortControllerRef.current = abortController
+
+      try {
       resetDeepResearchRun()
       setDraftAnswer("")
       let shouldUseDeepResearch = deepResearchEnabled
@@ -1782,6 +1833,10 @@ export function ChatPlayground() {
             })
           }
         }
+      }
+
+      if (abortController.signal.aborted) {
+        throw createAbortError()
       }
 
       if (shouldUseDeepResearch) {
@@ -1893,8 +1948,12 @@ export function ChatPlayground() {
               setStreamingMeta({ evidence: 0, sources: 0, status: "Done" })
             }
           },
+          abortController.signal,
         )
 
+        if (abortController.signal.aborted) {
+          throw createAbortError()
+        }
         if (streamError) {
           throw new Error(streamError)
         }
@@ -1981,8 +2040,12 @@ export function ChatPlayground() {
             setDraftAnswer("")
           }
         },
+        abortController.signal,
       )
 
+      if (abortController.signal.aborted) {
+        throw createAbortError()
+      }
       if (streamError) {
         throw new Error(streamError)
       }
@@ -2004,6 +2067,18 @@ export function ChatPlayground() {
         queryClient.invalidateQueries({ queryKey: ["conversations"] }),
         queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
       ])
+      } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null
+        }
+      }
+    },
+    onError: (error) => {
+      if (isAbortError(error)) {
+        setDraftAnswer((current) => (current.trim() ? `${current}\n\n[已停止生成]` : "已停止生成"))
+        setStreamingMeta((current) => ({ ...current, status: "Stopped" }))
+        setActionMessage({ tone: "success", text: "已停止生成" })
+      }
     },
   })
 
@@ -2012,7 +2087,7 @@ export function ChatPlayground() {
     conversationsQuery.error instanceof Error ? `会话列表加载失败：${conversationsQuery.error.message}` : null,
     conversationDetailQuery.error instanceof Error ? `会话详情加载失败：${conversationDetailQuery.error.message}` : null,
     modelsQuery.error instanceof Error ? `模型列表加载失败：${modelsQuery.error.message}` : null,
-    sendMutation.error instanceof Error ? `消息发送失败：${sendMutation.error.message}` : null,
+    sendMutation.error instanceof Error && !isAbortError(sendMutation.error) ? `消息发送失败：${sendMutation.error.message}` : null,
   ].filter(Boolean) as string[]
 
   const allMessages: ConversationMessage[] =
@@ -2030,6 +2105,7 @@ export function ChatPlayground() {
     ? attachments.filter((attachment) => attachment.conversation_id === activeConversationId)
     : []
   const hasProcessingAttachments = activeAttachments.some((attachment) => isAttachmentProcessing(attachment.status))
+  const responseIsRunning = sendMutation.isPending || regenerateMessageMutation.isPending
   const queryAnalysisIsRunning = queryAnalysisRun.status === "queued" || queryAnalysisRun.status === "running"
   const queryAnalysisTask = taskSummary(queryAnalysisRun.task)
   const queryAnalysisResult = queryAnalysisRun.result
@@ -2518,15 +2594,20 @@ export function ChatPlayground() {
 
                 <Button
                   className="h-14 rounded-2xl"
-                  disabled={!prompt.trim() || sendMutation.isPending || regenerateMessageMutation.isPending || hasProcessingAttachments}
+                  disabled={responseIsRunning ? false : !prompt.trim() || hasProcessingAttachments}
                   onClick={() => {
+                    if (responseIsRunning) {
+                      handleStopGeneration()
+                      return
+                    }
                     void sendMutation.mutateAsync(prompt)
                     setPrompt("")
                   }}
                   size="lg"
+                  variant={responseIsRunning ? "destructive" : "default"}
                 >
-                  <SendHorizontal className="size-4" />
-                  发送消息
+                  {responseIsRunning ? <X className="size-4" /> : <SendHorizontal className="size-4" />}
+                  {responseIsRunning ? "停止生成" : "发送消息"}
                 </Button>
               </div>
             </div>
@@ -2536,7 +2617,7 @@ export function ChatPlayground() {
         <Card>
           <CardHeader>
             <CardTitle>Chat Notes</CardTitle>
-            <CardDescription>当前实现优先打通数据链路，后面可以继续补深度研究可视化、消息编辑与中断控制。</CardDescription>
+            <CardDescription>已接入 SSE 聊天、深度研究、消息编辑、附件任务订阅和中断控制，继续承接旧前端剩余能力。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Badge>TanStack Router page</Badge>
