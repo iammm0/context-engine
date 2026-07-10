@@ -125,6 +125,16 @@ function agentDraftFrom(agent: AgentConfigItem): AgentDraft {
   }
 }
 
+function agentUpdateBody(agent: AgentConfigItem, draft: AgentDraft): AgentConfigUpdate {
+  return {
+    inference_model: draft.inference_model.trim(),
+    embedding_model: draft.embedding_model.trim(),
+    system_prompt: draft.system_prompt,
+    enabled: agent.enable_locked ? true : draft.enabled,
+    clear_system_prompt: false,
+  }
+}
+
 function feedbackClass(tone: Feedback["tone"]) {
   if (tone === "success") {
     return "border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -282,6 +292,10 @@ export function SettingsLab() {
     () => (agentsQuery.data?.agents || []).filter((agent) => agent.enabled).length,
     [agentsQuery.data],
   )
+  const dirtyAgents = useMemo(
+    () => (agentsQuery.data?.agents || []).filter((agent) => Boolean(agentDraftOverrides[agent.agent_type])),
+    [agentDraftOverrides, agentsQuery.data],
+  )
   const cpuPercent = metricNumber(metricsQuery.data, "cpu", "percent")
   const memoryPercent = metricNumber(metricsQuery.data, "memory", "percent")
   const diskPercent = metricNumber(metricsQuery.data, "disk", "percent")
@@ -346,6 +360,36 @@ export function SettingsLab() {
     },
   })
 
+  const bulkAgentMutation = useMutation({
+    mutationFn: async (agents: AgentConfigItem[]) => {
+      const updates = agents.map((agent) => {
+        const draft = agentDraftOverrides[agent.agent_type] || agentDraftFrom(agent)
+        return api.updateAgentConfig(agent.agent_type, agentUpdateBody(agent, draft)).then((result) => {
+          if (result.error || !result.data) {
+            throw new Error(result.error || `${agent.label} 保存失败`)
+          }
+          return result.data
+        })
+      })
+      return Promise.all(updates)
+    },
+    onSuccess: async (agents) => {
+      const savedTypes = new Set(agents.map((agent) => agent.agent_type))
+      setAgentDraftOverrides((current) => {
+        const next = { ...current }
+        for (const agentType of savedTypes) {
+          delete next[agentType]
+        }
+        return next
+      })
+      await queryClient.invalidateQueries({ queryKey: ["agent-configs"] })
+      setFeedback({ tone: "success", message: `已保存 ${agents.length} 个 Agent 配置` })
+    },
+    onError: (error) => {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "批量保存 Agent 配置失败" })
+    },
+  })
+
   const requestErrors = [
     runtimeQuery.error instanceof Error ? `运行时配置加载失败：${runtimeQuery.error.message}` : null,
     agentsQuery.error instanceof Error ? `Agent 配置加载失败：${agentsQuery.error.message}` : null,
@@ -394,14 +438,15 @@ export function SettingsLab() {
     }
     agentMutation.mutate({
       agentType: agent.agent_type,
-      body: {
-        inference_model: draft.inference_model.trim(),
-        embedding_model: draft.embedding_model.trim(),
-        system_prompt: draft.system_prompt,
-        enabled: agent.enable_locked ? true : draft.enabled,
-        clear_system_prompt: false,
-      },
+      body: agentUpdateBody(agent, draft),
     })
+  }
+
+  const saveAllAgents = () => {
+    if (!dirtyAgents.length) {
+      return
+    }
+    bulkAgentMutation.mutate(dirtyAgents)
   }
 
   const resetAgentPrompt = (agent: AgentConfigItem) => {
@@ -676,17 +721,30 @@ export function SettingsLab() {
                 <Bot className="size-5 text-sky-700" />
                 多 Agent 配置
               </CardTitle>
-              <CardDescription>推理模型、向量模型、启用状态和系统提示词覆盖。</CardDescription>
+              <CardDescription>
+                推理模型、向量模型、启用状态和系统提示词覆盖。
+                {dirtyAgents.length > 0 ? ` 未保存 ${dirtyAgents.length} 项。` : ""}
+              </CardDescription>
             </div>
-            <Button
-              disabled={agentsQuery.isFetching}
-              onClick={() => void agentsQuery.refetch()}
-              size="sm"
-              variant="outline"
-            >
-              <RefreshCw className="size-3.5" />
-              刷新
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={bulkAgentMutation.isPending || agentMutation.isPending || dirtyAgents.length === 0}
+                onClick={saveAllAgents}
+                size="sm"
+              >
+                <Save className="size-3.5" />
+                保存全部
+              </Button>
+              <Button
+                disabled={agentsQuery.isFetching}
+                onClick={() => void agentsQuery.refetch()}
+                size="sm"
+                variant="outline"
+              >
+                <RefreshCw className="size-3.5" />
+                刷新
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -714,7 +772,7 @@ export function SettingsLab() {
                       <input
                         checked={agent.enable_locked ? true : draft.enabled}
                         className="size-4 accent-sky-700"
-                        disabled={agent.enable_locked || agentMutation.isPending}
+                        disabled={agent.enable_locked || agentMutation.isPending || bulkAgentMutation.isPending}
                         onChange={(event) => updateAgentDraft(agent.agent_type, "enabled", event.target.checked)}
                         type="checkbox"
                       />
@@ -725,7 +783,7 @@ export function SettingsLab() {
                     <label className="grid gap-1.5">
                       <span className="text-xs font-medium text-slate-600">推理模型</span>
                       <Input
-                        disabled={agentMutation.isPending}
+                        disabled={agentMutation.isPending || bulkAgentMutation.isPending}
                         list={`models-${agent.agent_type}`}
                         onChange={(event) => updateAgentDraft(agent.agent_type, "inference_model", event.target.value)}
                         placeholder="留空使用默认模型"
@@ -740,7 +798,7 @@ export function SettingsLab() {
                     <label className="grid gap-1.5">
                       <span className="text-xs font-medium text-slate-600">向量模型</span>
                       <Input
-                        disabled={agentMutation.isPending}
+                        disabled={agentMutation.isPending || bulkAgentMutation.isPending}
                         list={`embeddings-${agent.agent_type}`}
                         onChange={(event) => updateAgentDraft(agent.agent_type, "embedding_model", event.target.value)}
                         placeholder="通常留空"
@@ -758,7 +816,7 @@ export function SettingsLab() {
                     <span className="text-xs font-medium text-slate-600">系统提示词覆盖</span>
                     <Textarea
                       className="min-h-[132px] font-mono text-xs leading-5"
-                      disabled={agentMutation.isPending}
+                      disabled={agentMutation.isPending || bulkAgentMutation.isPending}
                       onChange={(event) => updateAgentDraft(agent.agent_type, "system_prompt", event.target.value)}
                       placeholder="留空使用内置提示词"
                       value={draft.system_prompt}
@@ -773,12 +831,16 @@ export function SettingsLab() {
                   </details>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button disabled={agentMutation.isPending} onClick={() => saveAgent(agent)} size="sm">
+                    <Button
+                      disabled={agentMutation.isPending || bulkAgentMutation.isPending}
+                      onClick={() => saveAgent(agent)}
+                      size="sm"
+                    >
                       <Save className="size-3.5" />
                       保存
                     </Button>
                     <Button
-                      disabled={agentMutation.isPending}
+                      disabled={agentMutation.isPending || bulkAgentMutation.isPending}
                       onClick={() => resetAgentPrompt(agent)}
                       size="sm"
                       variant="secondary"
