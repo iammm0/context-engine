@@ -550,6 +550,25 @@ async def add_message(
                             queued.id,
                         )
                     except Exception as e:
+                        failed_title_task = {
+                            "backend": "celery",
+                            "task_id": None,
+                            "state": "FAILURE",
+                            "ready": True,
+                            "successful": False,
+                            "error": str(e)[:500],
+                        }
+                        try:
+                            await collection.update_one(
+                                {"_id": conversation_id},
+                                {"$set": {"title_task": failed_title_task}},
+                            )
+                        except Exception:
+                            logger.warning(
+                                "Failed to persist title task enqueue failure - conversation_id=%s",
+                                conversation_id,
+                                exc_info=True,
+                            )
                         logger.warning(f"启动标题生成任务失败: {str(e)}")
         
         logger.info(f"添加消息成功 - 对话ID: {conversation_id}, 角色: {message.role}")

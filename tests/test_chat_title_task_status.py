@@ -45,6 +45,13 @@ class FakeTitleTask:
         return FakeQueuedTask()
 
 
+class FailingTitleTask:
+    def delay(self, conversation_id, expected_title):
+        assert conversation_id == "conv1"
+        assert expected_title == "abc"
+        raise RuntimeError("broker down")
+
+
 @pytest.mark.asyncio
 async def test_add_assistant_message_persists_title_task(monkeypatch):
     collection = FakeCollection(
@@ -70,3 +77,33 @@ async def test_add_assistant_message_persists_title_task(monkeypatch):
         "task_id": "title-task-1",
     }
     assert any("title_task" in update.get("$set", {}) for update in collection.updates)
+
+
+@pytest.mark.asyncio
+async def test_add_assistant_message_persists_title_task_enqueue_failure(monkeypatch):
+    collection = FakeCollection(
+        {
+            "_id": "conv1",
+            "title": "abc",
+            "messages": [],
+        }
+    )
+
+    monkeypatch.setattr(chat.mongodb, "get_collection", lambda name: collection)
+    monkeypatch.setattr(chat_tasks, "generate_conversation_title_task", FailingTitleTask())
+
+    response = await chat.add_message(
+        "conv1",
+        chat.MessageAdd(role="assistant", content="assistant answer"),
+        None,
+    )
+
+    assert response["success"] is True
+    assert collection.document["title_task"] == {
+        "backend": "celery",
+        "task_id": None,
+        "state": "FAILURE",
+        "ready": True,
+        "successful": False,
+        "error": "broker down",
+    }
