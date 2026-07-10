@@ -331,6 +331,34 @@ function evidenceTitle(item: EvidenceItem | CitationEvidenceRef) {
   return item.document_title || item.document_id || item.chunk_id || item.id
 }
 
+function buildEvidenceDocumentUrl(item: EvidenceItem | CitationEvidenceRef | CitationEvidenceAudit) {
+  if (!item.document_id) {
+    return ""
+  }
+
+  const params = new URLSearchParams({ document_id: item.document_id })
+  if (item.chunk_id) {
+    params.set("chunk_id", item.chunk_id)
+  }
+  if (typeof item.chunk_index === "number") {
+    params.set("chunk_index", String(item.chunk_index))
+  }
+
+  let contentType: string | undefined
+  if ("content_type" in item) {
+    contentType = item.content_type
+  } else if ("metadata" in item) {
+    contentType = item.metadata?.content_type
+  }
+  if (contentType) {
+    params.set("content_type", contentType)
+  }
+
+  params.set("evidence_id", item.id)
+  params.set("context_window", "6")
+  return `/documents?${params.toString()}`
+}
+
 function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "sky" | "amber" | "rose" | "emerald" }) {
   const classes = {
     slate: "bg-slate-100 text-slate-700",
@@ -366,6 +394,7 @@ function EvidenceRefList({
         {items.slice(0, 4).map((item) => {
           const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : null
           const location = formatEvidenceLocation(item)
+          const documentUrl = buildEvidenceDocumentUrl(item)
           return (
             <div
               className="rounded-md border border-white/70 bg-white/70 px-2 py-1"
@@ -390,6 +419,14 @@ function EvidenceRefList({
               {item.preview ? <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.preview}</div> : null}
               {item.quality_notes?.length ? (
                 <div className="mt-0.5 text-[11px] opacity-75">{item.quality_notes.slice(0, 2).join(" · ")}</div>
+              ) : null}
+              {documentUrl ? (
+                <a
+                  className="mt-1 inline-flex text-[11px] font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                  href={documentUrl}
+                >
+                  定位到文档 chunk
+                </a>
               ) : null}
             </div>
           )
@@ -462,6 +499,7 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
               const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : null
               const location = formatEvidenceLocation(item)
               const riskLabels = formatRiskLabels(item.risk_reasons)
+              const documentUrl = buildEvidenceDocumentUrl(item)
               return (
                 <div
                   className="rounded-md border border-slate-200 bg-slate-50/70 px-2 py-1"
@@ -494,6 +532,14 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
                   {item.quality_notes?.length ? (
                     <div className="mt-0.5 text-[11px] text-amber-700">{item.quality_notes.slice(0, 2).join(" · ")}</div>
                   ) : null}
+                  {documentUrl ? (
+                    <a
+                      className="mt-1 inline-flex text-[11px] font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                      href={documentUrl}
+                    >
+                      定位到文档 chunk
+                    </a>
+                  ) : null}
                 </div>
               )
             })}
@@ -511,6 +557,7 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
             {message.evidence.slice(0, 5).map((item) => {
               const type = getEvidenceType(item)
               const location = formatEvidenceLocation(item)
+              const documentUrl = buildEvidenceDocumentUrl(item)
               return (
                 <div className="rounded-md border border-emerald-100 bg-white/80 px-2 py-1" key={`${item.id}-${item.chunk_id}`}>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -527,6 +574,14 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
                     ) : null}
                   </div>
                   <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.metadata?.preview || item.text}</div>
+                  {documentUrl ? (
+                    <a
+                      className="mt-1 inline-flex text-[11px] font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                      href={documentUrl}
+                    >
+                      定位到文档 chunk
+                    </a>
+                  ) : null}
                 </div>
               )
             })}

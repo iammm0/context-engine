@@ -7,6 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { useRouterState } from "@tanstack/react-router"
 import { DatabaseZap, Eye, FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
@@ -41,12 +42,80 @@ const CONTENT_TYPE_LABELS: Record<string, string> = {
 const FEATURE_FILTERS = [
   { value: "all", label: "全部质量" },
   { value: "artifact_issue", label: "结构化问题" },
+  { value: "table_artifact_issue", label: "表格问题" },
+  { value: "ocr_artifact_issue", label: "OCR 问题" },
+  { value: "table_missing_structure", label: "表格缺结构" },
   { value: "missing_anchor", label: "缺少锚点" },
   { value: "structured_missing_source_locator", label: "结构化缺定位" },
   { value: "table_missing_source", label: "表格缺来源" },
+  { value: "ocr_missing_source", label: "OCR 缺来源" },
   { value: "ocr_low_confidence", label: "低置信 OCR" },
+  { value: "source_locator", label: "可定位" },
+  { value: "bbox_locator", label: "bbox 定位" },
+  { value: "table_source_locator", label: "表格定位" },
+  { value: "ocr_source_locator", label: "OCR 定位" },
   { value: "size_issue", label: "切块长度异常" },
 ] as const
+
+type ChunkDeepLinkTarget = {
+  documentId: string
+  chunkId?: string
+  chunkIndex?: number
+  contentType?: string
+  feature?: string
+  evidenceId?: string
+  contextWindow?: number
+}
+
+function parseChunkDeepLinkTarget(searchText: string): ChunkDeepLinkTarget | null {
+  const params = new URLSearchParams(searchText.startsWith("?") ? searchText.slice(1) : searchText)
+  const documentId = params.get("document_id")?.trim()
+  if (!documentId) {
+    return null
+  }
+
+  const rawChunkIndex = params.get("chunk_index")
+  const chunkIndex = rawChunkIndex !== null ? Number.parseInt(rawChunkIndex, 10) : Number.NaN
+  const rawContextWindow = params.get("context_window")
+  const contextWindow = rawContextWindow !== null ? Number.parseInt(rawContextWindow, 10) : Number.NaN
+  const contentType = params.get("content_type")?.trim()
+  const feature = params.get("feature")?.trim()
+
+  return {
+    documentId,
+    chunkId: params.get("chunk_id")?.trim() || undefined,
+    chunkIndex: Number.isFinite(chunkIndex) && chunkIndex >= 0 ? chunkIndex : undefined,
+    contentType: contentType && contentType !== "all" ? contentType : undefined,
+    feature: feature && feature !== "all" ? feature : undefined,
+    evidenceId: params.get("evidence_id")?.trim() || undefined,
+    contextWindow: Number.isFinite(contextWindow) ? Math.max(0, Math.min(50, contextWindow)) : undefined,
+  }
+}
+
+function chunkDeepLinkKey(target: ChunkDeepLinkTarget | null) {
+  if (!target) {
+    return ""
+  }
+  return [
+    target.documentId,
+    target.chunkId || "",
+    typeof target.chunkIndex === "number" ? target.chunkIndex : "",
+    target.contentType || "",
+    target.feature || "",
+    target.evidenceId || "",
+    typeof target.contextWindow === "number" ? target.contextWindow : "",
+  ].join(":")
+}
+
+function isHighlightedChunk(chunk: DocumentChunkPreview, target: ChunkDeepLinkTarget | null) {
+  if (!target) {
+    return false
+  }
+  if (target.chunkId && chunk.id === target.chunkId) {
+    return true
+  }
+  return typeof target.chunkIndex === "number" && chunk.chunk_index === target.chunkIndex
+}
 
 function formatBytes(size: number) {
   if (size < 1024) {
@@ -105,7 +174,9 @@ function taskSummary(task?: TaskDispatchInfo | null) {
 export function DocumentsTable() {
   const queryClient = useQueryClient()
   const parentRef = useRef<HTMLDivElement>(null)
+  const highlightedChunkRef = useRef<HTMLDivElement | null>(null)
   const { selectedKnowledgeSpaceId, setSelectedKnowledgeSpaceId } = useUiStore()
+  const routeSearch = useRouterState({ select: (state) => state.location.searchStr })
   const [sorting, setSorting] = useState<SortingState>([])
   const [newSpaceName, setNewSpaceName] = useState("")
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>()
@@ -115,6 +186,8 @@ export function DocumentsTable() {
   const [chunkFeature, setChunkFeature] = useState("all")
   const [chunkQuery, setChunkQuery] = useState("")
   const [chunkSkip, setChunkSkip] = useState(0)
+  const deepLinkTarget = useMemo(() => parseChunkDeepLinkTarget(routeSearch || ""), [routeSearch])
+  const deepLinkKey = useMemo(() => chunkDeepLinkKey(deepLinkTarget), [deepLinkTarget])
 
   const knowledgeSpacesQuery = useQuery({
     queryKey: ["knowledge-spaces"],
@@ -158,6 +231,8 @@ export function DocumentsTable() {
     () => data.find((document) => document.id === selectedDocumentId),
     [data, selectedDocumentId],
   )
+  const activeDeepLinkTarget = deepLinkTarget?.documentId === selectedDocumentId ? deepLinkTarget : null
+  const shouldApplyDeepLinkTarget = Boolean(activeDeepLinkTarget && chunkSkip === 0)
   const selectedDocumentIsStreaming = selectedDocument ? STREAMING_DOCUMENT_STATUSES.has(selectedDocument.status) : false
   const streamingDocumentKey = useMemo(
     () =>
@@ -170,6 +245,22 @@ export function DocumentsTable() {
   )
 
   useEffect(() => {
+    if (deepLinkTarget?.documentId && selectedKnowledgeSpaceId) {
+      setSelectedKnowledgeSpaceId(undefined)
+    }
+  }, [deepLinkTarget?.documentId, selectedKnowledgeSpaceId, setSelectedKnowledgeSpaceId])
+
+  useEffect(() => {
+    if (!deepLinkTarget) {
+      return
+    }
+    setChunkContentType(deepLinkTarget.contentType || "all")
+    setChunkFeature(deepLinkTarget.feature || "all")
+    setChunkQuery("")
+    setChunkSkip(0)
+  }, [deepLinkKey, deepLinkTarget])
+
+  useEffect(() => {
     if (!data.length) {
       if (selectedDocumentId) {
         setSelectedDocumentId(undefined)
@@ -177,10 +268,23 @@ export function DocumentsTable() {
       return
     }
 
+    if (deepLinkTarget?.documentId) {
+      if (data.some((document) => document.id === deepLinkTarget.documentId)) {
+        if (selectedDocumentId !== deepLinkTarget.documentId) {
+          setSelectedDocumentId(deepLinkTarget.documentId)
+        }
+        return
+      }
+
+      if (documentsQuery.isFetching) {
+        return
+      }
+    }
+
     if (!selectedDocumentId || !data.some((document) => document.id === selectedDocumentId)) {
       setSelectedDocumentId(data[0].id)
     }
-  }, [data, selectedDocumentId])
+  }, [data, deepLinkTarget?.documentId, documentsQuery.isFetching, selectedDocumentId])
 
   useEffect(() => {
     setIsRenaming(false)
@@ -192,7 +296,15 @@ export function DocumentsTable() {
   }, [selectedDocumentId, chunkContentType, chunkFeature, chunkQuery])
 
   const chunkPreviewQuery = useQuery({
-    queryKey: ["document-chunks", selectedDocumentId, chunkContentType, chunkFeature, chunkQuery, chunkSkip],
+    queryKey: [
+      "document-chunks",
+      selectedDocumentId,
+      chunkContentType,
+      chunkFeature,
+      chunkQuery,
+      chunkSkip,
+      shouldApplyDeepLinkTarget ? deepLinkKey : "",
+    ],
     enabled: Boolean(selectedDocumentId),
     queryFn: async () => {
       const result = await api.getDocumentChunks(selectedDocumentId!, {
@@ -202,6 +314,9 @@ export function DocumentsTable() {
         contentType: chunkContentType,
         feature: chunkFeature,
         query: chunkQuery,
+        targetChunkId: shouldApplyDeepLinkTarget ? activeDeepLinkTarget?.chunkId : undefined,
+        targetChunkIndex: shouldApplyDeepLinkTarget ? activeDeepLinkTarget?.chunkIndex : undefined,
+        contextWindow: shouldApplyDeepLinkTarget ? activeDeepLinkTarget?.contextWindow : undefined,
       })
       if (result.error) {
         throw new Error(result.error)
@@ -212,6 +327,7 @@ export function DocumentsTable() {
 
   const chunkPreview = chunkPreviewQuery.data
   const parseQuality = chunkPreview?.parse_quality || selectedDocument?.parse_quality || null
+  const effectiveChunkSkip = chunkPreview?.skip ?? chunkSkip
   const contentTypeCounts = useMemo(
     () => chunkPreview?.facets?.content_type_counts || parseQuality?.content_type_counts || EMPTY_COUNT_RECORD,
     [chunkPreview?.facets?.content_type_counts, parseQuality?.content_type_counts],
@@ -221,8 +337,13 @@ export function DocumentsTable() {
     [chunkPreview?.facets?.feature_counts],
   )
   const chunkTotal = chunkPreview?.total_chunks || 0
-  const chunkEnd = Math.min(chunkSkip + CHUNK_PAGE_SIZE, chunkTotal)
-  const chunkRows = chunkPreview?.chunks || []
+  const chunkEnd = Math.min(effectiveChunkSkip + CHUNK_PAGE_SIZE, chunkTotal)
+  const chunkRows = useMemo(() => chunkPreview?.chunks || [], [chunkPreview?.chunks])
+  const deepLinkTargetMissing = Boolean(
+    activeDeepLinkTarget &&
+      chunkPreview?.target_found === false &&
+      (activeDeepLinkTarget.chunkId || typeof activeDeepLinkTarget.chunkIndex === "number"),
+  )
   const contentTypeOptions = useMemo(() => {
     const values = new Set(["all", "text", "table", "image_ocr", "formula", "code", ...Object.keys(contentTypeCounts)])
     return Array.from(values)
@@ -412,6 +533,21 @@ export function DocumentsTable() {
     }
   }, [queryClient, selectedKnowledgeSpaceId, streamingDocumentKey])
 
+  useEffect(() => {
+    if (!activeDeepLinkTarget || chunkPreviewQuery.isFetching) {
+      return
+    }
+    if (!chunkRows.some((chunk) => isHighlightedChunk(chunk, activeDeepLinkTarget))) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      highlightedChunkRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 80)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeDeepLinkTarget, chunkPreviewQuery.isFetching, chunkRows])
+
   const columns = useMemo(
     () => [
       {
@@ -520,6 +656,18 @@ export function DocumentsTable() {
           ) : null}
 
           <div className="space-y-2">
+            <button
+              className={`w-full rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-100 ${
+                !selectedKnowledgeSpaceId
+                  ? "border-sky-950 bg-sky-950 text-white shadow-[0_12px_24px_rgba(12,74,110,0.16)]"
+                  : "border-[var(--blue-line)] bg-white text-slate-700 hover:bg-[var(--surface-blue)] hover:text-sky-950"
+              }`}
+              onClick={() => setSelectedKnowledgeSpaceId(undefined)}
+              type="button"
+            >
+              <div className="font-medium">全部知识空间</div>
+              <div className="mt-1 text-xs opacity-70">用于跨空间检索文档和承接证据深链</div>
+            </button>
             {(knowledgeSpacesQuery.data?.knowledge_spaces || []).map((space) => (
               <button
                 key={space.id}
@@ -756,6 +904,29 @@ export function DocumentsTable() {
               </div>
             ) : (
               <>
+                {activeDeepLinkTarget ? (
+                  <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                    <div className="font-medium">
+                      已从链接定位到文档
+                      {activeDeepLinkTarget.evidenceId ? ` · 证据 ${activeDeepLinkTarget.evidenceId}` : ""}
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-sky-800">
+                      {activeDeepLinkTarget.chunkId ? `chunk ${activeDeepLinkTarget.chunkId}` : null}
+                      {activeDeepLinkTarget.chunkId && typeof activeDeepLinkTarget.chunkIndex === "number" ? " · " : ""}
+                      {typeof activeDeepLinkTarget.chunkIndex === "number" ? `索引 ${activeDeepLinkTarget.chunkIndex}` : null}
+                      {typeof activeDeepLinkTarget.contextWindow === "number"
+                        ? ` · 上下文窗口 ${activeDeepLinkTarget.contextWindow}`
+                        : ""}
+                    </div>
+                  </div>
+                ) : null}
+
+                {deepLinkTargetMissing ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    目标 chunk 未在当前筛选结果中找到。已加载同一文档的可用 chunk，可尝试切换质量筛选或清空搜索条件。
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 md:grid-cols-4">
                   <div className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
                     <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Quality</div>
@@ -833,94 +1004,106 @@ export function DocumentsTable() {
                     </div>
                   ) : null}
 
-                  {chunkRows.map((chunk) => (
-                    <div key={chunk.id} className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <Badge>
-                          <FileText className="mr-1 size-3" />#{chunk.chunk_index ?? "-"}
-                        </Badge>
-                        <Badge className="bg-white text-slate-700">{contentTypeLabel(chunk.content_type)}</Badge>
-                        <Badge className="bg-white text-slate-700">{formatChunkLocation(chunk)}</Badge>
-                        {chunk.artifact_quality?.status === "warn" ? (
-                          <Badge className="border-amber-200 bg-amber-50 text-amber-800">artifact warn</Badge>
+                  {chunkRows.map((chunk) => {
+                    const highlighted = isHighlightedChunk(chunk, activeDeepLinkTarget)
+                    return (
+                      <div
+                        className={`rounded-2xl border p-4 transition-colors ${
+                          highlighted
+                            ? "border-amber-400 bg-amber-50 ring-2 ring-amber-300"
+                            : "border-[var(--blue-line)] bg-white"
+                        }`}
+                        key={chunk.id}
+                        ref={highlighted ? highlightedChunkRef : undefined}
+                      >
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <Badge>
+                            <FileText className="mr-1 size-3" />#{chunk.chunk_index ?? "-"}
+                          </Badge>
+                          {highlighted ? <Badge className="bg-amber-100 text-amber-800">目标证据</Badge> : null}
+                          <Badge className="bg-white text-slate-700">{contentTypeLabel(chunk.content_type)}</Badge>
+                          <Badge className="bg-white text-slate-700">{formatChunkLocation(chunk)}</Badge>
+                          {chunk.artifact_quality?.status === "warn" ? (
+                            <Badge className="border-amber-200 bg-amber-50 text-amber-800">artifact warn</Badge>
+                          ) : null}
+                          <Button
+                            className="ml-auto"
+                            onClick={() =>
+                              openDocumentPreview(chunk.document_id || selectedDocument.id, chunk.page_start ?? chunk.page)
+                            }
+                            size="xs"
+                            variant="ghost"
+                          >
+                            <Eye className="size-3" />
+                            原文
+                          </Button>
+                        </div>
+
+                        <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                          {chunk.preview || chunk.text}
+                        </div>
+
+                        {chunk.quality_notes?.length ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {chunk.quality_notes.map((note) => (
+                              <span
+                                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800"
+                                key={note}
+                              >
+                                {note}
+                              </span>
+                            ))}
+                          </div>
                         ) : null}
-                        <Button
-                          className="ml-auto"
-                          onClick={() =>
-                            openDocumentPreview(chunk.document_id || selectedDocument.id, chunk.page_start ?? chunk.page)
-                          }
-                          size="xs"
-                          variant="ghost"
-                        >
-                          <Eye className="size-3" />
-                          原文
-                        </Button>
+
+                        {chunk.artifact?.type === "table" && chunk.artifact.rows?.length ? (
+                          <div className="mt-4 overflow-x-auto rounded-xl border border-sky-100">
+                            <table className="min-w-full text-left text-xs text-slate-600">
+                              {chunk.artifact.headers?.length ? (
+                                <thead className="bg-[var(--surface-blue)] text-slate-700">
+                                  <tr>
+                                    {chunk.artifact.headers.map((header) => (
+                                      <th className="px-3 py-2 font-medium" key={header}>
+                                        {header}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                              ) : null}
+                              <tbody>
+                                {chunk.artifact.rows.slice(0, 4).map((row, rowIndex) => (
+                                  <tr className="border-t border-sky-100" key={`${chunk.id}-${rowIndex}`}>
+                                    {row.map((cell, cellIndex) => (
+                                      <td className="px-3 py-2" key={`${chunk.id}-${rowIndex}-${cellIndex}`}>
+                                        {cell}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
                       </div>
-
-                      <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                        {chunk.preview || chunk.text}
-                      </div>
-
-                      {chunk.quality_notes?.length ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {chunk.quality_notes.map((note) => (
-                            <span
-                              className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800"
-                              key={note}
-                            >
-                              {note}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {chunk.artifact?.type === "table" && chunk.artifact.rows?.length ? (
-                        <div className="mt-4 overflow-x-auto rounded-xl border border-sky-100">
-                          <table className="min-w-full text-left text-xs text-slate-600">
-                            {chunk.artifact.headers?.length ? (
-                              <thead className="bg-[var(--surface-blue)] text-slate-700">
-                                <tr>
-                                  {chunk.artifact.headers.map((header) => (
-                                    <th className="px-3 py-2 font-medium" key={header}>
-                                      {header}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                            ) : null}
-                            <tbody>
-                              {chunk.artifact.rows.slice(0, 4).map((row, rowIndex) => (
-                                <tr className="border-t border-sky-100" key={`${chunk.id}-${rowIndex}`}>
-                                  {row.map((cell, cellIndex) => (
-                                    <td className="px-3 py-2" key={`${chunk.id}-${rowIndex}-${cellIndex}`}>
-                                      {cell}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-sm text-slate-500">
-                    {chunkTotal > 0 ? `${chunkSkip + 1}-${chunkEnd} / ${chunkTotal}` : "0 / 0"}
+                    {chunkTotal > 0 ? `${effectiveChunkSkip + 1}-${chunkEnd} / ${chunkTotal}` : "0 / 0"}
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      disabled={chunkSkip <= 0 || chunkPreviewQuery.isFetching}
-                      onClick={() => setChunkSkip(Math.max(0, chunkSkip - CHUNK_PAGE_SIZE))}
+                      disabled={effectiveChunkSkip <= 0 || chunkPreviewQuery.isFetching}
+                      onClick={() => setChunkSkip(Math.max(0, effectiveChunkSkip - CHUNK_PAGE_SIZE))}
                       variant="outline"
                     >
                       上一页
                     </Button>
                     <Button
                       disabled={chunkEnd >= chunkTotal || chunkPreviewQuery.isFetching}
-                      onClick={() => setChunkSkip(chunkSkip + CHUNK_PAGE_SIZE)}
+                      onClick={() => setChunkSkip(effectiveChunkSkip + CHUNK_PAGE_SIZE)}
                       variant="outline"
                     >
                       下一页
