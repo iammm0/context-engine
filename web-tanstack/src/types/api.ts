@@ -473,11 +473,59 @@ export type AgentConfigItem = Schemas["AgentConfigItemResponse"]
 export type AgentConfigsResponse = Schemas["AgentConfigsListResponse"]
 export type AgentConfigUpdate = Schemas["AgentConfigUpdateRequest"]
 
-export interface DeepResearchEvaluation {
-  should_deep_research: boolean
-  score: number
-  threshold: number
-  reasons: string[]
+export type DeepResearchEvaluateRequest = Schemas["DeepResearchEvaluateRequest"]
+export type DeepResearchEvaluation = Schemas["DeepResearchGateDecision"]
+export type DeepResearchRequest = Schemas["DeepResearchRequest"]
+
+export interface DeepResearchAgentResult {
+  agent_type: string
+  content: string
+  title?: string
+  sources?: SourceInfo[]
+  evidence?: EvidenceItem[]
+  evidence_ids?: string[]
+  claims?: string[]
+  open_questions?: string[]
+  confidence?: number
+}
+
+export interface DeepResearchAgentStatus {
+  agent_type: string
+  status: "pending" | "running" | "completed" | "error" | "skipped" | string
+  current_step?: string
+  progress?: number
+  details?: string
+  dependencies?: string[]
+  started_at?: number | string
+  completed_at?: number | string
+}
+
+export interface DeepResearchStreamEvent {
+  type?: "planning" | "agent_result" | "agent_status" | "html" | "markdown" | "text" | string
+  done?: boolean
+  error?: string
+  run_id?: string
+  content?: string
+  title?: string
+  selected_agents?: string[]
+  agent_tasks?: Record<string, string>
+  dependencies?: unknown
+  parallel_groups?: unknown[]
+  reasoning?: string
+  agent_type?: string
+  sources?: SourceInfo[]
+  evidence?: EvidenceItem[]
+  evidence_ids?: string[]
+  claims?: string[]
+  open_questions?: string[]
+  confidence?: number
+  status?: DeepResearchAgentStatus["status"]
+  current_step?: string
+  progress?: number
+  details?: string
+  started_at?: number | string
+  completed_at?: number | string
+  artifact?: unknown
 }
 
 export interface ChatStreamEvent {

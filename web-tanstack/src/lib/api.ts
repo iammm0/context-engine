@@ -8,6 +8,10 @@ import type {
   ConversationAttachmentStatus,
   DocumentActionResponse,
   DocumentChunksResponse,
+  DeepResearchEvaluateRequest,
+  DeepResearchEvaluation,
+  DeepResearchRequest,
+  DeepResearchStreamEvent,
   ConversationUpdate,
   ConversationDetail,
   ConversationListResponse,
@@ -133,7 +137,7 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return text ? `?${text}` : ""
 }
 
-async function parseSseResponse(response: Response, onEvent: (event: ChatStreamEvent) => void) {
+async function parseSseResponse<T>(response: Response, onEvent: (event: T) => void) {
   if (!response.body) {
     throw new Error("响应流为空")
   }
@@ -163,7 +167,7 @@ async function parseSseResponse(response: Response, onEvent: (event: ChatStreamE
         continue
       }
 
-      onEvent(JSON.parse(data) as ChatStreamEvent)
+      onEvent(JSON.parse(data) as T)
     }
   }
 }
@@ -255,7 +259,33 @@ export const api = {
       throw new Error(parseHttpError(payload))
     }
 
-    await parseSseResponse(response, onEvent)
+    await parseSseResponse<ChatStreamEvent>(response, onEvent)
+  },
+
+  evaluateDeepResearch(body: DeepResearchEvaluateRequest) {
+    return requestJson<DeepResearchEvaluation>("/api/chat/deep-research/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  },
+
+  async streamDeepResearch(body: DeepResearchRequest, onEvent: (event: DeepResearchStreamEvent) => void) {
+    const response = await fetch(apiUrl("/api/chat/deep-research"), {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const payload = await readJson<unknown>(response)
+      throw new Error(parseHttpError(payload))
+    }
+
+    await parseSseResponse<DeepResearchStreamEvent>(response, onEvent)
   },
 
   getKnowledgeSpaces() {

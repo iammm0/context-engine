@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Bot,
+  BrainCircuit,
   Check,
   Cpu,
   FileSearch,
@@ -32,6 +33,10 @@ import type {
   CitationQuality,
   ConversationDetail,
   ConversationMessage,
+  DeepResearchAgentResult,
+  DeepResearchAgentStatus,
+  DeepResearchEvaluation,
+  DeepResearchStreamEvent,
   EvidenceItem,
   EvidenceQuality,
 } from "@/types/api"
@@ -96,6 +101,72 @@ const citationRiskReasonLabel: Record<string, string> = {
   artifact_warning: "解析需复核",
   low_confidence_ocr: "低置信OCR",
   quality_note: "质量提示",
+}
+
+const deepResearchAgentLabels: Record<string, string> = {
+  coordinator: "协调规划",
+  document_retrieval: "文档检索",
+  argument_analysis: "论证分析",
+  concept_explanation: "概念解释",
+  critic: "批判审阅",
+  summary: "总结整合",
+  formula_analysis: "公式分析",
+  code_analysis: "代码分析",
+  example_generation: "示例生成",
+  exercise: "练习设计",
+  scientific_coding: "科学计算",
+}
+
+const DEFAULT_DEEP_RESEARCH_AGENTS = [
+  "coordinator",
+  "document_retrieval",
+  "argument_analysis",
+  "concept_explanation",
+  "critic",
+  "summary",
+  "formula_analysis",
+  "code_analysis",
+  "example_generation",
+  "exercise",
+  "scientific_coding",
+]
+
+function deepResearchAgentLabel(agentType?: string) {
+  if (!agentType) {
+    return "未知 Agent"
+  }
+  return deepResearchAgentLabels[agentType] || agentType
+}
+
+function deepResearchStatusTone(status?: string): "slate" | "sky" | "amber" | "rose" | "emerald" {
+  if (status === "completed") {
+    return "emerald"
+  }
+  if (status === "running") {
+    return "sky"
+  }
+  if (status === "error") {
+    return "rose"
+  }
+  if (status === "skipped") {
+    return "amber"
+  }
+  return "slate"
+}
+
+function buildDeepResearchMarkdown(results: DeepResearchAgentResult[], htmlContent?: string) {
+  const parts = results
+    .filter((result) => result.content?.trim())
+    .map((result) => {
+      const title = result.title || deepResearchAgentLabel(result.agent_type)
+      return `## ${title}\n\n${result.content.trim()}`
+    })
+
+  if (!parts.length && htmlContent?.trim()) {
+    return "深度研究已完成，HTML 报告已生成，可在当前会话的深度研究面板中查看。"
+  }
+
+  return parts.join("\n\n---\n\n")
 }
 
 function formatPercent(value?: number | null) {
@@ -406,6 +477,99 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
   )
 }
 
+function DeepResearchPanel({
+  gate,
+  statuses,
+  results,
+  htmlContent,
+}: {
+  gate?: DeepResearchEvaluation | null
+  statuses: DeepResearchAgentStatus[]
+  results: DeepResearchAgentResult[]
+  htmlContent: string
+}) {
+  if (!gate && !statuses.length && !results.length && !htmlContent) {
+    return null
+  }
+
+  return (
+    <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sm text-slate-800">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 font-semibold text-sky-950">
+          <BrainCircuit className="size-4" />
+          深度研究工作流
+        </div>
+        {gate ? (
+          <Badge className="bg-white text-slate-700">
+            评分 {gate.score}/{gate.threshold}
+          </Badge>
+        ) : null}
+      </div>
+
+      {gate?.reasons?.length ? (
+        <div className="mb-3 rounded-xl border border-sky-100 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+          {gate.reasons.slice(0, 3).join("；")}
+        </div>
+      ) : null}
+
+      {statuses.length ? (
+        <div className="mb-3 grid gap-2 md:grid-cols-2">
+          {statuses.map((status) => (
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2" key={status.agent_type}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-slate-950">{deepResearchAgentLabel(status.agent_type)}</span>
+                <DiagnosticBadge tone={deepResearchStatusTone(status.status)}>{status.status}</DiagnosticBadge>
+              </div>
+              {typeof status.progress === "number" ? (
+                <div className="mt-2 h-1.5 rounded-full bg-sky-100">
+                  <div className="h-1.5 rounded-full bg-sky-600" style={{ width: `${Math.max(0, Math.min(100, status.progress))}%` }} />
+                </div>
+              ) : null}
+              {status.current_step || status.details ? (
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{status.current_step || status.details}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {results.length ? (
+        <details className="mb-3 rounded-xl border border-sky-100 bg-white px-3 py-2" open>
+          <summary className="cursor-pointer text-sm font-medium text-slate-950">Agent 结果 · {results.length} 条</summary>
+          <div className="mt-2 space-y-2">
+            {results.map((result) => (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" key={result.agent_type}>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <DiagnosticBadge tone="sky">{deepResearchAgentLabel(result.agent_type)}</DiagnosticBadge>
+                  {typeof result.confidence === "number" ? (
+                    <DiagnosticBadge tone="slate">confidence {result.confidence.toFixed(2)}</DiagnosticBadge>
+                  ) : null}
+                  {result.evidence_ids?.length ? (
+                    <DiagnosticBadge tone="emerald">evidence {result.evidence_ids.length}</DiagnosticBadge>
+                  ) : null}
+                </div>
+                <div className="line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-slate-600">{result.content}</div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {htmlContent ? (
+        <details className="rounded-xl border border-sky-100 bg-white px-3 py-2" open>
+          <summary className="cursor-pointer text-sm font-medium text-slate-950">HTML 报告</summary>
+          <iframe
+            className="mt-3 h-[420px] w-full rounded-lg border border-slate-200 bg-white"
+            sandbox=""
+            srcDoc={htmlContent}
+            title="深度研究报告"
+          />
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
 export function ChatPlayground() {
   const queryClient = useQueryClient()
   const { activeConversationId, setActiveConversationId, selectedKnowledgeSpaceId, enableRag, setEnableRag } =
@@ -418,6 +582,16 @@ export function ChatPlayground() {
   const [messageDraft, setMessageDraft] = useState("")
   const [actionMessage, setActionMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return false
+    }
+    return window.localStorage.getItem("deepResearchEnabled") === "true"
+  })
+  const [deepResearchGate, setDeepResearchGate] = useState<DeepResearchEvaluation | null>(null)
+  const [deepResearchStatuses, setDeepResearchStatuses] = useState<DeepResearchAgentStatus[]>([])
+  const [deepResearchResults, setDeepResearchResults] = useState<DeepResearchAgentResult[]>([])
+  const [deepResearchHtml, setDeepResearchHtml] = useState("")
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
@@ -473,6 +647,10 @@ export function ChatPlayground() {
 
     messageListRef.current.scrollTop = messageListRef.current.scrollHeight
   }, [conversationDetailQuery.data, draftAnswer])
+
+  useEffect(() => {
+    window.localStorage.setItem("deepResearchEnabled", String(deepResearchEnabled))
+  }, [deepResearchEnabled])
 
   useEffect(() => {
     const processingAttachments = attachments.filter((attachment) => isAttachmentProcessing(attachment.status))
@@ -639,6 +817,33 @@ export function ChatPlayground() {
     },
   })
 
+  const resetDeepResearchRun = () => {
+    setDeepResearchGate(null)
+    setDeepResearchStatuses([])
+    setDeepResearchResults([])
+    setDeepResearchHtml("")
+  }
+
+  const upsertDeepResearchStatus = (next: DeepResearchAgentStatus) => {
+    setDeepResearchStatuses((current) => {
+      const exists = current.some((status) => status.agent_type === next.agent_type)
+      if (exists) {
+        return current.map((status) => (status.agent_type === next.agent_type ? { ...status, ...next } : status))
+      }
+      return [...current, next]
+    })
+  }
+
+  const updateDeepResearchResult = (result: DeepResearchAgentResult) => {
+    setDeepResearchResults((current) => {
+      const exists = current.some((item) => item.agent_type === result.agent_type)
+      if (exists) {
+        return current.map((item) => (item.agent_type === result.agent_type ? { ...item, ...result } : item))
+      }
+      return [...current, result]
+    })
+  }
+
   const regenerateMessageMutation = useMutation({
     mutationFn: async (message: ConversationMessage) => {
       if (!activeConversationId) {
@@ -803,10 +1008,183 @@ export function ChatPlayground() {
         content: question,
       })
 
+      resetDeepResearchRun()
       setDraftAnswer("")
+      let shouldUseDeepResearch = deepResearchEnabled
+
+      if (shouldUseDeepResearch) {
+        setStreamingMeta({ evidence: 0, sources: 0, status: "Evaluating" })
+        const gate = await api.evaluateDeepResearch({ query: question, conversation_id: conversationId })
+        if (gate.error || !gate.data) {
+          shouldUseDeepResearch = false
+          setActionMessage({ tone: "error", text: `深度研究预评估失败，已改走常规模式：${gate.error || "未知错误"}` })
+        } else {
+          setDeepResearchGate(gate.data)
+          const reasons = gate.data.reasons.slice(0, 2).join("；")
+          if (!gate.data.should_deep_research) {
+            shouldUseDeepResearch = false
+            setActionMessage({
+              tone: "success",
+              text: `本次问题评分 ${gate.data.score}/${gate.data.threshold}，先走常规模式：${reasons}`,
+            })
+          } else {
+            setActionMessage({
+              tone: "success",
+              text: `已进入深度研究，评分 ${gate.data.score}/${gate.data.threshold}：${reasons}`,
+            })
+          }
+        }
+      }
+
+      if (shouldUseDeepResearch) {
+        setStreamingMeta({ evidence: 0, sources: 0, status: "Deep research" })
+        setDraftAnswer("深度研究已启动，正在规划多 Agent 任务...")
+        setDeepResearchStatuses(
+          DEFAULT_DEEP_RESEARCH_AGENTS.map((agentType, index) => ({
+            agent_type: agentType,
+            status: index === 0 ? "running" : "pending",
+            current_step: index === 0 ? "分析问题并规划研究任务" : undefined,
+            progress: index === 0 ? 0 : undefined,
+          })),
+        )
+
+        const resultsMap = new Map<string, DeepResearchAgentResult>()
+        let htmlReport = ""
+        let streamError: string | undefined
+
+        await api.streamDeepResearch(
+          {
+            query: question,
+            conversation_id: conversationId,
+            knowledge_space_ids: selectedKnowledgeSpaceId ? [selectedKnowledgeSpaceId] : undefined,
+            generation_config: {
+              llm_model: modelsQuery.data?.models?.[0]?.name,
+            },
+          },
+          (event: DeepResearchStreamEvent) => {
+            if (event.error) {
+              streamError = event.error
+              setDraftAnswer(`深度研究失败：${event.error}`)
+              setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
+              return
+            }
+
+            if (event.type === "planning") {
+              const selectedAgents = event.selected_agents?.length ? event.selected_agents : DEFAULT_DEEP_RESEARCH_AGENTS.slice(1)
+              setDeepResearchStatuses(
+                DEFAULT_DEEP_RESEARCH_AGENTS.map((agentType) => {
+                  if (agentType === "coordinator") {
+                    return {
+                      agent_type: agentType,
+                      status: "completed",
+                      details: event.reasoning || event.content || "任务规划完成",
+                      progress: 100,
+                    }
+                  }
+                  return {
+                    agent_type: agentType,
+                    status: selectedAgents.includes(agentType) ? "pending" : "skipped",
+                    details: selectedAgents.includes(agentType) ? undefined : "协调规划未选择此 Agent",
+                  }
+                }),
+              )
+              setDraftAnswer(`## 研究规划\n\n${event.content || event.reasoning || "任务规划完成"}`)
+              return
+            }
+
+            if (event.type === "agent_status" && event.agent_type) {
+              upsertDeepResearchStatus({
+                agent_type: event.agent_type,
+                status: event.status || "running",
+                current_step: event.current_step,
+                progress: event.progress,
+                details: event.details,
+                dependencies: Array.isArray(event.dependencies) ? event.dependencies.map(String) : undefined,
+                started_at: event.started_at,
+                completed_at: event.completed_at,
+              })
+              return
+            }
+
+            if ((event.type === "agent_result" || event.type === "markdown" || event.type === "text") && event.content) {
+              const agentType = event.agent_type || "summary"
+              const result: DeepResearchAgentResult = {
+                agent_type: agentType,
+                content: event.content,
+                title: event.title,
+                sources: event.sources,
+                evidence: event.evidence,
+                evidence_ids: event.evidence_ids,
+                claims: event.claims,
+                open_questions: event.open_questions,
+                confidence: event.confidence,
+              }
+              resultsMap.set(agentType, result)
+              updateDeepResearchResult(result)
+              upsertDeepResearchStatus({
+                agent_type: agentType,
+                status: "completed",
+                progress: 100,
+                details: event.title || "工作完成",
+              })
+              setDraftAnswer(buildDeepResearchMarkdown(Array.from(resultsMap.values())))
+              return
+            }
+
+            if (event.type === "html" && event.content) {
+              htmlReport = event.content
+              setDeepResearchHtml(event.content)
+              setStreamingMeta({ evidence: 0, sources: 0, status: "Report ready" })
+              return
+            }
+
+            if (event.done) {
+              setDeepResearchStatuses((current) =>
+                current.map((status) =>
+                  status.status === "running" ? { ...status, status: "completed", progress: status.progress ?? 100 } : status,
+                ),
+              )
+              setStreamingMeta({ evidence: 0, sources: 0, status: "Done" })
+            }
+          },
+        )
+
+        if (streamError) {
+          throw new Error(streamError)
+        }
+
+        const finalResults = Array.from(resultsMap.values())
+        const finalContent = buildDeepResearchMarkdown(finalResults, htmlReport)
+        if (finalContent.trim()) {
+          queryClient.setQueryData(["conversation", conversationId], (existing: ConversationDetail | undefined) => ({
+            ...(existing || currentConversation),
+            messages: [
+              ...(existing?.messages || currentConversation.messages || []),
+              {
+                role: "assistant",
+                content: finalContent,
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          }))
+          await api.addConversationMessage(conversationId, {
+            role: "assistant",
+            content: finalContent,
+          })
+        }
+
+        setDraftAnswer("")
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+          queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
+        ])
+        return
+      }
+
       setStreamingMeta({ evidence: 0, sources: 0, status: "Streaming" })
       let assistantText = ""
       let finalEvent: ChatStreamEvent | undefined
+      let streamError: string | undefined
 
       await api.streamChat(
         {
@@ -822,6 +1200,7 @@ export function ChatPlayground() {
           finalEvent = event.done ? event : finalEvent
 
           if (event.error) {
+            streamError = event.error
             setDraftAnswer(`请求失败：${event.error}`)
             setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
             return
@@ -859,6 +1238,10 @@ export function ChatPlayground() {
           }
         },
       )
+
+      if (streamError) {
+        throw new Error(streamError)
+      }
 
       if (assistantText.trim()) {
         await api.addConversationMessage(conversationId, {
@@ -1035,6 +1418,7 @@ export function ChatPlayground() {
                 <Badge>sources {streamingMeta.sources}</Badge>
                 <Badge>evidence {streamingMeta.evidence}</Badge>
                 <Badge>{enableRag ? "RAG on" : "RAG off"}</Badge>
+                <Badge>{deepResearchEnabled ? "Deep research on" : "Deep research off"}</Badge>
               </div>
             </div>
           </CardHeader>
@@ -1057,6 +1441,12 @@ export function ChatPlayground() {
                 {actionMessage.text}
               </div>
             ) : null}
+            <DeepResearchPanel
+              gate={deepResearchGate}
+              htmlContent={deepResearchHtml}
+              results={deepResearchResults}
+              statuses={deepResearchStatuses}
+            />
 
             <div
               className="blue-panel h-[440px] space-y-4 overflow-y-auto rounded-2xl p-4"
@@ -1185,6 +1575,27 @@ export function ChatPlayground() {
                   />
                 </label>
 
+                <label className="blue-panel flex cursor-pointer items-center justify-between rounded-2xl px-4 py-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-950">Deep research</div>
+                    <div className="text-xs text-slate-500">先评估，再进入多 Agent 流程</div>
+                  </div>
+                  <input
+                    checked={deepResearchEnabled}
+                    className="size-4 accent-sky-700"
+                    onChange={(event) => {
+                      const enabled = event.target.checked
+                      setDeepResearchEnabled(enabled)
+                      if (enabled) {
+                        setEnableRag(false)
+                      } else {
+                        resetDeepResearchRun()
+                      }
+                    }}
+                    type="checkbox"
+                  />
+                </label>
+
                 <div className="space-y-2 rounded-2xl border border-[var(--blue-line)] bg-white p-4">
                   <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Active model</div>
                   <div className="text-sm font-medium text-slate-900">
@@ -1192,7 +1603,7 @@ export function ChatPlayground() {
                       (modelsQuery.isError ? "Model unavailable" : "Loading models...")}
                   </div>
                   <div className="text-xs leading-5 text-slate-500">
-                    这里可以继续扩展多模型切换、Embedding 选择和深度研究入口。
+                    这里可以继续扩展多模型切换和 Embedding 选择。
                   </div>
                 </div>
 
