@@ -23,6 +23,7 @@ import {
   SourceLocatorAnchorPreview,
 } from "@/components/evidence/source-locator-preview"
 import { useDeepResearchTask } from "@/components/chat/use-deep-research-task"
+import { useQueryAnalysisTask } from "@/components/chat/use-query-analysis-task"
 import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
 import { MarkdownMessage } from "@/components/message/markdown-message"
 import { Badge } from "@/components/ui/badge"
@@ -49,7 +50,6 @@ import type {
   DeepResearchEvaluation,
   EvidenceItem,
   EvidenceQuality,
-  QueryAnalysisResponse,
   RecommendedResource,
   SourceInfo,
   TaskDispatchInfo,
@@ -67,14 +67,6 @@ type ChatAttachment = {
   message?: string | null
   task?: TaskDispatchInfo | null
   error?: string
-}
-
-type QueryAnalysisRun = {
-  status: "idle" | "queued" | "running" | "completed" | "failed"
-  query?: string
-  task?: TaskDispatchInfo | null
-  result?: QueryAnalysisResponse | null
-  error?: string | null
 }
 
 type CitationTargetKind = "evidence" | "audit" | "source" | "ref"
@@ -131,23 +123,6 @@ function mergeAttachmentTask(current: ChatAttachment, task: TaskDispatchInfo, er
     task,
     error: error ?? current.error,
     status: task.ready && task.successful === false ? "failed" : current.status,
-  }
-}
-
-function readQueryAnalysisResult(task: TaskDispatchInfo): QueryAnalysisResponse | null {
-  const result = task.result
-  if (!result) {
-    return null
-  }
-
-  if (typeof result.need_retrieval !== "boolean" || typeof result.reason !== "string") {
-    return null
-  }
-
-  return {
-    need_retrieval: result.need_retrieval,
-    reason: result.reason,
-    confidence: typeof result.confidence === "string" ? result.confidence : "medium",
   }
 }
 
@@ -1041,12 +1016,18 @@ export function ChatPlayground() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState(() =>
     readStoredModelSelection(CHAT_EMBEDDING_MODEL_STORAGE_KEY),
   )
-  const [queryAnalysisRun, setQueryAnalysisRun] = useState<QueryAnalysisRun>({ status: "idle" })
   const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
     evidence: 0,
     sources: 0,
     status: "Idle",
   })
+  const {
+    isRunning: queryAnalysisIsRunning,
+    result: queryAnalysisResult,
+    run: queryAnalysisRun,
+    start: startQueryAnalysis,
+    taskLabel: queryAnalysisTask,
+  } = useQueryAnalysisTask()
   const {
     applyTaskProgress: applyDeepResearchTaskProgress,
     gate: deepResearchGate,
@@ -1072,7 +1053,6 @@ export function ChatPlayground() {
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
   const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
-  const queryAnalysisAbortRef = useRef<AbortController | null>(null)
 
   const registerCitationTarget = useCallback<CitationTargetRegistrar>((messageKey, kind, citationId, node) => {
     const key = citationTargetKey(messageKey, citationId, kind)
@@ -1387,78 +1367,8 @@ export function ChatPlayground() {
         unsubscribe()
       }
       attachmentTaskSubscriptionsRef.current = {}
-      queryAnalysisAbortRef.current?.abort()
-      queryAnalysisAbortRef.current = null
     }
   }, [])
-
-  const startQueryAnalysis = async () => {
-    const query = prompt.trim()
-    if (!query) {
-      return
-    }
-
-    queryAnalysisAbortRef.current?.abort()
-    const abortController = new AbortController()
-    queryAnalysisAbortRef.current = abortController
-    setQueryAnalysisRun({ status: "queued", query, result: null, error: null })
-
-    try {
-      const queued = await api.queueQueryAnalysis(query)
-      if (abortController.signal.aborted) {
-        return
-      }
-      if (queued.error || !queued.data) {
-        setQueryAnalysisRun({
-          status: "failed",
-          query,
-          result: null,
-          error: queued.error || "查询分析任务投递失败",
-        })
-        return
-      }
-
-      const task = queued.data
-      setQueryAnalysisRun({ status: "running", query, task, result: null, error: null })
-
-      const finalTask = await waitForTaskCompletion(
-        task,
-        abortController.signal,
-        (status) =>
-          setQueryAnalysisRun((current) => ({
-            ...current,
-            status: status.ready ? current.status : "running",
-            task: status,
-          })),
-      )
-      if (abortController.signal.aborted) {
-        return
-      }
-
-      const result = readQueryAnalysisResult(finalTask)
-      setQueryAnalysisRun({
-        status: result ? "completed" : "failed",
-        query,
-        task: finalTask,
-        result,
-        error: result ? null : finalTask.error || "查询分析任务未返回有效结果",
-      })
-    } catch (error) {
-      if (isAbortError(error)) {
-        return
-      }
-      setQueryAnalysisRun({
-        status: "failed",
-        query,
-        result: null,
-        error: error instanceof Error ? error.message : "查询分析任务投递失败",
-      })
-    } finally {
-      if (queryAnalysisAbortRef.current === abortController) {
-        queryAnalysisAbortRef.current = null
-      }
-    }
-  }
 
   const createConversationMutation = useMutation({
     mutationFn: async () => {
@@ -1969,9 +1879,6 @@ export function ChatPlayground() {
     : []
   const hasProcessingAttachments = activeAttachments.some((attachment) => isAttachmentProcessing(attachment.status))
   const responseIsRunning = sendMutation.isPending || regenerateMessageMutation.isPending
-  const queryAnalysisIsRunning = queryAnalysisRun.status === "queued" || queryAnalysisRun.status === "running"
-  const queryAnalysisTask = taskSummary(queryAnalysisRun.task)
-  const queryAnalysisResult = queryAnalysisRun.result
 
   return (
     <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -2300,7 +2207,7 @@ export function ChatPlayground() {
                     </div>
                     <Button
                       disabled={!prompt.trim() || queryAnalysisIsRunning}
-                      onClick={() => void startQueryAnalysis()}
+                      onClick={() => void startQueryAnalysis(prompt)}
                       size="sm"
                       variant="secondary"
                     >
