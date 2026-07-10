@@ -39,9 +39,13 @@ export interface SourceInfo {
 }
 
 export interface RecommendedResource {
+  resource_id?: string
   title?: string
   url?: string
   description?: string
+  file_type?: string
+  file_size?: number
+  score?: number
 }
 
 export type ConversationMessage = Omit<

@@ -285,6 +285,19 @@ function formatScore(value?: number | null) {
   return typeof value === "number" ? value.toFixed(3) : null
 }
 
+function formatBytes(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return ""
+  }
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function formatEvidenceLocation(item: EvidenceItem | CitationEvidenceRef | CitationEvidenceAudit) {
   const pageStart = "metadata" in item ? item.metadata?.page_start ?? item.page ?? null : item.page_start ?? item.page ?? null
   const pageEnd = "metadata" in item ? item.metadata?.page_end ?? item.page ?? null : item.page_end ?? item.page ?? null
@@ -644,11 +657,13 @@ function RecommendedResourceList({ resources }: { resources?: RecommendedResourc
           const title = resource.title?.trim() || resource.url?.trim() || `推荐资源 ${index + 1}`
           const description = resource.description?.trim()
           const url = resource.url?.trim()
+          const score = formatScore(resource.score)
+          const fileSize = formatBytes(resource.file_size)
 
           return (
             <div
               className="rounded-md border border-violet-100 bg-white/85 px-2 py-1.5"
-              key={`${title}-${url || index}`}
+              key={resource.resource_id || `${title}-${url || index}`}
             >
               <div className="flex min-w-0 items-center gap-1.5">
                 <DiagnosticBadge tone="slate">{index + 1}</DiagnosticBadge>
@@ -666,8 +681,16 @@ function RecommendedResourceList({ resources }: { resources?: RecommendedResourc
                   <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
                 )}
               </div>
+              {resource.file_type || fileSize || score ? (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {resource.file_type ? <DiagnosticBadge tone="sky">{resource.file_type}</DiagnosticBadge> : null}
+                  {fileSize ? <DiagnosticBadge tone="slate">{fileSize}</DiagnosticBadge> : null}
+                  {score ? <DiagnosticBadge tone="emerald">score {score}</DiagnosticBadge> : null}
+                </div>
+              ) : null}
               {description ? <div className="mt-0.5 line-clamp-2 text-[11px] text-violet-900/75">{description}</div> : null}
               {url ? <div className="mt-0.5 truncate text-[11px] text-violet-700/70">{url}</div> : null}
+              {resource.resource_id ? <div className="mt-0.5 truncate text-[11px] text-violet-700/60">{resource.resource_id}</div> : null}
             </div>
           )
         })}
