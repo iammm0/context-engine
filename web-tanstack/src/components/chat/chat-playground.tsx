@@ -17,6 +17,11 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import {
+  ArtifactSourceLocatorPreview,
+  SourceLocatorAnchorPreview,
+} from "@/components/evidence/source-locator-preview"
+import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -395,6 +400,7 @@ function EvidenceRefList({
           const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : null
           const location = formatEvidenceLocation(item)
           const documentUrl = buildEvidenceDocumentUrl(item)
+          const sourceLocatorSummary = formatSourceLocatorSummary(item.source_locator)
           return (
             <div
               className="rounded-md border border-white/70 bg-white/70 px-2 py-1"
@@ -417,6 +423,12 @@ function EvidenceRefList({
                 {item.source_locator?.anchor_count ? <span>{item.source_locator.anchor_count} anchors</span> : null}
               </div>
               {item.preview ? <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.preview}</div> : null}
+              {sourceLocatorSummary ? (
+                <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+                  来源定位：{sourceLocatorSummary}
+                </div>
+              ) : null}
+              <SourceLocatorAnchorPreview compact locator={item.source_locator} />
               {item.quality_notes?.length ? (
                 <div className="mt-0.5 text-[11px] opacity-75">{item.quality_notes.slice(0, 2).join(" · ")}</div>
               ) : null}
@@ -558,6 +570,7 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
               const type = getEvidenceType(item)
               const location = formatEvidenceLocation(item)
               const documentUrl = buildEvidenceDocumentUrl(item)
+              const sourceLocatorSummary = formatSourceLocatorSummary(item.metadata?.source_locator)
               return (
                 <div className="rounded-md border border-emerald-100 bg-white/80 px-2 py-1" key={`${item.id}-${item.chunk_id}`}>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -574,6 +587,13 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
                     ) : null}
                   </div>
                   <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.metadata?.preview || item.text}</div>
+                  {sourceLocatorSummary ? (
+                    <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+                      来源定位：{sourceLocatorSummary}
+                    </div>
+                  ) : null}
+                  <SourceLocatorAnchorPreview compact locator={item.metadata?.source_locator} />
+                  <ArtifactSourceLocatorPreview artifact={item.metadata?.artifact} />
                   {documentUrl ? (
                     <a
                       className="mt-1 inline-flex text-[11px] font-medium text-sky-700 hover:text-sky-900 hover:underline"

@@ -12,6 +12,11 @@ import { DatabaseZap, Eye, FileText, LoaderCircle, Pencil, RotateCcw, Save, Sear
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { BatchDocumentUpload } from "@/components/documents/batch-document-upload"
+import {
+  ArtifactSourceLocatorPreview,
+  SourceLocatorAnchorPreview,
+} from "@/components/evidence/source-locator-preview"
+import { formatSourceLocatorSummary } from "@/components/evidence/source-locator-utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1006,6 +1011,7 @@ export function DocumentsTable() {
 
                   {chunkRows.map((chunk) => {
                     const highlighted = isHighlightedChunk(chunk, activeDeepLinkTarget)
+                    const sourceLocatorSummary = formatSourceLocatorSummary(chunk.source_locator)
                     return (
                       <div
                         className={`rounded-2xl border p-4 transition-colors ${
@@ -1042,6 +1048,13 @@ export function DocumentsTable() {
                         <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
                           {chunk.preview || chunk.text}
                         </div>
+
+                        {sourceLocatorSummary ? (
+                          <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                            来源定位：{sourceLocatorSummary}
+                          </div>
+                        ) : null}
+                        <SourceLocatorAnchorPreview locator={chunk.source_locator} />
 
                         {chunk.quality_notes?.length ? (
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -1084,6 +1097,7 @@ export function DocumentsTable() {
                             </table>
                           </div>
                         ) : null}
+                        <ArtifactSourceLocatorPreview artifact={chunk.artifact} />
                       </div>
                     )
                   })}
