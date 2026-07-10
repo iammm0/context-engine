@@ -5,7 +5,11 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from services.document_task_dispatcher import enqueue_document_processing
+from services.document_task_dispatcher import (
+    check_document_task_queue_health,
+    enqueue_document_processing,
+    store_document_task_dispatch,
+)
 
 
 class FakeBackgroundTasks:
@@ -14,6 +18,14 @@ class FakeBackgroundTasks:
 
     def add_task(self, func, *args, **kwargs):
         self.tasks.append((func, args, kwargs))
+
+
+class FakeDocumentRepository:
+    def __init__(self):
+        self.metadata_updates = []
+
+    def update_document_metadata(self, doc_id, metadata_patch):
+        self.metadata_updates.append((doc_id, metadata_patch))
 
 
 def test_enqueue_document_processing_local_backend(monkeypatch):
@@ -35,3 +47,22 @@ def test_enqueue_document_processing_local_backend(monkeypatch):
     assert func.__name__ == "_run_local_document_processing"
     assert args == ("uploads/demo.pdf", "doc1", "assistant1", "space1")
     assert kwargs == {}
+
+
+def test_document_task_queue_health_local_backend(monkeypatch):
+    monkeypatch.setenv("DOCUMENT_TASK_BACKEND", "local")
+
+    status = check_document_task_queue_health()
+
+    assert status["status"] == "healthy"
+    assert status["connected"] is True
+    assert status["active_backend"] == "fastapi-background"
+
+
+def test_store_document_task_dispatch_persists_metadata():
+    repo = FakeDocumentRepository()
+    dispatch = {"backend": "celery", "task_id": "task-1"}
+
+    store_document_task_dispatch(repo, "doc1", dispatch)
+
+    assert repo.metadata_updates == [("doc1", {"task": dispatch})]

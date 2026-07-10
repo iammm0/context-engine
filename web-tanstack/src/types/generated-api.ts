@@ -1441,6 +1441,10 @@ export interface components {
             status: string;
             /** Error */
             error?: string | null;
+            /** Services */
+            services?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * QueryAnalysisRequest

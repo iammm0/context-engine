@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import BackgroundTasks
 
@@ -18,6 +19,81 @@ def _bool_env(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _configured_backend() -> str:
+    return os.getenv("DOCUMENT_TASK_BACKEND", "celery").strip().lower()
+
+
+def _redact_url(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+        if "@" not in parsed.netloc:
+            return url
+
+        credentials, host = parsed.netloc.rsplit("@", 1)
+        username = credentials.split(":", 1)[0]
+        netloc = f"{username}:***@{host}" if username else host
+        return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+    except Exception:
+        return "<redacted>"
+
+
+def check_document_task_queue_health() -> Dict[str, Any]:
+    backend = _configured_backend()
+    fallback_local = _bool_env("DOCUMENT_TASK_FALLBACK_LOCAL", True)
+
+    if backend in LOCAL_BACKENDS:
+        return {
+            "status": "healthy",
+            "connected": True,
+            "configured_backend": backend,
+            "active_backend": "fastapi-background",
+            "fallback_local": fallback_local,
+        }
+
+    status: Dict[str, Any] = {
+        "status": "unknown",
+        "connected": False,
+        "configured_backend": backend,
+        "active_backend": "celery",
+        "fallback_local": fallback_local,
+    }
+
+    try:
+        import redis
+        from tasks.celery_app import broker_url, celery_app, result_backend
+
+        status["broker_url"] = _redact_url(broker_url)
+        status["result_backend"] = _redact_url(result_backend)
+
+        redis_client = redis.Redis.from_url(
+            broker_url,
+            socket_connect_timeout=float(os.getenv("CELERY_HEALTH_TIMEOUT_S", "1.0")),
+            socket_timeout=float(os.getenv("CELERY_HEALTH_TIMEOUT_S", "1.0")),
+        )
+        redis_client.ping()
+        status["redis"] = "healthy"
+
+        inspect_timeout = float(os.getenv("CELERY_HEALTH_TIMEOUT_S", "1.0"))
+        workers = celery_app.control.inspect(timeout=inspect_timeout).ping() or {}
+        worker_count = len(workers)
+        status["worker_count"] = worker_count
+        status["workers"] = ",".join(sorted(workers.keys())) if workers else ""
+
+        if worker_count > 0:
+            status["status"] = "healthy"
+            status["connected"] = True
+        else:
+            status["status"] = "degraded"
+            status["connected"] = False
+            status["error"] = "No Celery workers responded to ping"
+    except Exception as exc:
+        status["status"] = "unhealthy"
+        status["connected"] = False
+        status["error"] = str(exc)[:200]
+
+    return status
 
 
 def _run_local_document_processing(
@@ -77,7 +153,7 @@ def enqueue_document_processing(
     for a development fallback that keeps the old FastAPI BackgroundTasks path.
     """
 
-    backend = os.getenv("DOCUMENT_TASK_BACKEND", "celery").strip().lower()
+    backend = _configured_backend()
     if backend in LOCAL_BACKENDS:
         return _enqueue_local(background_tasks, file_path, doc_id, assistant_id, knowledge_space_id)
 

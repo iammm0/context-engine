@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional
 from database.mongodb import mongodb
 from database.qdrant_client import qdrant_client
+from services.document_task_dispatcher import check_document_task_queue_health
 from utils.logger import logger
 from utils.monitoring import performance_monitor
 import psutil
@@ -24,6 +25,7 @@ class ProbeStatusResponse(BaseModel):
     """Liveness/readiness probe response."""
     status: str
     error: Optional[str] = None
+    services: Optional[Dict[str, Any]] = None
 
 
 class MetricsResponse(BaseModel):
@@ -78,6 +80,11 @@ async def health_check():
         overall_status = "degraded"
     
     # 系统资源信息（可选）
+    task_queue_status = check_document_task_queue_health()
+    services_status["task_queue"] = task_queue_status
+    if task_queue_status.get("status") != "healthy":
+        overall_status = "degraded"
+
     system_info = None
     try:
         cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -121,7 +128,18 @@ async def readiness_check():
         await collection.find_one({}, limit=1)
         
         # 如果所有关键服务都正常，返回就绪
-        return {"status": "ready"}
+        task_queue_status = check_document_task_queue_health()
+        if (
+            task_queue_status.get("active_backend") == "celery"
+            and task_queue_status.get("status") != "healthy"
+        ):
+            return {
+                "status": "not_ready",
+                "error": task_queue_status.get("error") or "Celery task queue is not ready",
+                "services": {"task_queue": task_queue_status},
+            }
+
+        return {"status": "ready", "services": {"task_queue": task_queue_status}}
     except Exception as e:
         logger.warning(f"就绪检查失败: {str(e)}")
         return {"status": "not_ready", "error": str(e)[:100]}

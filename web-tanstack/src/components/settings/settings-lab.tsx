@@ -148,6 +148,26 @@ function statusBadgeClass(status?: string) {
   return "bg-slate-100 text-slate-600"
 }
 
+function formatServiceValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "true" : "false"
+  }
+  if (typeof value === "number") {
+    return String(value)
+  }
+  if (typeof value === "string") {
+    return value || "空"
+  }
+  return undefined
+}
+
+function serviceDetailEntries(service: Record<string, unknown>) {
+  return Object.entries(service)
+    .filter(([key]) => !["status", "connected", "error"].includes(key))
+    .map(([key, value]) => [key, formatServiceValue(value)] as const)
+    .filter(([, value]) => value !== undefined)
+}
+
 function metricNumber(metrics: MetricsResponse | undefined, group: string, key: string) {
   const groupValue = metrics?.system_metrics?.[group]
   if (!groupValue || typeof groupValue !== "object") {
@@ -584,6 +604,7 @@ export function SettingsLab() {
                     const status = typeof service.status === "string" ? service.status : "unknown"
                     const connected = typeof service.connected === "boolean" ? service.connected : undefined
                     const error = typeof service.error === "string" ? service.error : ""
+                    const details = serviceDetailEntries(service)
                     return (
                       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" key={name}>
                         <div className="flex items-center justify-between gap-2">
@@ -593,6 +614,16 @@ export function SettingsLab() {
                         <div className="mt-1 text-slate-500">
                           {connected === undefined ? "连接状态未知" : connected ? "已连接" : "未连接"}
                         </div>
+                        {details.length > 0 ? (
+                          <div className="mt-2 grid gap-1 text-slate-500">
+                            {details.map(([key, value]) => (
+                              <div className="flex min-w-0 justify-between gap-2" key={key}>
+                                <span className="shrink-0">{key}</span>
+                                <span className="min-w-0 truncate text-right text-slate-700">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         {error ? <div className="mt-1 line-clamp-2 text-rose-700">{error}</div> : null}
                       </div>
                     )
