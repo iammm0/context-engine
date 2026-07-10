@@ -44,6 +44,7 @@ import type {
   DeepResearchStreamEvent,
   EvidenceItem,
   EvidenceQuality,
+  SourceInfo,
   TaskDispatchInfo,
 } from "@/types/api"
 
@@ -364,6 +365,46 @@ function buildEvidenceDocumentUrl(item: EvidenceItem | CitationEvidenceRef | Cit
   return `/documents?${params.toString()}`
 }
 
+function buildSourceDocumentUrl(source: SourceInfo) {
+  if (!source.document_id) {
+    return ""
+  }
+
+  const params = new URLSearchParams({ document_id: source.document_id })
+  if (source.chunk_id) {
+    params.set("chunk_id", source.chunk_id)
+  }
+  if (typeof source.chunk_index === "number") {
+    params.set("chunk_index", String(source.chunk_index))
+  }
+  if (source.content_type) {
+    params.set("content_type", source.content_type)
+  }
+  if (source.evidence_id) {
+    params.set("evidence_id", source.evidence_id)
+  }
+  params.set("context_window", "6")
+  return `/documents?${params.toString()}`
+}
+
+function sourceTitle(source: SourceInfo) {
+  return source.document_title || source.title || source.document_id || source.chunk_id || source.file_id || "来源"
+}
+
+function formatSourceLocation(source: SourceInfo) {
+  const pageStart = source.page_start ?? source.page ?? null
+  const pageEnd = source.page_end ?? source.page ?? null
+  const pages =
+    pageStart && pageEnd && pageStart !== pageEnd
+      ? `第 ${pageStart}-${pageEnd} 页`
+      : pageStart
+        ? `第 ${pageStart} 页`
+        : ""
+  const section = source.section_path?.length ? source.section_path.join(" / ") : ""
+  const chunk = typeof source.chunk_index === "number" ? `chunk ${source.chunk_index}` : ""
+  return [pages, section, chunk].filter(Boolean).join(" · ")
+}
+
 function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "sky" | "amber" | "rose" | "emerald" }) {
   const classes = {
     slate: "bg-slate-100 text-slate-700",
@@ -448,6 +489,60 @@ function EvidenceRefList({
   )
 }
 
+function ReferenceSourceList({ sources }: { sources?: SourceInfo[] | null }) {
+  if (!sources?.length) {
+    return null
+  }
+
+  return (
+    <details className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950" open>
+      <summary className="cursor-pointer font-medium">参考来源 · {sources.length} 条</summary>
+      <div className="mt-2 space-y-1.5">
+        {sources.slice(0, 10).map((source, index) => {
+          const documentUrl = buildSourceDocumentUrl(source)
+          const sourceLocatorSummary = formatSourceLocatorSummary(source.source_locator)
+          const location = formatSourceLocation(source)
+          const typeLabel = source.content_type ? evidenceTypeLabel[source.content_type] || source.content_type : null
+          return (
+            <div
+              className="rounded-md border border-sky-100 bg-white/85 px-2 py-1.5"
+              key={`${source.document_id || source.file_id || source.title || "source"}-${source.chunk_id || source.chunk_index || index}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <DiagnosticBadge tone="sky">{index + 1}</DiagnosticBadge>
+                {typeLabel ? <DiagnosticBadge tone="emerald">{typeLabel}</DiagnosticBadge> : null}
+                <span className="min-w-0 flex-1 truncate font-medium">{sourceTitle(source)}</span>
+                {formatScore(source.score) ? <span className="shrink-0 opacity-70">{formatScore(source.score)}</span> : null}
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-sky-800/80">
+                {location ? <span>{location}</span> : null}
+                {source.retrieval_type ? <span>{source.retrieval_type}</span> : null}
+                {source.source_locator?.anchor_count ? <span>{source.source_locator.anchor_count} anchors</span> : null}
+              </div>
+              {source.content ? <div className="mt-0.5 line-clamp-2 text-[11px] text-sky-900/80">{source.content}</div> : null}
+              {sourceLocatorSummary ? (
+                <div className="mt-1 rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+                  来源定位：{sourceLocatorSummary}
+                </div>
+              ) : null}
+              <SourceLocatorAnchorPreview compact locator={source.source_locator} />
+              <ArtifactSourceLocatorPreview artifact={source.artifact} />
+              {documentUrl ? (
+                <a
+                  className="mt-1 inline-flex text-[11px] font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                  href={documentUrl}
+                >
+                  定位到文档 chunk
+                </a>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </details>
+  )
+}
+
 function MessageDiagnostics({ message }: { message: ConversationMessage }) {
   if (message.role === "user") {
     return null
@@ -456,7 +551,8 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
   const citationSummary = formatCitationQuality(message.citation_quality)
   const evidenceSummary = formatEvidenceQuality(message.evidence_quality)
   const hasDiagnostics = Boolean(
-    message.evidence?.length ||
+    message.sources?.length ||
+      message.evidence?.length ||
       message.evidence_quality ||
       message.citation_quality ||
       message.citation_warnings?.length,
@@ -500,6 +596,8 @@ function MessageDiagnostics({ message }: { message: ConversationMessage }) {
           {message.citation_quality.recommendations.slice(0, 3).join("；")}
         </div>
       ) : null}
+
+      <ReferenceSourceList sources={message.sources} />
 
       {message.citation_quality?.evidence_citation_audit?.length ? (
         <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800" open>
