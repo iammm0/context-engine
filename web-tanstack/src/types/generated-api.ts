@@ -1012,6 +1012,7 @@ export interface components {
             title: string;
             /** Assistant Id */
             assistant_id?: string | null;
+            title_task?: components["schemas"]["TaskDispatchInfo"] | null;
             /** Messages */
             messages: components["schemas"]["ConversationMessageResponse"][];
             /** Created At */
@@ -1084,6 +1085,7 @@ export interface components {
             message_count: number;
             /** Assistant Id */
             assistant_id?: string | null;
+            title_task?: components["schemas"]["TaskDispatchInfo"] | null;
             /** Created At */
             created_at?: string | null;
             /** Updated At */

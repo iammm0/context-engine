@@ -128,6 +128,7 @@ class ConversationSummaryResponse(BaseModel):
     title: str
     message_count: int
     assistant_id: Optional[str] = None
+    title_task: Optional[TaskDispatchInfo] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -160,6 +161,7 @@ class ConversationDetailResponse(BaseModel):
     user_id: Optional[str] = None
     title: str
     assistant_id: Optional[str] = None
+    title_task: Optional[TaskDispatchInfo] = None
     messages: List[ConversationMessageResponse]
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -383,6 +385,7 @@ async def list_conversations(
                 "title": doc.get("title", "未命名对话"),
                 "message_count": len(doc.get("messages", [])),
                 "assistant_id": doc.get("assistant_id"),
+                "title_task": enrich_task_dispatch(doc.get("title_task")),
                 "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
                 "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None
             })
@@ -446,6 +449,7 @@ async def get_conversation(
             "user_id": doc.get("user_id"),
             "title": doc.get("title", "未命名对话"),
             "assistant_id": doc.get("assistant_id"),
+            "title_task": enrich_task_dispatch(doc.get("title_task")),
             "messages": messages,
             "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
             "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None
@@ -519,6 +523,10 @@ async def add_message(
                         from tasks.chat_tasks import generate_conversation_title_task
 
                         queued = generate_conversation_title_task.delay(conversation_id, current_title)
+                        await collection.update_one(
+                            {"_id": conversation_id},
+                            {"$set": {"title_task": {"backend": "celery", "task_id": queued.id}}},
+                        )
                         logger.info(
                             "Conversation title generation queued in Celery - conversation_id=%s task_id=%s",
                             conversation_id,
@@ -570,6 +578,7 @@ async def update_conversation(
         update_fields = {"updated_at": datetime.now(timezone.utc)}
         if request.title is not None:
             update_fields["title"] = request.title
+            update_fields["title_task"] = None
         
         # 更新对话
         result = await collection.update_one(
