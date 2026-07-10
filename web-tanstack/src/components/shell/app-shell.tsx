@@ -23,7 +23,7 @@ export function AppShell() {
                 <Sparkles className="size-4" />
               </div>
               <div>
-                <div className="text-base font-semibold leading-5 text-slate-950">advanced-rag</div>
+                <div className="text-base font-semibold leading-5 text-slate-950">context-engine</div>
                 <div className="text-xs font-medium text-sky-700">TanStack Series</div>
               </div>
             </Link>
@@ -71,7 +71,7 @@ export function AppShell() {
             </div>
             <div className="max-w-4xl space-y-3">
               <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-                TanStack Web That Grows With Your RAG Stack.
+                TanStack Web That Grows With Your Context Stack.
               </h1>
               <p className="max-w-3xl text-base leading-7 text-slate-600">
                 一套并列的 TanStack 前端实现，复用现有 FastAPI 接口，把 Router、Query、Table、

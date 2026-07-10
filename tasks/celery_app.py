@@ -1,4 +1,4 @@
-"""Celery application configuration for advanced-rag workers."""
+"""Celery application configuration for context-engine workers."""
 
 from __future__ import annotations
 
@@ -31,4 +31,3 @@ celery_app.conf.update(
     worker_prefetch_multiplier=int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
     task_acks_late=os.getenv("CELERY_TASK_ACKS_LATE", "true").lower() in {"1", "true", "yes"},
 )
-

@@ -130,7 +130,7 @@ export function SettingsLab() {
     terminal.loadAddon(fitAddon)
     terminal.open(terminalRef.current)
     fitAddon.fit()
-    terminal.writeln("advanced-rag :: tanstack frontend bootstrap")
+    terminal.writeln("context-engine :: tanstack frontend bootstrap")
     terminal.writeln("")
     terminal.writeln(`runtime mode: ${runtimeQuery.data?.mode || "loading..."}`)
     terminal.writeln(`agents loaded: ${agentsQuery.data?.agents?.length || 0}`)

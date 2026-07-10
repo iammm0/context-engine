@@ -1,6 +1,6 @@
 # Security Boundaries
 
-advanced-rag currently supports anonymous local use. Production deployments
+context-engine currently supports anonymous local use. Production deployments
 should add authentication, authorization, and tenant isolation before exposing
 the service to untrusted users.
 

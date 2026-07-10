@@ -273,7 +273,7 @@ export function DocumentsTable() {
           <div className="space-y-3 rounded-2xl border border-[var(--blue-line)] bg-[var(--surface-blue)] p-4">
             <div className="text-sm font-medium text-slate-950">Create Space</div>
             <Input
-              placeholder="例如：advanced-rag-lab"
+              placeholder="例如：context-engine-lab"
               value={newSpaceName}
               onChange={(event) => setNewSpaceName(event.target.value)}
             />

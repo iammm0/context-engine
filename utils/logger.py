@@ -12,7 +12,7 @@ class AsyncFileHandler(RotatingFileHandler):
     pass
 
 
-def setup_logger(name: str = "advanced-rag-api", log_level: str = None) -> logging.Logger:
+def setup_logger(name: str = "context-engine-api", log_level: str = None) -> logging.Logger:
     """配置并返回日志记录器（支持异步写入）"""
     # 获取日志级别
     if log_level is None:

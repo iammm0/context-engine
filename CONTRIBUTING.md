@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你对 **advanced-rag** 的关注！我们欢迎任何形式的贡献，包括 Bug 报告、功能建议、文档改进和代码提交。
+感谢你对 **context-engine** 的关注！我们欢迎任何形式的贡献，包括 Bug 报告、功能建议、文档改进和代码提交。
 
 ## 目录
 
@@ -57,8 +57,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/iammm0/advanced-rag.git
-cd advanced-rag
+git clone https://github.com/iammm0/advanced-rag.git context-engine
+cd context-engine
 
 # 安装 Python 依赖
 pip install -r requirements.txt

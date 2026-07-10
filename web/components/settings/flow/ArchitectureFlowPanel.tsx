@@ -130,7 +130,7 @@ export default function ArchitectureFlowPanel() {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
       <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-        <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">高级 RAG 架构（只读画布）</div>
+        <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">上下文引擎架构（只读画布）</div>
         <span className="text-xs text-gray-500 dark:text-gray-400">
           可缩放平移；点击节点在弹窗中配置（不可拖拽节点）
         </span>

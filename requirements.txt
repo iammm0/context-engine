@@ -1,4 +1,4 @@
-# advanced-rag API - Python 依赖
+# context-engine API - Python 依赖
 # PaddleOCR 需单独从 vendor 安装: pip install -e ./vendor/PaddleOCR
 
 # Web 框架

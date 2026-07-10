@@ -1,25 +1,25 @@
-# advanced-rag
+# context-engine
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/release-1.0.0-228b22.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)](https://fastapi.tiangolo.com/)
 
-`advanced-rag` 是一个面向本地知识库问答与复杂问题分析的 RAG 项目。后端基于 FastAPI，提供文档入库、混合检索、流式聊天、深度研究和运行时配置接口；前端目前保留两套实现：`web/` 是 Next.js 版本，`web-tanstack/` 是基于 Vite + TanStack 系列的新版本。
+`context-engine` 是一个用于构建检索、记忆与上下文感知 AI 系统的工程基础设施。后端基于 FastAPI，提供文档入库、混合检索、证据上下文组装、流式聊天、深度研究和运行时配置接口；前端目前保留两套实现：`web/` 是 Next.js 版本，`web-tanstack/` 是基于 Vite + TanStack 系列的新版本。
 
 当前发布版本为 `1.0.0`。后端版本号的单一来源是 [utils/version.py](utils/version.py)，健康检查和 OpenAPI 版本都会读取它。
 
 ## 功能范围
 
 - 通用对话：匿名访问，支持会话列表、会话详情、消息追加、重命名、删除和重新生成。
-- RAG 问答：聊天请求可选择知识空间，并通过向量库、关键词和图谱关联做检索增强。
+- 上下文增强问答：聊天请求可选择知识空间，并通过向量库、关键词和图谱关联做检索增强。
 - 文档入库：支持 PDF、Word、Markdown、TXT 等常见文档上传、解析、分块、嵌入、入库和进度查询。
 - 知识空间：提供知识空间列表和创建接口，用于组织文档与检索范围。
 - 深度研究：针对复杂问题提供多 Agent 协作式分析，并提供进入深度研究前的轻量评估接口。
 - 运行时设置：支持模型、Agent 和请求日志等运行时配置，部分配置可通过 API 动态调整。
 - 健康检查：暴露 liveness、readiness、依赖状态和基础系统指标。
 
-已从当前主线中移除或不作为核心维护范围的能力包括：登录认证、用户系统、通知、邮件、后台管理、资源社区和 Comsol/mph-agent 等非 RAG 功能。
+已从当前主线中移除或不作为核心维护范围的能力包括：登录认证、用户系统、通知、邮件、后台管理、资源社区和 Comsol/mph-agent 等非上下文核心功能。
 
 ## 技术栈
 
@@ -42,7 +42,7 @@
 ## 目录结构
 
 ```txt
-advanced-rag/
+context-engine/
 ├── agents/              # 通用对话、深度研究与专家 Agent
 ├── chunking/            # 文本分块与分块路由
 ├── database/            # MongoDB、Qdrant 等连接与仓储
@@ -156,7 +156,7 @@ MAX_UPLOAD_SIZE=104857600
 UPLOAD_DIR=./uploads
 
 LOG_LEVEL=INFO
-LOG_FILE=./logs/advanced-rag-api.log
+LOG_FILE=./logs/context-engine-api.log
 ```
 
 如果后端运行在容器里，而 MongoDB、Qdrant、Neo4j、Redis 或 Ollama 运行在宿主机，参考 [.env.docker.local](.env.docker.local)，把地址改成 `host.docker.internal`。
@@ -228,17 +228,17 @@ VITE_API_URL=http://localhost:8000
 
 ```bash
 ./download_dependencies.sh
-DOCKER_BUILDKIT=1 docker build -t advanced-rag .
+DOCKER_BUILDKIT=1 docker build -t context-engine .
 ```
 
 运行 API 容器：
 
 ```bash
 docker run -d \
-  --name advanced-rag-api \
+  --name context-engine-api \
   -p 8000:8000 \
   --env-file .env.docker.local \
-  advanced-rag
+  context-engine
 ```
 
 `docker-compose.yml` 当前用于本地依赖服务。如果需要把 API 也纳入 compose，需要额外添加应用服务并处理模型、上传目录、日志目录和依赖健康检查。
@@ -248,7 +248,7 @@ docker run -d \
 聊天与会话：
 
 - `GET /api/chat/models`：获取 Ollama 可用模型
-- `POST /api/chat`：常规聊天 / RAG 增强聊天，返回 SSE 流
+- `POST /api/chat`：常规聊天 / 上下文增强聊天，返回 SSE 流
 - `POST /api/chat/deep-research`：深度研究模式
 - `POST /api/chat/deep-research/evaluate`：评估问题是否值得进入深度研究
 - `GET /api/chat/conversations`：会话列表
@@ -293,7 +293,7 @@ docker run -d \
 
 ```env
 LOG_LEVEL=INFO
-LOG_FILE=./logs/advanced-rag-api.log
+LOG_FILE=./logs/context-engine-api.log
 ```
 
 HTTP 请求日志可以通过运行时配置动态调整：

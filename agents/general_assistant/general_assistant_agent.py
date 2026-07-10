@@ -1,4 +1,4 @@
-"""通用高级RAG助手Agent - 封装对话流程（混合检索 + 知识图谱 + 重排 + LLM生成）"""
+"""通用上下文增强助手 Agent - 封装对话流程（混合检索 + 知识图谱 + 重排 + LLM生成）"""
 from typing import Dict, Any, Optional, AsyncGenerator
 from agents.base.base_agent import BaseAgent
 from services.rag_service import rag_service
@@ -8,7 +8,7 @@ from utils.citation import build_citation_diagnostics, build_citation_policy_con
 
 
 class GeneralAssistantAgent(BaseAgent):
-    """通用高级RAG助手Agent - 处理通用领域的问答任务"""
+    """通用上下文增强助手 Agent - 处理通用领域的问答任务"""
     
     def __init__(
         self,

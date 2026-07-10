@@ -320,7 +320,7 @@ export function ChatPlayground() {
 
             <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
               <Textarea
-                placeholder="输入问题，例如：请基于当前知识空间总结高级 RAG 的检索链路，并指出可优化点。"
+                placeholder="输入问题，例如：请基于当前知识空间总结上下文引擎的检索链路，并指出可优化点。"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 className="min-h-[144px]"

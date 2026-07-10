@@ -12,7 +12,7 @@ def http_json(url: str) -> dict:
 
 
 def post_multipart(url: str, fields: dict[str, str], file_path: str, filename: str, content_type: str) -> tuple[int, str]:
-    boundary = "----advancedrag-" + uuid.uuid4().hex
+    boundary = "----contextengine-" + uuid.uuid4().hex
     crlf = "\r\n"
 
     body = bytearray()
@@ -42,7 +42,7 @@ def post_multipart(url: str, fields: dict[str, str], file_path: str, filename: s
 
 
 def main():
-    base = os.environ.get("ADVANCED_RAG_API", "http://127.0.0.1:8000")
+    base = os.environ.get("CONTEXT_ENGINE_API") or os.environ.get("ADVANCED_RAG_API", "http://127.0.0.1:8000")
 
     conv = http_json(f"{base}/api/chat/conversations")
     conv_id = None

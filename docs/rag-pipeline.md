@@ -1,6 +1,6 @@
 # RAG Pipeline
 
-advanced-rag keeps the legacy `context` and `sources` response fields, but the
+context-engine keeps the legacy `context` and `sources` response fields, but the
 retrieval pipeline is now centered on chunk-level evidence.
 
 ## Flow

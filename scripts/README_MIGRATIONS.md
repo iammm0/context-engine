@@ -13,7 +13,7 @@
 ### 1. 运行所有未应用的迁移
 
 ```bash
-cd advanced-rag
+cd context-engine
 python scripts/migrate_models.py
 ```
 
@@ -39,7 +39,7 @@ python scripts/migrate_models.py --force
 
 ```bash
 # 进入容器
-docker exec -it advanced-rag-1 bash
+docker exec -it context-engine-1 bash
 
 # 运行迁移
 python scripts/migrate_models.py

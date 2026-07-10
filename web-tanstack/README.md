@@ -1,4 +1,4 @@
-# advanced-rag TanStack Frontend
+# context-engine TanStack Frontend
 
 这是一套并列于现有 `web/` Next.js 前端的新实现，目录为 `web-tanstack/`。  
 目标是基于你指定的技术栈，落一套可运行、可继续扩展、并且已经接上现有 FastAPI 后端的 TanStack 系列前端骨架。

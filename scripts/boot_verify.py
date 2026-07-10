@@ -12,7 +12,7 @@ def _http_json(url: str) -> dict:
 
 
 def _post_multipart(url: str, fields: dict[str, str], file_field: str, file_path: str, filename: str, content_type: str):
-    boundary = "----advancedrag-" + uuid.uuid4().hex
+    boundary = "----contextengine-" + uuid.uuid4().hex
     crlf = "\r\n"
 
     body = bytearray()
@@ -43,7 +43,7 @@ def _post_multipart(url: str, fields: dict[str, str], file_field: str, file_path
 
 
 def main():
-    base = os.environ.get("ADVANCED_RAG_API", "http://127.0.0.1:8000")
+    base = os.environ.get("CONTEXT_ENGINE_API") or os.environ.get("ADVANCED_RAG_API", "http://127.0.0.1:8000")
     spaces = _http_json(f"{base}/api/knowledge-spaces")
     items = spaces.get("knowledge_spaces", [])
     test_space = next((s for s in items if s.get("name") == "TestSpace"), None)
@@ -53,7 +53,7 @@ def main():
     sid = test_space["id"]
     fp = os.path.join(tempfile.gettempdir(), "boot-kb.txt")
     with open(fp, "w", encoding="utf-8") as f:
-        f.write("hello advanced-rag\n")
+        f.write("hello context-engine\n")
 
     status, text = _post_multipart(
         f"{base}/api/documents/upload",

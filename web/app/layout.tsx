@@ -4,8 +4,8 @@ import { ThemeProvider } from "@/lib/theme";
 import React from "react";
 
 export const metadata: Metadata = {
-  title: "advanced-rag - 开源高级RAG系统",
-  description: "开源高级RAG系统：对话（含深度研究）+ 知识库检索/入库",
+  title: "context-engine - 上下文感知 AI 工程基础设施",
+  description: "上下文感知 AI 工程基础设施：对话（含深度研究）+ 知识库检索/入库",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
