@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
-import { taskSummary } from "@/lib/task"
+import { createAbortError, taskSummary, waitForTaskCompletion } from "@/lib/task"
 import { cn } from "@/lib/utils"
 import { useUiStore } from "@/stores/ui-store"
 import type {
@@ -177,51 +177,6 @@ function readDeepResearchTaskResult(task: TaskDispatchInfo): DeepResearchTaskRes
   return result as DeepResearchTaskResult
 }
 
-function waitForTaskCompletion(
-  task: TaskDispatchInfo,
-  signal: AbortSignal,
-  onProgress: (task: TaskDispatchInfo) => void,
-): Promise<TaskDispatchInfo> {
-  if (!task.task_id) {
-    return Promise.reject(new Error("任务没有返回可订阅的 Celery task_id"))
-  }
-  const taskId = task.task_id
-
-  return new Promise((resolve, reject) => {
-    let unsubscribe: () => void = () => {}
-
-    const cleanup = () => {
-      signal.removeEventListener("abort", handleAbort)
-      unsubscribe()
-    }
-    const handleAbort = () => {
-      cleanup()
-      reject(createAbortError())
-    }
-
-    signal.addEventListener("abort", handleAbort, { once: true })
-    onProgress(task)
-
-    unsubscribe = api.subscribeTaskStatus(
-      taskId,
-      onProgress,
-      (nextTask) => {
-        cleanup()
-        resolve(nextTask)
-      },
-      (message) => {
-        cleanup()
-        reject(new Error(message))
-      },
-      task.backend,
-    )
-
-    if (signal.aborted) {
-      handleAbort()
-    }
-  })
-}
-
 const evidenceTypeLabel: Record<string, string> = {
   text: "文本",
   table: "表格",
@@ -362,12 +317,6 @@ function formatBytes(value?: number | null) {
     return `${(value / 1024).toFixed(1)} KB`
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function createAbortError() {
-  const error = new Error("已停止生成")
-  error.name = "AbortError"
-  return error
 }
 
 function isAbortError(error: unknown) {
@@ -1134,7 +1083,7 @@ export function ChatPlayground() {
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const attachmentSubscriptionsRef = useRef<Record<string, () => void>>({})
   const attachmentTaskSubscriptionsRef = useRef<Record<string, () => void>>({})
-  const queryAnalysisSubscriptionRef = useRef<(() => void) | null>(null)
+  const queryAnalysisAbortRef = useRef<AbortController | null>(null)
 
   const registerCitationTarget = useCallback<CitationTargetRegistrar>((messageKey, kind, citationId, node) => {
     const key = citationTargetKey(messageKey, citationId, kind)
@@ -1449,8 +1398,8 @@ export function ChatPlayground() {
         unsubscribe()
       }
       attachmentTaskSubscriptionsRef.current = {}
-      queryAnalysisSubscriptionRef.current?.()
-      queryAnalysisSubscriptionRef.current = null
+      queryAnalysisAbortRef.current?.abort()
+      queryAnalysisAbortRef.current = null
     }
   }, [])
 
@@ -1460,12 +1409,16 @@ export function ChatPlayground() {
       return
     }
 
-    queryAnalysisSubscriptionRef.current?.()
-    queryAnalysisSubscriptionRef.current = null
+    queryAnalysisAbortRef.current?.abort()
+    const abortController = new AbortController()
+    queryAnalysisAbortRef.current = abortController
     setQueryAnalysisRun({ status: "queued", query, result: null, error: null })
 
     try {
       const queued = await api.queueQueryAnalysis(query)
+      if (abortController.signal.aborted) {
+        return
+      }
       if (queued.error || !queued.data) {
         setQueryAnalysisRun({
           status: "failed",
@@ -1479,50 +1432,42 @@ export function ChatPlayground() {
       const task = queued.data
       setQueryAnalysisRun({ status: "running", query, task, result: null, error: null })
 
-      if (task.backend !== "celery" || !task.task_id) {
-        setQueryAnalysisRun({
-          status: "failed",
-          query,
-          task,
-          result: null,
-          error: "查询分析任务没有返回可订阅的 Celery task_id",
-        })
-        return
-      }
-
-      queryAnalysisSubscriptionRef.current = api.subscribeTaskStatus(
-        task.task_id,
-        (status) => {
+      const finalTask = await waitForTaskCompletion(
+        task,
+        abortController.signal,
+        (status) =>
           setQueryAnalysisRun((current) => ({
             ...current,
             status: status.ready ? current.status : "running",
             task: status,
-          }))
-        },
-        (status) => {
-          const result = readQueryAnalysisResult(status)
-          setQueryAnalysisRun({
-            status: result ? "completed" : "failed",
-            query,
-            task: status,
-            result,
-            error: result ? null : status.error || "查询分析任务未返回有效结果",
-          })
-          queryAnalysisSubscriptionRef.current = null
-        },
-        (message) => {
-          setQueryAnalysisRun({ status: "failed", query, task, result: null, error: message })
-          queryAnalysisSubscriptionRef.current = null
-        },
-        task.backend,
+          })),
       )
+      if (abortController.signal.aborted) {
+        return
+      }
+
+      const result = readQueryAnalysisResult(finalTask)
+      setQueryAnalysisRun({
+        status: result ? "completed" : "failed",
+        query,
+        task: finalTask,
+        result,
+        error: result ? null : finalTask.error || "查询分析任务未返回有效结果",
+      })
     } catch (error) {
+      if (isAbortError(error)) {
+        return
+      }
       setQueryAnalysisRun({
         status: "failed",
         query,
         result: null,
         error: error instanceof Error ? error.message : "查询分析任务投递失败",
       })
+    } finally {
+      if (queryAnalysisAbortRef.current === abortController) {
+        queryAnalysisAbortRef.current = null
+      }
     }
   }
 

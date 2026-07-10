@@ -1,4 +1,5 @@
 import type { TaskDispatchInfo } from "@/types/api"
+import { api } from "@/lib/api"
 
 const CELERY_STATE_LABELS: Record<string, string> = {
   PENDING: "排队中",
@@ -53,4 +54,55 @@ export function taskProcessingMessage(task?: TaskDispatchInfo | null) {
     return `${summary} 后台处理中`
   }
   return `${summary} 处理中`
+}
+
+export function createAbortError() {
+  const error = new Error("已停止生成")
+  error.name = "AbortError"
+  return error
+}
+
+export function waitForTaskCompletion(
+  task: TaskDispatchInfo,
+  signal: AbortSignal,
+  onProgress: (task: TaskDispatchInfo) => void,
+): Promise<TaskDispatchInfo> {
+  if (!task.task_id) {
+    return Promise.reject(new Error("任务没有返回可订阅的 Celery task_id"))
+  }
+  const taskId = task.task_id
+
+  return new Promise((resolve, reject) => {
+    let unsubscribe: () => void = () => {}
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", handleAbort)
+      unsubscribe()
+    }
+    const handleAbort = () => {
+      cleanup()
+      reject(createAbortError())
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true })
+    onProgress(task)
+
+    unsubscribe = api.subscribeTaskStatus(
+      taskId,
+      onProgress,
+      (nextTask) => {
+        cleanup()
+        resolve(nextTask)
+      },
+      (message) => {
+        cleanup()
+        reject(new Error(message))
+      },
+      task.backend,
+    )
+
+    if (signal.aborted) {
+      handleAbort()
+    }
+  })
 }
