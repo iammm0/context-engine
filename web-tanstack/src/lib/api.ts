@@ -2,6 +2,7 @@ import type {
   AgentConfigsResponse,
   ApiEnvelope,
   ChatStreamEvent,
+  DocumentChunksResponse,
   ConversationDetail,
   ConversationListResponse,
   DocumentListResponse,
@@ -41,6 +42,18 @@ type UploadDocumentResponse = {
 }
 
 type ProgressSubscriber = (progress: DocumentProgress) => void
+
+type DocumentChunksOptions = {
+  skip?: number
+  limit?: number
+  includeText?: boolean
+  contentType?: string
+  feature?: string
+  query?: string
+  targetChunkId?: string
+  targetChunkIndex?: number
+  contextWindow?: number
+}
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "")
 
@@ -213,6 +226,22 @@ export const api = {
   getDocuments(knowledgeSpaceId?: string) {
     return requestJson<DocumentListResponse>(
       `/api/documents${buildQuery({ skip: 0, limit: 100, knowledge_space_id: knowledgeSpaceId })}`,
+    )
+  },
+
+  getDocumentChunks(documentId: string, options?: DocumentChunksOptions) {
+    return requestJson<DocumentChunksResponse>(
+      `/api/documents/${encodeURIComponent(documentId)}/chunks${buildQuery({
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 40,
+        include_text: options?.includeText ?? true,
+        content_type: options?.contentType && options.contentType !== "all" ? options.contentType : undefined,
+        feature: options?.feature && options.feature !== "all" ? options.feature : undefined,
+        q: options?.query?.trim() || undefined,
+        target_chunk_id: options?.targetChunkId,
+        target_chunk_index: options?.targetChunkIndex,
+        context_window: options?.contextWindow,
+      })}`,
     )
   },
 

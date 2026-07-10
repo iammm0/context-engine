@@ -7,7 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { DatabaseZap, FileUp, LoaderCircle } from "lucide-react"
+import { DatabaseZap, FileText, FileUp, LoaderCircle, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -16,9 +16,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import { useUiStore } from "@/stores/ui-store"
-import type { DocumentItem, DocumentListResponse, DocumentProgress } from "@/types/api"
+import type { DocumentChunkPreview, DocumentItem, DocumentListResponse, DocumentProgress } from "@/types/api"
 
 const STREAMING_DOCUMENT_STATUSES = new Set(["uploading", "processing", "parsing", "chunking", "embedding"])
+const CHUNK_PAGE_SIZE = 40
+const EMPTY_COUNT_RECORD: Record<string, number> = {}
+
+const CONTENT_TYPE_LABELS: Record<string, string> = {
+  all: "全部类型",
+  text: "文本",
+  table: "表格",
+  image_ocr: "图片 OCR",
+  formula: "公式",
+  code: "代码",
+}
+
+const FEATURE_FILTERS = [
+  { value: "all", label: "全部质量" },
+  { value: "artifact_issue", label: "结构化问题" },
+  { value: "missing_anchor", label: "缺少锚点" },
+  { value: "structured_missing_source_locator", label: "结构化缺定位" },
+  { value: "table_missing_source", label: "表格缺来源" },
+  { value: "ocr_low_confidence", label: "低置信 OCR" },
+  { value: "size_issue", label: "切块长度异常" },
+] as const
 
 function formatBytes(size: number) {
   if (size < 1024) {
@@ -30,6 +51,26 @@ function formatBytes(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+function contentTypeLabel(value?: string | null) {
+  if (!value) {
+    return "未知"
+  }
+  return CONTENT_TYPE_LABELS[value] || value
+}
+
+function formatChunkLocation(chunk: DocumentChunkPreview) {
+  const parts = []
+  if (typeof chunk.page_start === "number" || typeof chunk.page === "number") {
+    const start = chunk.page_start ?? chunk.page
+    const end = chunk.page_end && chunk.page_end !== start ? `-${chunk.page_end}` : ""
+    parts.push(`P${start}${end}`)
+  }
+  if (typeof chunk.token_count === "number") {
+    parts.push(`${chunk.token_count} tokens`)
+  }
+  return parts.join(" · ") || "未定位"
+}
+
 export function DocumentsTable() {
   const queryClient = useQueryClient()
   const parentRef = useRef<HTMLDivElement>(null)
@@ -37,6 +78,11 @@ export function DocumentsTable() {
   const { selectedKnowledgeSpaceId, setSelectedKnowledgeSpaceId } = useUiStore()
   const [sorting, setSorting] = useState<SortingState>([])
   const [newSpaceName, setNewSpaceName] = useState("")
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string>()
+  const [chunkContentType, setChunkContentType] = useState("all")
+  const [chunkFeature, setChunkFeature] = useState("all")
+  const [chunkQuery, setChunkQuery] = useState("")
+  const [chunkSkip, setChunkSkip] = useState(0)
 
   const knowledgeSpacesQuery = useQuery({
     queryKey: ["knowledge-spaces"],
@@ -93,6 +139,10 @@ export function DocumentsTable() {
   })
 
   const data = useMemo(() => documentsQuery.data?.documents || [], [documentsQuery.data])
+  const selectedDocument = useMemo(
+    () => data.find((document) => document.id === selectedDocumentId),
+    [data, selectedDocumentId],
+  )
   const streamingDocumentKey = useMemo(
     () =>
       data
@@ -102,6 +152,60 @@ export function DocumentsTable() {
         .join("|"),
     [data],
   )
+
+  useEffect(() => {
+    if (!data.length) {
+      if (selectedDocumentId) {
+        setSelectedDocumentId(undefined)
+      }
+      return
+    }
+
+    if (!selectedDocumentId || !data.some((document) => document.id === selectedDocumentId)) {
+      setSelectedDocumentId(data[0].id)
+    }
+  }, [data, selectedDocumentId])
+
+  useEffect(() => {
+    setChunkSkip(0)
+  }, [selectedDocumentId, chunkContentType, chunkFeature, chunkQuery])
+
+  const chunkPreviewQuery = useQuery({
+    queryKey: ["document-chunks", selectedDocumentId, chunkContentType, chunkFeature, chunkQuery, chunkSkip],
+    enabled: Boolean(selectedDocumentId),
+    queryFn: async () => {
+      const result = await api.getDocumentChunks(selectedDocumentId!, {
+        skip: chunkSkip,
+        limit: CHUNK_PAGE_SIZE,
+        includeText: true,
+        contentType: chunkContentType,
+        feature: chunkFeature,
+        query: chunkQuery,
+      })
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      return result.data
+    },
+  })
+
+  const chunkPreview = chunkPreviewQuery.data
+  const parseQuality = chunkPreview?.parse_quality || selectedDocument?.parse_quality || null
+  const contentTypeCounts = useMemo(
+    () => chunkPreview?.facets?.content_type_counts || parseQuality?.content_type_counts || EMPTY_COUNT_RECORD,
+    [chunkPreview?.facets?.content_type_counts, parseQuality?.content_type_counts],
+  )
+  const featureCounts = useMemo(
+    () => chunkPreview?.facets?.feature_counts || EMPTY_COUNT_RECORD,
+    [chunkPreview?.facets?.feature_counts],
+  )
+  const chunkTotal = chunkPreview?.total_chunks || 0
+  const chunkEnd = Math.min(chunkSkip + CHUNK_PAGE_SIZE, chunkTotal)
+  const chunkRows = chunkPreview?.chunks || []
+  const contentTypeOptions = useMemo(() => {
+    const values = new Set(["all", "text", "table", "image_ocr", "formula", "code", ...Object.keys(contentTypeCounts)])
+    return Array.from(values)
+  }, [contentTypeCounts])
 
   useEffect(() => {
     const documentIds = streamingDocumentKey ? streamingDocumentKey.split("|") : []
@@ -234,6 +338,7 @@ export function DocumentsTable() {
     documentsQuery.error instanceof Error ? `文档列表加载失败：${documentsQuery.error.message}` : null,
     createSpaceMutation.error instanceof Error ? `知识空间创建失败：${createSpaceMutation.error.message}` : null,
     uploadMutation.error instanceof Error ? `上传失败：${uploadMutation.error.message}` : null,
+    chunkPreviewQuery.error instanceof Error ? `Chunk inspector 加载失败：${chunkPreviewQuery.error.message}` : null,
   ].filter(Boolean) as string[]
 
   return (
@@ -309,6 +414,7 @@ export function DocumentsTable() {
         </CardContent>
       </Card>
 
+      <div className="grid gap-5">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -348,9 +454,14 @@ export function DocumentsTable() {
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const row = rows[virtualRow.index]
                     return (
-                      <div
+                      <button
                         key={row.id}
-                        className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-b border-sky-100 px-4 py-4 text-sm text-slate-700"
+                        className={`grid appearance-none grid-cols-[2fr_1fr_1.5fr_1fr_1fr] gap-4 border-0 border-b border-sky-100 px-4 py-4 text-left text-sm transition-colors ${
+                          row.original.id === selectedDocumentId
+                            ? "bg-sky-50 text-sky-950"
+                            : "bg-white text-slate-700 hover:bg-[var(--surface-blue)]"
+                        }`}
+                        onClick={() => setSelectedDocumentId(row.original.id)}
                         style={{
                           position: "absolute",
                           top: 0,
@@ -358,13 +469,14 @@ export function DocumentsTable() {
                           width: "100%",
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
+                        type="button"
                       >
                         {row.getVisibleCells().map((cell) => (
                           <div key={cell.id} className="flex items-center">
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </div>
                         ))}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -373,6 +485,192 @@ export function DocumentsTable() {
           </div>
         </CardContent>
       </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Chunk Inspector</CardTitle>
+                <CardDescription>{selectedDocument?.title || "未选择文档"}</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge>{selectedDocument?.status || "idle"}</Badge>
+                <Badge className="bg-white text-slate-700">{chunkTotal} chunks</Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedDocument ? (
+              <div className="blue-panel flex min-h-[220px] items-center justify-center rounded-2xl px-6 py-10 text-sm text-slate-500">
+                暂无文档
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Quality</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {typeof parseQuality?.quality_score === "number" ? parseQuality.quality_score : "N/A"}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Tables</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">{parseQuality?.table_count || 0}</div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.14em] text-slate-500">OCR</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {parseQuality?.ocr_recognized_images || 0}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Problems</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-950">
+                      {chunkPreview?.facets?.problem_chunk_count || 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[180px_220px_minmax(0,1fr)]">
+                  <select
+                    className="h-10 rounded-lg border border-[var(--blue-line)] bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400 focus:ring-3 focus:ring-sky-100"
+                    onChange={(event) => setChunkContentType(event.target.value)}
+                    value={chunkContentType}
+                  >
+                    {contentTypeOptions.map((value) => (
+                      <option key={value} value={value}>
+                        {contentTypeLabel(value)}
+                        {value === "all" ? "" : ` (${contentTypeCounts[value] || 0})`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="h-10 rounded-lg border border-[var(--blue-line)] bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400 focus:ring-3 focus:ring-sky-100"
+                    onChange={(event) => setChunkFeature(event.target.value)}
+                    value={chunkFeature}
+                  >
+                    {FEATURE_FILTERS.map((filter) => (
+                      <option key={filter.value} value={filter.value}>
+                        {filter.label}
+                        {filter.value === "all" ? "" : ` (${featureCounts[filter.value] || 0})`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      className="pl-9"
+                      onChange={(event) => setChunkQuery(event.target.value)}
+                      placeholder="搜索 chunk 内容"
+                      value={chunkQuery}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {chunkPreviewQuery.isFetching ? (
+                    <div className="flex items-center gap-2 rounded-2xl border border-[var(--blue-line)] bg-white px-4 py-3 text-sm text-slate-500">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      加载中
+                    </div>
+                  ) : null}
+
+                  {chunkRows.length === 0 && !chunkPreviewQuery.isFetching ? (
+                    <div className="blue-panel flex min-h-[180px] items-center justify-center rounded-2xl px-6 py-8 text-sm text-slate-500">
+                      没有匹配的 chunk
+                    </div>
+                  ) : null}
+
+                  {chunkRows.map((chunk) => (
+                    <div key={chunk.id} className="rounded-2xl border border-[var(--blue-line)] bg-white p-4">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <Badge>
+                          <FileText className="mr-1 size-3" />#{chunk.chunk_index ?? "-"}
+                        </Badge>
+                        <Badge className="bg-white text-slate-700">{contentTypeLabel(chunk.content_type)}</Badge>
+                        <Badge className="bg-white text-slate-700">{formatChunkLocation(chunk)}</Badge>
+                        {chunk.artifact_quality?.status === "warn" ? (
+                          <Badge className="border-amber-200 bg-amber-50 text-amber-800">artifact warn</Badge>
+                        ) : null}
+                      </div>
+
+                      <div className="max-h-[180px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {chunk.preview || chunk.text}
+                      </div>
+
+                      {chunk.quality_notes?.length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {chunk.quality_notes.map((note) => (
+                            <span
+                              className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800"
+                              key={note}
+                            >
+                              {note}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {chunk.artifact?.type === "table" && chunk.artifact.rows?.length ? (
+                        <div className="mt-4 overflow-x-auto rounded-xl border border-sky-100">
+                          <table className="min-w-full text-left text-xs text-slate-600">
+                            {chunk.artifact.headers?.length ? (
+                              <thead className="bg-[var(--surface-blue)] text-slate-700">
+                                <tr>
+                                  {chunk.artifact.headers.map((header) => (
+                                    <th className="px-3 py-2 font-medium" key={header}>
+                                      {header}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                            ) : null}
+                            <tbody>
+                              {chunk.artifact.rows.slice(0, 4).map((row, rowIndex) => (
+                                <tr className="border-t border-sky-100" key={`${chunk.id}-${rowIndex}`}>
+                                  {row.map((cell, cellIndex) => (
+                                    <td className="px-3 py-2" key={`${chunk.id}-${rowIndex}-${cellIndex}`}>
+                                      {cell}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm text-slate-500">
+                    {chunkTotal > 0 ? `${chunkSkip + 1}-${chunkEnd} / ${chunkTotal}` : "0 / 0"}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      disabled={chunkSkip <= 0 || chunkPreviewQuery.isFetching}
+                      onClick={() => setChunkSkip(Math.max(0, chunkSkip - CHUNK_PAGE_SIZE))}
+                      variant="outline"
+                    >
+                      上一页
+                    </Button>
+                    <Button
+                      disabled={chunkEnd >= chunkTotal || chunkPreviewQuery.isFetching}
+                      onClick={() => setChunkSkip(chunkSkip + CHUNK_PAGE_SIZE)}
+                      variant="outline"
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
