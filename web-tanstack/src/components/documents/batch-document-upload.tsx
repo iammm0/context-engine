@@ -113,6 +113,7 @@ function progressMessage(progress: DocumentProgress) {
 export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDocumentSettled }: BatchDocumentUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const subscriptionsRef = useRef<Map<string, () => void>>(new Map())
+  const taskSubscriptionsRef = useRef<Map<string, () => void>>(new Map())
   const [queue, setQueue] = useState<UploadQueueItem[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -120,16 +121,70 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
 
   useEffect(() => {
     const subscriptions = subscriptionsRef.current
+    const taskSubscriptions = taskSubscriptionsRef.current
     return () => {
       for (const unsubscribe of subscriptions.values()) {
         unsubscribe()
       }
       subscriptions.clear()
+      for (const unsubscribe of taskSubscriptions.values()) {
+        unsubscribe()
+      }
+      taskSubscriptions.clear()
     }
   }, [])
 
   const updateItem = (id: string, patch: Partial<UploadQueueItem>) => {
     setQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  const stopItemSubscriptions = (itemId: string) => {
+    subscriptionsRef.current.get(itemId)?.()
+    subscriptionsRef.current.delete(itemId)
+    taskSubscriptionsRef.current.get(itemId)?.()
+    taskSubscriptionsRef.current.delete(itemId)
+  }
+
+  const applyTaskStatus = (itemId: string, task: TaskDispatchInfo) => {
+    const taskMessage = taskProcessingMessage(task)
+    if (task.ready && task.successful === false) {
+      updateItem(itemId, {
+        task,
+        status: "failed",
+        error: task.error || "后台任务执行失败",
+        retryable: true,
+      })
+      return
+    }
+
+    updateItem(itemId, {
+      task,
+      message: taskMessage,
+    })
+  }
+
+  const subscribeTaskProgress = (itemId: string, task?: TaskDispatchInfo | null) => {
+    taskSubscriptionsRef.current.get(itemId)?.()
+    taskSubscriptionsRef.current.delete(itemId)
+
+    if (task?.backend !== "celery" || !task.task_id) {
+      return
+    }
+
+    const unsubscribe = api.subscribeTaskStatus(
+      task.task_id,
+      (status) => applyTaskStatus(itemId, status),
+      (status) => {
+        applyTaskStatus(itemId, status)
+        taskSubscriptionsRef.current.delete(itemId)
+      },
+      (message) => {
+        updateItem(itemId, { message })
+        taskSubscriptionsRef.current.delete(itemId)
+      },
+      task.backend,
+    )
+    taskSubscriptionsRef.current.set(itemId, unsubscribe)
   }
 
   const subscribeProgress = (itemId: string, documentId: string) => {
@@ -159,6 +214,8 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
           retryable: progress.status === "failed",
         })
         subscriptionsRef.current.delete(itemId)
+        taskSubscriptionsRef.current.get(itemId)?.()
+        taskSubscriptionsRef.current.delete(itemId)
         onDocumentSettled?.(documentId)
       },
       (message) => {
@@ -260,16 +317,14 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
   }
 
   const removeItem = (itemId: string) => {
-    subscriptionsRef.current.get(itemId)?.()
-    subscriptionsRef.current.delete(itemId)
+    stopItemSubscriptions(itemId)
     setQueue((current) => current.filter((item) => item.id !== itemId))
   }
 
   const clearQueue = () => {
-    for (const unsubscribe of subscriptionsRef.current.values()) {
-      unsubscribe()
+    for (const item of queue) {
+      stopItemSubscriptions(item.id)
     }
-    subscriptionsRef.current.clear()
     setQueue([])
     setNotice(undefined)
   }
@@ -285,6 +340,7 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
       return false
     }
 
+    stopItemSubscriptions(item.id)
     updateItem(item.id, {
       status: "uploading",
       progress: 5,
@@ -316,6 +372,7 @@ export function BatchDocumentUpload({ knowledgeSpaceId, onDocumentUploaded, onDo
       task: result.data.task,
     })
     onDocumentUploaded?.(documentId)
+    subscribeTaskProgress(item.id, result.data.task)
     subscribeProgress(item.id, documentId)
     return true
   }
