@@ -9,16 +9,10 @@ import type {
   DocumentProgress,
   KnowledgeSpace,
   KnowledgeSpacesResponse,
+  MessagePayload,
   ModelsResponse,
   RuntimeConfigResponse,
 } from "@/types/api"
-
-type MessagePayload = {
-  role: "user" | "assistant"
-  content: string
-  sources?: unknown[]
-  recommended_resources?: unknown[]
-}
 
 type ChatPayload = {
   query: string

@@ -38,10 +38,27 @@ export interface ConversationListResponse {
 export interface SourceInfo {
   title?: string
   content?: string
-  document_id?: string
   chunk_id?: string
+  chunk_index?: number
+  evidence_id?: string
+  document_id?: string
+  file_id?: string
+  conversation_id?: string
   score?: number
   source?: string
+  retrieval_type?: string
+  document_title?: string
+  file_type?: string
+  status?: string
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  content_type?: string
+  artifact?: EvidenceArtifact | null
+  artifact_quality?: EvidenceArtifactQuality | null
+  source_locator?: SourceLocatorSummary | null
+  quality_notes?: string[]
+  section_path?: string[]
 }
 
 export interface RecommendedResource {
@@ -56,8 +73,24 @@ export interface ConversationMessage {
   content: string
   timestamp?: string | null
   sources?: SourceInfo[]
+  evidence?: EvidenceItem[]
   evidence_quality?: EvidenceQuality | null
+  citation_warnings?: string[]
+  citation_quality?: CitationQuality | null
   recommended_resources?: RecommendedResource[]
+}
+
+export type MessagePayload = Omit<
+  Schemas["MessageAdd"],
+  "role" | "sources" | "evidence" | "evidence_quality" | "citation_warnings" | "citation_quality" | "recommended_resources"
+> & {
+  role: "user" | "assistant"
+  sources?: SourceInfo[] | null
+  evidence?: EvidenceItem[] | null
+  evidence_quality?: EvidenceQuality | null
+  citation_warnings?: string[] | null
+  citation_quality?: CitationQuality | null
+  recommended_resources?: RecommendedResource[] | null
 }
 
 export interface ConversationDetail {
@@ -134,6 +167,8 @@ export interface ChunkPreviewArtifact {
   image_count?: number | null
   images?: OcrImageRef[]
 }
+
+export type EvidenceArtifact = ChunkPreviewArtifact
 
 export interface TableSourceRef {
   table_index?: number | null
@@ -253,6 +288,100 @@ export interface EvidenceQuality {
   recommendations?: string[]
 }
 
+export interface EvidenceItem {
+  id: string
+  text: string
+  document_id?: string
+  file_id?: string
+  conversation_id?: string
+  chunk_id?: string
+  chunk_index?: number
+  document_title?: string
+  section_path?: string[]
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  score?: number
+  retrieval_type?: string
+  metadata?: {
+    content_type?: string
+    page_start?: number | null
+    page_end?: number | null
+    preview?: string
+    artifact?: EvidenceArtifact | null
+    artifact_quality?: EvidenceArtifactQuality | null
+    source_locator?: SourceLocatorSummary | null
+    quality_notes?: string[]
+    [key: string]: unknown
+  }
+}
+
+export interface CitationEvidenceRef {
+  id: string
+  score?: number
+  document_id?: string
+  file_id?: string
+  conversation_id?: string
+  chunk_id?: string
+  chunk_index?: number
+  document_title?: string
+  section_path?: string[]
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  content_type?: string
+  retrieval_type?: string
+  preview?: string
+  source_locator?: SourceLocatorSummary | null
+  artifact_quality?: EvidenceArtifactQuality | null
+  quality_notes?: string[]
+  risk_reasons?: string[]
+}
+
+export interface CitationEvidenceAudit {
+  id: string
+  content_type?: string
+  document_id?: string
+  chunk_id?: string
+  chunk_index?: number
+  page?: number | null
+  page_start?: number | null
+  page_end?: number | null
+  score?: number
+  retrieval_type?: string
+  has_source_locator?: boolean
+  source_anchor_count?: number
+  has_table_source?: boolean
+  has_image_source?: boolean
+  has_bbox?: boolean
+  artifact_quality_status?: string | null
+  risk_reasons?: string[]
+  quality_notes?: string[]
+}
+
+export interface CitationQuality {
+  status: "no_evidence" | "missing" | "invalid" | "partial" | "complete" | string
+  risk_level?: "low" | "medium" | "high" | string
+  evidence_count: number
+  used_citation_ids: string[]
+  valid_citation_ids: string[]
+  invalid_citation_ids: string[]
+  duplicate_citation_ids: string[]
+  cited_structured_evidence_count?: number
+  cited_missing_source_locator_ids?: string[]
+  cited_artifact_warning_ids?: string[]
+  cited_low_confidence_ocr_ids?: string[]
+  cited_quality_note_ids?: string[]
+  evidence_citation_audit?: CitationEvidenceAudit[]
+  cited_risky_evidence?: CitationEvidenceRef[]
+  unused_evidence_ids: string[]
+  unreferenced_top_evidence_ids: string[]
+  unreferenced_top_evidence?: CitationEvidenceRef[]
+  coverage?: number | null
+  warnings?: string[]
+  recommendations?: string[]
+}
+
 export interface ParseQualitySummary {
   parser_type?: string | null
   extraction_method?: string | null
@@ -334,6 +463,9 @@ export interface ChatStreamEvent {
   done?: boolean
   error?: string
   sources?: SourceInfo[]
+  evidence?: EvidenceItem[]
   evidence_quality?: EvidenceQuality | null
+  citation_warnings?: string[]
+  citation_quality?: CitationQuality | null
   recommended_resources?: RecommendedResource[]
 }

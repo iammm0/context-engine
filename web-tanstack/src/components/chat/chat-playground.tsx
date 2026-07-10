@@ -9,7 +9,16 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { useUiStore } from "@/stores/ui-store"
-import type { ChatStreamEvent, ConversationDetail } from "@/types/api"
+import type {
+  ChatStreamEvent,
+  CitationEvidenceAudit,
+  CitationEvidenceRef,
+  CitationQuality,
+  ConversationDetail,
+  ConversationMessage,
+  EvidenceItem,
+  EvidenceQuality,
+} from "@/types/api"
 
 function formatTime(value?: string | null) {
   if (!value) {
@@ -24,13 +33,339 @@ function formatTime(value?: string | null) {
   }).format(new Date(value))
 }
 
+const evidenceTypeLabel: Record<string, string> = {
+  text: "文本",
+  table: "表格",
+  image_ocr: "图片OCR",
+  ocr: "OCR",
+  formula: "公式",
+  code: "代码",
+  graph: "图谱",
+}
+
+const citationRiskReasonLabel: Record<string, string> = {
+  missing_source_locator: "缺来源定位",
+  artifact_warning: "解析需复核",
+  low_confidence_ocr: "低置信OCR",
+  quality_note: "质量提示",
+}
+
+function formatPercent(value?: number | null) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : null
+}
+
+function formatScore(value?: number | null) {
+  return typeof value === "number" ? value.toFixed(3) : null
+}
+
+function formatEvidenceLocation(item: EvidenceItem | CitationEvidenceRef | CitationEvidenceAudit) {
+  const pageStart = "metadata" in item ? item.metadata?.page_start ?? item.page ?? null : item.page_start ?? item.page ?? null
+  const pageEnd = "metadata" in item ? item.metadata?.page_end ?? item.page ?? null : item.page_end ?? item.page ?? null
+  const pages =
+    pageStart && pageEnd && pageStart !== pageEnd
+      ? `第 ${pageStart}-${pageEnd} 页`
+      : pageStart
+        ? `第 ${pageStart} 页`
+        : ""
+  const section = "section_path" in item && item.section_path?.length ? item.section_path.join(" / ") : ""
+  const chunk = typeof item.chunk_index === "number" ? `chunk ${item.chunk_index}` : ""
+  return [pages, section, chunk].filter(Boolean).join(" · ")
+}
+
+function getEvidenceType(item: EvidenceItem) {
+  return item.metadata?.content_type || "text"
+}
+
+function formatRiskLabels(reasons?: string[]) {
+  return (reasons || []).map((reason) => citationRiskReasonLabel[reason] || reason)
+}
+
+function formatCitationQuality(quality?: CitationQuality | null) {
+  if (!quality || typeof quality.evidence_count !== "number" || quality.evidence_count <= 0) {
+    return ""
+  }
+
+  const bits: string[] = []
+  if (quality.risk_level === "high") {
+    bits.push("引用风险高")
+  } else if (quality.risk_level === "medium") {
+    bits.push("引用需复核")
+  } else if (quality.status) {
+    bits.push(`状态 ${quality.status}`)
+  }
+
+  const coverage = formatPercent(quality.coverage)
+  if (coverage) {
+    bits.push(`覆盖 ${coverage}`)
+  }
+  if (quality.valid_citation_ids?.length) {
+    bits.push(`有效引用 ${quality.valid_citation_ids.join(", ")}`)
+  }
+  if (quality.invalid_citation_ids?.length) {
+    bits.push(`无效 ${quality.invalid_citation_ids.join(", ")}`)
+  }
+  if (quality.duplicate_citation_ids?.length) {
+    bits.push(`重复 ${quality.duplicate_citation_ids.join(", ")}`)
+  }
+  if (quality.unreferenced_top_evidence_ids?.length) {
+    bits.push(`未引用高分 ${quality.unreferenced_top_evidence_ids.join(", ")}`)
+  }
+  return bits.join(" · ")
+}
+
+function formatEvidenceQuality(quality?: EvidenceQuality | null) {
+  if (!quality || typeof quality.evidence_count !== "number" || quality.evidence_count <= 0) {
+    return ""
+  }
+
+  const bits: string[] = []
+  const artifactCoverage = formatPercent(quality.structured_artifact_coverage ?? quality.artifact_coverage)
+  const locatorCoverage = formatPercent(quality.source_locator_coverage)
+  if (artifactCoverage) {
+    bits.push(`结构化 ${artifactCoverage}`)
+  }
+  if (locatorCoverage) {
+    bits.push(`定位 ${locatorCoverage}`)
+  }
+  if ((quality.structured_missing_source_locator_count || quality.missing_source_locator_count || 0) > 0) {
+    bits.push(`缺定位 ${quality.structured_missing_source_locator_count || quality.missing_source_locator_count}`)
+  }
+  if (quality.table_missing_structure_count > 0) {
+    bits.push(`表格结构缺失 ${quality.table_missing_structure_count}`)
+  }
+  if (quality.ocr_low_confidence_source_count > 0) {
+    bits.push(`低置信OCR ${quality.ocr_low_confidence_source_count}`)
+  }
+  if (!bits.length && quality.status === "pass") {
+    bits.push("证据结构完整")
+  }
+  return bits.join(" · ")
+}
+
+function evidenceTitle(item: EvidenceItem | CitationEvidenceRef) {
+  return item.document_title || item.document_id || item.chunk_id || item.id
+}
+
+function DiagnosticBadge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "sky" | "amber" | "rose" | "emerald" }) {
+  const classes = {
+    slate: "bg-slate-100 text-slate-700",
+    sky: "bg-sky-100 text-sky-800",
+    amber: "bg-amber-100 text-amber-800",
+    rose: "bg-rose-100 text-rose-800",
+    emerald: "bg-emerald-100 text-emerald-800",
+  }[tone]
+
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${classes}`}>{children}</span>
+}
+
+function EvidenceRefList({
+  title,
+  items,
+  tone,
+}: {
+  title: string
+  items?: CitationEvidenceRef[]
+  tone: "amber" | "rose"
+}) {
+  if (!items?.length) {
+    return null
+  }
+
+  const panelClass =
+    tone === "rose" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"
+
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-xs ${panelClass}`}>
+      <div className="mb-1 font-medium">{title}</div>
+      <div className="space-y-1">
+        {items.slice(0, 4).map((item) => {
+          const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : null
+          const location = formatEvidenceLocation(item)
+          return (
+            <div
+              className="rounded-md border border-white/70 bg-white/70 px-2 py-1"
+              key={`${title}-${item.id}-${item.chunk_id || item.chunk_index || item.score}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <DiagnosticBadge tone={tone}>{item.id}</DiagnosticBadge>
+                {typeLabel ? <DiagnosticBadge tone="sky">{typeLabel}</DiagnosticBadge> : null}
+                {formatRiskLabels(item.risk_reasons).map((label) => (
+                  <DiagnosticBadge key={`${item.id}-${label}`} tone="amber">
+                    {label}
+                  </DiagnosticBadge>
+                ))}
+                <span className="min-w-0 flex-1 truncate font-medium">{evidenceTitle(item)}</span>
+                {formatScore(item.score) ? <span className="shrink-0 opacity-70">{formatScore(item.score)}</span> : null}
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] opacity-75">
+                {location ? <span>{location}</span> : null}
+                {item.retrieval_type ? <span>{item.retrieval_type}</span> : null}
+                {item.source_locator?.anchor_count ? <span>{item.source_locator.anchor_count} anchors</span> : null}
+              </div>
+              {item.preview ? <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.preview}</div> : null}
+              {item.quality_notes?.length ? (
+                <div className="mt-0.5 text-[11px] opacity-75">{item.quality_notes.slice(0, 2).join(" · ")}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MessageDiagnostics({ message }: { message: ConversationMessage }) {
+  if (message.role === "user") {
+    return null
+  }
+
+  const citationSummary = formatCitationQuality(message.citation_quality)
+  const evidenceSummary = formatEvidenceQuality(message.evidence_quality)
+  const hasDiagnostics = Boolean(
+    message.evidence?.length ||
+      message.evidence_quality ||
+      message.citation_quality ||
+      message.citation_warnings?.length,
+  )
+
+  if (!hasDiagnostics) {
+    return null
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {message.sources?.length ? <DiagnosticBadge tone="sky">{message.sources.length} sources</DiagnosticBadge> : null}
+        {message.evidence?.length ? (
+          <DiagnosticBadge tone="emerald">{message.evidence.length} evidence</DiagnosticBadge>
+        ) : null}
+        {message.citation_quality?.risk_level ? (
+          <DiagnosticBadge tone={message.citation_quality.risk_level === "high" ? "rose" : "amber"}>
+            citation {message.citation_quality.risk_level}
+          </DiagnosticBadge>
+        ) : null}
+        {typeof message.citation_quality?.coverage === "number" ? (
+          <DiagnosticBadge tone="slate">coverage {formatPercent(message.citation_quality.coverage)}</DiagnosticBadge>
+        ) : null}
+      </div>
+
+      {message.citation_warnings?.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {message.citation_warnings.join("；")}
+        </div>
+      ) : null}
+
+      {citationSummary ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          {citationSummary}
+        </div>
+      ) : null}
+
+      {message.citation_quality?.recommendations?.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {message.citation_quality.recommendations.slice(0, 3).join("；")}
+        </div>
+      ) : null}
+
+      {message.citation_quality?.evidence_citation_audit?.length ? (
+        <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800" open>
+          <summary className="cursor-pointer font-medium">
+            证据引用审计 · {message.citation_quality.evidence_citation_audit.length} 条
+          </summary>
+          <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+            {message.citation_quality.evidence_citation_audit.slice(0, 6).map((item) => {
+              const typeLabel = item.content_type ? evidenceTypeLabel[item.content_type] || item.content_type : null
+              const location = formatEvidenceLocation(item)
+              const riskLabels = formatRiskLabels(item.risk_reasons)
+              return (
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50/70 px-2 py-1"
+                  key={`${item.id}-${item.chunk_id || item.chunk_index || item.document_id || item.score}-audit`}
+                >
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <DiagnosticBadge>{item.id}</DiagnosticBadge>
+                    {typeLabel ? <DiagnosticBadge tone="sky">{typeLabel}</DiagnosticBadge> : null}
+                    {item.has_source_locator ? (
+                      <DiagnosticBadge tone="emerald">有定位</DiagnosticBadge>
+                    ) : (
+                      <DiagnosticBadge tone="amber">缺定位</DiagnosticBadge>
+                    )}
+                    {riskLabels.map((label) => (
+                      <DiagnosticBadge key={`${item.id}-${label}`} tone="amber">
+                        {label}
+                      </DiagnosticBadge>
+                    ))}
+                    {formatScore(item.score) ? <span className="ml-auto text-[11px] opacity-70">{formatScore(item.score)}</span> : null}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+                    {location ? <span>{location}</span> : null}
+                    {item.retrieval_type ? <span>{item.retrieval_type}</span> : null}
+                    {typeof item.source_anchor_count === "number" ? <span>{item.source_anchor_count} anchors</span> : null}
+                    {item.has_table_source ? <span>表格来源</span> : null}
+                    {item.has_image_source ? <span>图片来源</span> : null}
+                    {item.has_bbox ? <span>bbox</span> : null}
+                    {item.artifact_quality_status ? <span>artifact {item.artifact_quality_status}</span> : null}
+                  </div>
+                  {item.quality_notes?.length ? (
+                    <div className="mt-0.5 text-[11px] text-amber-700">{item.quality_notes.slice(0, 2).join(" · ")}</div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      ) : null}
+
+      <EvidenceRefList title="已引用需复核证据" items={message.citation_quality?.cited_risky_evidence} tone="rose" />
+      <EvidenceRefList title="未引用高分证据" items={message.citation_quality?.unreferenced_top_evidence} tone="amber" />
+
+      {message.evidence?.length ? (
+        <details className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          <summary className="cursor-pointer font-medium">检索证据 · {message.evidence.length} 条</summary>
+          <div className="mt-2 space-y-1">
+            {message.evidence.slice(0, 5).map((item) => {
+              const type = getEvidenceType(item)
+              const location = formatEvidenceLocation(item)
+              return (
+                <div className="rounded-md border border-emerald-100 bg-white/80 px-2 py-1" key={`${item.id}-${item.chunk_id}`}>
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <DiagnosticBadge tone="emerald">{item.id}</DiagnosticBadge>
+                    <DiagnosticBadge tone="sky">{evidenceTypeLabel[type] || type}</DiagnosticBadge>
+                    <span className="min-w-0 flex-1 truncate font-medium">{evidenceTitle(item)}</span>
+                    {formatScore(item.score) ? <span className="shrink-0 opacity-70">{formatScore(item.score)}</span> : null}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] opacity-75">
+                    {location ? <span>{location}</span> : null}
+                    {item.retrieval_type ? <span>{item.retrieval_type}</span> : null}
+                    {item.metadata?.source_locator?.anchor_count ? (
+                      <span>{item.metadata.source_locator.anchor_count} anchors</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{item.metadata?.preview || item.text}</div>
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      ) : null}
+
+      {evidenceSummary ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          {evidenceSummary}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function ChatPlayground() {
   const queryClient = useQueryClient()
   const { activeConversationId, setActiveConversationId, selectedKnowledgeSpaceId, enableRag, setEnableRag } =
     useUiStore()
   const [prompt, setPrompt] = useState("")
   const [draftAnswer, setDraftAnswer] = useState("")
-  const [streamingMeta, setStreamingMeta] = useState<{ sources: number; status: string }>({
+  const [streamingMeta, setStreamingMeta] = useState<{ evidence: number; sources: number; status: string }>({
+    evidence: 0,
     sources: 0,
     status: "Idle",
   })
@@ -134,7 +469,7 @@ export function ChatPlayground() {
       })
 
       setDraftAnswer("")
-      setStreamingMeta({ sources: 0, status: "Streaming" })
+      setStreamingMeta({ evidence: 0, sources: 0, status: "Streaming" })
       let assistantText = ""
       let finalEvent: ChatStreamEvent | undefined
 
@@ -153,7 +488,7 @@ export function ChatPlayground() {
 
           if (event.error) {
             setDraftAnswer(`请求失败：${event.error}`)
-            setStreamingMeta({ sources: 0, status: "Error" })
+            setStreamingMeta({ evidence: 0, sources: 0, status: "Error" })
             return
           }
 
@@ -172,11 +507,19 @@ export function ChatPlayground() {
                   content: assistantText,
                   timestamp: new Date().toISOString(),
                   sources: event.sources,
+                  evidence: event.evidence,
+                  evidence_quality: event.evidence_quality,
+                  citation_warnings: event.citation_warnings,
+                  citation_quality: event.citation_quality,
                   recommended_resources: event.recommended_resources,
                 },
               ],
             }))
-            setStreamingMeta({ sources: event.sources?.length || 0, status: "Done" })
+            setStreamingMeta({
+              evidence: event.evidence?.length || 0,
+              sources: event.sources?.length || 0,
+              status: "Done",
+            })
           }
         },
       )
@@ -186,6 +529,10 @@ export function ChatPlayground() {
           role: "assistant",
           content: assistantText,
           sources: finalEvent?.sources,
+          evidence: finalEvent?.evidence,
+          evidence_quality: finalEvent?.evidence_quality,
+          citation_warnings: finalEvent?.citation_warnings,
+          citation_quality: finalEvent?.citation_quality,
           recommended_resources: finalEvent?.recommended_resources,
         })
       }
@@ -205,7 +552,7 @@ export function ChatPlayground() {
     sendMutation.error instanceof Error ? `消息发送失败：${sendMutation.error.message}` : null,
   ].filter(Boolean) as string[]
 
-  const allMessages =
+  const allMessages: ConversationMessage[] =
     draftAnswer.trim().length > 0
       ? [
           ...messages,
@@ -265,6 +612,7 @@ export function ChatPlayground() {
               <div className="flex flex-wrap gap-2">
                 <Badge>{streamingMeta.status}</Badge>
                 <Badge>sources {streamingMeta.sources}</Badge>
+                <Badge>evidence {streamingMeta.evidence}</Badge>
                 <Badge>{enableRag ? "RAG on" : "RAG off"}</Badge>
               </div>
             </div>
@@ -309,7 +657,9 @@ export function ChatPlayground() {
                         {message.role === "user" ? <User className="size-3" /> : <Cpu className="size-3" />}
                         <span>{formatTime(message.timestamp)}</span>
                         {message.sources?.length ? <span>{message.sources.length} sources</span> : null}
+                        {message.evidence?.length ? <span>{message.evidence.length} evidence</span> : null}
                       </div>
+                      <MessageDiagnostics message={message} />
                     </div>
                   </div>
                 ))
