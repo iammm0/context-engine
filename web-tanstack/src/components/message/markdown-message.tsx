@@ -1,5 +1,7 @@
 import { Check, Copy } from "lucide-react"
+import katex from "katex"
 import { useMemo, useState, type ReactNode } from "react"
+import "katex/dist/katex.min.css"
 
 import { cn } from "@/lib/utils"
 
@@ -18,6 +20,7 @@ type MarkdownBlock =
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "quote"; text: string }
   | { type: "code"; language: string; code: string }
+  | { type: "math"; formula: string }
   | { type: "table"; headers: string[]; rows: string[][] }
 
 const CODE_FENCE_PATTERN = /^```(\w+)?\s*$/
@@ -26,7 +29,7 @@ const UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
 const ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
 const QUOTE_PATTERN = /^\s*>\s?(.*)$/
 const TABLE_SEPARATOR_PATTERN = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/
-const INLINE_PATTERN = /(`[^`]+`|\*\*[^*]+\*\*|\[(S\d+)\]|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g
+const INLINE_PATTERN = /(`[^`]+`|\*\*[^*]+\*\*|\\\([^\n]+?\\\)|\$[^$\n]+\$|\[(S\d+)\]|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g
 
 type InlineRenderOptions = {
   inverted: boolean
@@ -37,6 +40,45 @@ type InlineRenderOptions = {
 
 function isTableSeparator(line?: string) {
   return Boolean(line && TABLE_SEPARATOR_PATTERN.test(line))
+}
+
+function isMathBlockStart(line: string) {
+  const trimmed = line.trim()
+  return trimmed.startsWith("$$") || trimmed.startsWith("\\[")
+}
+
+function readDelimitedMathBlock(lines: string[], index: number, opener: "$$" | "\\[", closer: "$$" | "\\]") {
+  const firstLine = lines[index].trim()
+  if (!firstLine.startsWith(opener)) {
+    return null
+  }
+
+  const afterOpener = firstLine.slice(opener.length)
+  const sameLineEnd = afterOpener.indexOf(closer)
+  if (sameLineEnd >= 0) {
+    return {
+      formula: afterOpener.slice(0, sameLineEnd).trim(),
+      nextIndex: index + 1,
+    }
+  }
+
+  const formulaLines = [afterOpener]
+  let cursor = index + 1
+  while (cursor < lines.length) {
+    const line = lines[cursor]
+    const endIndex = line.indexOf(closer)
+    if (endIndex >= 0) {
+      formulaLines.push(line.slice(0, endIndex))
+      return {
+        formula: formulaLines.join("\n").trim(),
+        nextIndex: cursor + 1,
+      }
+    }
+    formulaLines.push(line)
+    cursor += 1
+  }
+
+  return null
 }
 
 function splitTableRow(line: string) {
@@ -55,6 +97,7 @@ function startsSpecialBlock(line: string, nextLine?: string) {
     UNORDERED_LIST_PATTERN.test(line) ||
     ORDERED_LIST_PATTERN.test(line) ||
     QUOTE_PATTERN.test(line) ||
+    isMathBlockStart(line) ||
     (line.includes("|") && isTableSeparator(nextLine))
   )
 }
@@ -70,6 +113,20 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
 
     if (!trimmed) {
       index += 1
+      continue
+    }
+
+    const dollarMath = readDelimitedMathBlock(lines, index, "$$", "$$")
+    if (dollarMath) {
+      blocks.push({ type: "math", formula: dollarMath.formula })
+      index = dollarMath.nextIndex
+      continue
+    }
+
+    const bracketMath = readDelimitedMathBlock(lines, index, "\\[", "\\]")
+    if (bracketMath) {
+      blocks.push({ type: "math", formula: bracketMath.formula })
+      index = bracketMath.nextIndex
       continue
     }
 
@@ -182,6 +239,16 @@ function renderInline(text: string, options: InlineRenderOptions): ReactNode[] {
       )
     } else if (token.startsWith("**")) {
       nodes.push(<strong key={`${token}-${match.index}`}>{token.slice(2, -2)}</strong>)
+    } else if (token.startsWith("$") || token.startsWith("\\(")) {
+      const formula = token.startsWith("$") ? token.slice(1, -1) : token.slice(2, -2)
+      nodes.push(
+        <MathFormula
+          display={false}
+          formula={formula}
+          inverted={inverted}
+          key={`${token}-${match.index}`}
+        />,
+      )
     } else if (/^\[S\d+\]$/.test(token)) {
       const citationId = token.slice(1, -1)
       if (!citationEnabled) {
@@ -238,6 +305,62 @@ function renderInline(text: string, options: InlineRenderOptions): ReactNode[] {
   }
 
   return nodes
+}
+
+function MathFormula({
+  display,
+  formula,
+  inverted,
+}: {
+  display: boolean
+  formula: string
+  inverted: boolean
+}) {
+  const html = useMemo(() => {
+    try {
+      return katex.renderToString(formula, {
+        displayMode: display,
+        strict: false,
+        throwOnError: false,
+        trust: false,
+      })
+    } catch {
+      return ""
+    }
+  }, [display, formula])
+
+  const fallback = display ? `$$${formula}$$` : `$${formula}$`
+  if (!html) {
+    return (
+      <code
+        className={cn(
+          "rounded px-1.5 py-0.5 font-mono text-[0.85em]",
+          inverted ? "bg-white/15 text-white" : "bg-slate-100 text-slate-900",
+        )}
+      >
+        {fallback}
+      </code>
+    )
+  }
+
+  if (display) {
+    return (
+      <div
+        className={cn(
+          "overflow-x-auto rounded-lg border px-3 py-3 text-center text-current",
+          inverted ? "border-white/20 bg-white/10" : "border-slate-200 bg-slate-50",
+        )}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
+
+  return (
+    <span
+      className={cn("align-baseline text-current", inverted && "text-white")}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
 }
 
 function CodeBlock({ code, language }: { code: string; language: string }) {
@@ -333,7 +456,14 @@ export function MarkdownMessage({
         }
 
         if (block.type === "code") {
+          if (block.language.toLowerCase() === "math") {
+            return <MathFormula display formula={block.code} inverted={inverted} key={`math-code-${index}`} />
+          }
           return <CodeBlock code={block.code} key={`code-${index}`} language={block.language} />
+        }
+
+        if (block.type === "math") {
+          return <MathFormula display formula={block.formula} inverted={inverted} key={`math-${index}`} />
         }
 
         if (block.type === "table") {
