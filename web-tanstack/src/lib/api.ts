@@ -36,10 +36,12 @@ import type {
   RootResponse,
   RuntimeConfigResponse,
   RuntimeConfigUpdate,
+  TaskDispatchInfo,
 } from "@/types/api"
 
 type ProgressSubscriber = (progress: DocumentProgress) => void
 type AttachmentProgressSubscriber = (progress: ConversationAttachmentStatus) => void
+type TaskProgressSubscriber = (progress: TaskDispatchInfo) => void
 
 type DocumentChunksOptions = {
   skip?: number
@@ -475,6 +477,49 @@ export const api = {
           onError?.(JSON.parse(event.data).error || "附件进度订阅中断")
         } catch {
           onError?.("附件进度订阅中断")
+        }
+      }
+    })
+
+    return () => source.close()
+  },
+
+  getTaskStatus(taskId: string, backend = "celery") {
+    const query = buildQuery({ backend })
+    return requestJson<TaskDispatchInfo>(`/api/tasks/${encodeURIComponent(taskId)}${query}`)
+  },
+
+  subscribeTaskStatus(
+    taskId: string,
+    onProgress: TaskProgressSubscriber,
+    onDone?: TaskProgressSubscriber,
+    onError?: (message: string) => void,
+    backend = "celery",
+  ) {
+    const query = buildQuery({ backend })
+    const source = new EventSource(apiUrl(`/api/tasks/${encodeURIComponent(taskId)}/stream${query}`))
+
+    const handleProgress = (event: MessageEvent<string>) => {
+      const payload = JSON.parse(event.data) as TaskDispatchInfo
+      onProgress(payload)
+    }
+
+    source.addEventListener("progress", handleProgress)
+    source.addEventListener("done", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as TaskDispatchInfo
+      onDone?.(payload)
+      source.close()
+    })
+    source.addEventListener("error", (event) => {
+      if (source.readyState === EventSource.CLOSED) {
+        return
+      }
+      onError?.("任务状态订阅中断")
+      if ("data" in event && typeof event.data === "string" && event.data) {
+        try {
+          onError?.(JSON.parse(event.data).error || "任务状态订阅中断")
+        } catch {
+          onError?.("任务状态订阅中断")
         }
       }
     })

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import uvicorn
 import os
 from dotenv import load_dotenv
-from routers import chat, documents, retrieval, assistants, health, knowledge_spaces, settings
+from routers import chat, documents, retrieval, assistants, health, knowledge_spaces, settings, task_status
 from utils.logger import logger
 from utils.lifespan import lifespan
 from middleware.logging_middleware import log_requests
@@ -96,6 +96,7 @@ app.include_router(retrieval.router, prefix="/api/retrieval", tags=["检索服�
 app.include_router(assistants.router, prefix="/api/assistants", tags=["助手"])
 app.include_router(knowledge_spaces.router, prefix="/api/knowledge-spaces", tags=["知识空间"])
 app.include_router(settings.router, prefix="/api/settings", tags=["设置"])
+app.include_router(task_status.router, prefix="/api/tasks", tags=["任务"])
 app.include_router(health.router, tags=["健康检查"])
 
 

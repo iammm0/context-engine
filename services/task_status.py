@@ -60,3 +60,15 @@ def enrich_task_dispatch(task_dispatch: Any) -> Optional[Dict[str, Any]]:
         payload["error"] = str(exc)[:500]
 
     return payload
+
+
+def get_task_status(task_id: str, backend: str = "celery") -> Dict[str, Any]:
+    """Return normalized runtime status for a queued task id."""
+
+    normalized_backend = (backend or "celery").strip().lower()
+    return enrich_task_dispatch({"backend": normalized_backend, "task_id": task_id}) or {
+        "backend": normalized_backend,
+        "task_id": task_id,
+        "state": "UNKNOWN",
+        "error": "Unable to read task status",
+    }
